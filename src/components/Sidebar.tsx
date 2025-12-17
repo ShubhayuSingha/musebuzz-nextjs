@@ -2,10 +2,11 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { HiHome } from 'react-icons/hi';
 import { BiSearch } from 'react-icons/bi';
 import { TbPlaylist } from 'react-icons/tb';
-import { AiOutlinePlus } from 'react-icons/ai';
+import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; // 1. Added Heart Icon
 import { FiMenu } from 'react-icons/fi';
 
 interface SidebarProps {
@@ -47,16 +48,16 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       <nav>
         <ul>
           <li className="mb-4">
-            <a href="#" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
+            <Link href="/" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
               <HiHome size={26} />
               {showText && <span className={textClasses}>Home</span>}
-            </a>
+            </Link>
           </li>
           <li className="mb-4">
-            <a href="#" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
+            <Link href="/search" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
               <BiSearch size={26} />
               {showText && <span className={textClasses}>Search</span>}
-            </a>
+            </Link>
           </li>
         </ul>
       </nav>
@@ -65,6 +66,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       
       <nav>
         <ul>
+          {/* 2. NEW: Liked Songs Button */}
+          <li className="mb-4">
+            <Link href="/liked" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
+              <AiFillHeart size={26} />
+              {showText && <span className={textClasses}>Liked Songs</span>}
+            </Link>
+          </li>
+
           <li className="mb-4">
             <a href="#" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
               <TbPlaylist size={26} />

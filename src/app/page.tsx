@@ -1,27 +1,42 @@
 // src/app/page.tsx
-    
-import supabaseServer from "@/lib/supabaseServer";
-import AlbumItem from "@/components/AlbumItem"; // Assuming AlbumItem is ready
+'use client'; // <-- Now a Client Component
 
-export default async function Home() {
-  const supabase = supabaseServer();
-  
-  const { data: albums } = await supabase
-    .from('albums')
-    .select('*, artists(*)')
-    .order('created_at', { ascending: false });
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient'; // <-- Use the client-side Supabase
+import AlbumItem from '@/components/AlbumItem';
+import Greeting from '@/components/Greeting'; // <-- Import our new component
+
+export default function Home() {
+  const [albums, setAlbums] = useState<any[]>([]);
+
+  // Data fetching now happens inside a useEffect hook
+  useEffect(() => {
+    const fetchAlbums = async () => {
+      const { data, error } = await supabase
+        .from('albums')
+        .select('*, artists(*)')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching albums:', error);
+      } else if (data) {
+        setAlbums(data);
+      }
+    };
+
+    fetchAlbums();
+  }, []);
 
   return (
     <div className="p-8">
-      <h1 className="text-4xl font-bold">Welcome to MuseBuzz</h1>
+      <Greeting /> {/* <-- Use the animated greeting here */}
       <p className="mt-4 text-zinc-400">
-        Discover new music every day.
+        Music buzzing every day.
       </p>
 
       <div className="mt-8">
         <h2 className="text-2xl font-semibold">Newest Albums</h2>
         <div
-          // THIS IS THE UPDATED LINE
           className="
             grid 
             grid-cols-[repeat(auto-fill,180px)]

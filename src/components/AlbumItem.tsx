@@ -1,4 +1,3 @@
-// src/components/AlbumItem.tsx
 'use client';
 
 import { supabase } from '@/lib/supabaseClient';
@@ -17,9 +16,7 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
     .getPublicUrl(album.image_path);
 
   const handleClick = () => {
-    // We will build the actual album page later
-    // For now, it will just log to the console
-    console.log(`Clicked on album: ${album.title}`);
+    router.push(`/album/${album.id}`);
   };
 
   return (
@@ -37,7 +34,7 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
         gap-x-4 
         bg-neutral-400/5 
         cursor-pointer 
-        hover:bg-neutral-400/10 
+        hover:bg-purple-950/50
         transition 
         p-3
       "
