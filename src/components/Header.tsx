@@ -20,6 +20,9 @@ const Header = () => {
   return (
     <div 
       className="
+        sticky     /* 1. STICKY POSITIONING */
+        top-0      /* 2. STICK TO TOP */
+        z-50       /* 3. FLOAT ABOVE CONTENT */
         h-fit 
         bg-black 
         py-3 
@@ -43,7 +46,7 @@ const Header = () => {
             <>
               <Button 
                 onClick={() => onOpen('sign_up')}
-                // ADDED 'py-2' HERE TO MATCH THE OTHER BUTTONS
+                // PRESERVED YOUR FIX: 'py-2' ensures consistent height
                 className="bg-transparent text-neutral-300 font-medium whitespace-nowrap py-2"
               >
                 Sign up

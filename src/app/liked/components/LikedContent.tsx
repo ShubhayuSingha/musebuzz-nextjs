@@ -91,7 +91,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
           {/* Right side: Duration */}
           <span className="text-neutral-400 text-sm font-medium">
-            {formatTime(song.duration || 0)} 
+            {formatTime(song.duration_seconds)} 
           </span>
         </li>
       ))}

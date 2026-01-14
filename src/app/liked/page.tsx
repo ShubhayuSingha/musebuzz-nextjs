@@ -6,7 +6,7 @@ import Image from "next/image";
 
 export const revalidate = 0;
 
-export default async function Liked() {
+export default async function Liked() {  
   const cookieStore = cookies();
   const supabase = createServerComponentClient({
     cookies: () => cookieStore

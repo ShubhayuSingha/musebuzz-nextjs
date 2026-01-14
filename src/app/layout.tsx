@@ -11,7 +11,6 @@ import ModalProvider from '@/providers/ModalProvider';
 import Header from "@/components/Header";
 import SupabaseProvider from "@/providers/SupabaseProvider";
 
-// 1. Define the font as a CSS variable
 const inter = Inter({ 
   subsets: ["latin"],
   variable: '--font-inter',
@@ -42,7 +41,6 @@ export default function RootLayout({
   };
 
   return (
-    // 2. Add the variable to the <html> tag
     <html lang="en" className={inter.variable}>
       <body
         className={`antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}
@@ -52,10 +50,15 @@ export default function RootLayout({
           <ModalProvider />
           <div className="flex flex-1 overflow-hidden">
             <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
-            <main className="flex-1 overflow-y-auto">
+            
+            {/* --- FIX IS HERE --- */}
+            {/* Added 'pb-20' to create space for the player at the bottom */}
+            <main className="flex-1 overflow-y-auto pb-20">
               <Header />
               {children}
             </main>
+            {/* ------------------- */}
+
           </div>
           <Player />
         </SupabaseProvider>
