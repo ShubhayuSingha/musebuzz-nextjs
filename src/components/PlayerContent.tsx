@@ -82,8 +82,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   }, [volume]);
 
   // 2. NEW FIX: SYNC PLAY/PAUSE STATE
-  // This listens to the Store. If you click "Pause" in the Album list,
-  // this effect fires and actually pauses the audio engine.
   useEffect(() => {
     const sound = soundRef.current;
     if (sound) {
@@ -223,7 +221,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         </div>
 
         <div className="flex items-center gap-x-2 w-full group">
-          <p className="text-neutral-400 text-xs w-12 text-right">{formatTime(currentTime)}</p>
+          {/* FIX: Added tabular-nums here */}
+          <p className="text-neutral-400 text-xs w-12 text-right tabular-nums">{formatTime(currentTime)}</p>
+          
           <Slider 
             min={0}
             max={duration || 100} 
@@ -237,7 +237,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
           />
-          <p className="text-neutral-400 text-xs w-12 text-left">{formatTime(duration)}</p>
+
+          {/* FIX: Added tabular-nums here */}
+          <p className="text-neutral-400 text-xs w-12 text-left tabular-nums">{formatTime(duration)}</p>
         </div>
       </div>
       

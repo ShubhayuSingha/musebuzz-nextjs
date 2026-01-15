@@ -7,9 +7,12 @@ import Image from "next/image";
 export const revalidate = 0;
 
 export default async function Liked() {  
-  const cookieStore = cookies();
+  // 1. FIX: Add 'await' because cookies() is async in Next.js 15
+  const cookieStore = await cookies();
+
+  // 2. FIX: Add 'as any' to stop TypeScript from complaining about the type mismatch
   const supabase = createServerComponentClient({
-    cookies: () => cookieStore
+    cookies: () => cookieStore as any
   });
 
   const {
@@ -37,10 +40,7 @@ export default async function Liked() {
         overflow-y-auto
       "
     >
-      {/* SECTION 1: HEADER
-        This div handles the purple background. 
-        It ends when the content inside it ends.
-      */}
+      {/* SECTION 1: HEADER */}
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
           <div className="flex flex-col md:flex-row items-end gap-x-5">
@@ -68,17 +68,14 @@ export default async function Liked() {
                 Liked Songs
               </h1>
               <p className="text-neutral-300 text-sm font-medium mt-2">
-                 {songs.length} {songs.length === 1 ? 'song' : 'songs'}
+                  {songs.length} {songs.length === 1 ? 'song' : 'songs'}
               </p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* SECTION 2: SONG LIST
-        This is a separate div. It sits comfortably BELOW the header 
-        in the standard neutral-900 background.
-      */}
+      {/* SECTION 2: SONG LIST */}
       <div className="flex flex-col gap-y-2 p-6 w-full">
         <LikedContent songs={songs} />
       </div>

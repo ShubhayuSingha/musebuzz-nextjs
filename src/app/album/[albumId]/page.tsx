@@ -6,7 +6,6 @@ import AlbumContent from "./AlbumContent";
 
 export const revalidate = 0;
 
-// 1. UPDATE INTERFACE: params is now a Promise
 interface AlbumProps {
   params: Promise<{
     albumId: string;
@@ -14,20 +13,20 @@ interface AlbumProps {
 }
 
 export default async function Album(props: AlbumProps) {
-  // 2. AWAIT THE PARAMS
   const params = await props.params;
   const { albumId } = params;
 
-  const cookieStore = cookies();
+  // 🔴 FIX: Add 'await' here because cookies() is now async in Next.js 15
+  const cookieStore = await cookies();
+  
   const supabase = createServerComponentClient({
-    cookies: () => cookieStore
+    cookies: () => cookieStore as any
   });
 
-  // 1. Fetch Album Data (Use albumId from the awaited params)
   const { data: album } = await supabase
     .from('albums')
     .select('*, songs(*), artists(*)')
-    .eq('id', albumId) // <--- Updated variable
+    .eq('id', albumId)
     .single();
 
   if (!album) {
@@ -38,13 +37,11 @@ export default async function Album(props: AlbumProps) {
     )
   }
 
-  // 2. Get Public URL for the Album Art
   const { data: imageData } = supabase
     .storage
     .from('images')
     .getPublicUrl(album.image_path);
 
-  // 3. Dynamic Font Size Logic
   const titleLength = album.title.length;
   let titleSizeClass = "text-4xl sm:text-6xl lg:text-8xl"; 
 
@@ -64,11 +61,9 @@ export default async function Album(props: AlbumProps) {
         overflow-y-auto
       "
     >
-      {/* SECTION 1: HERO HEADER */}
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
           <div className="flex flex-col md:flex-row items-end gap-x-5">
-            {/* Album Art Container */}
             <div className="
               relative 
               h-32 
@@ -88,13 +83,11 @@ export default async function Album(props: AlbumProps) {
               />
             </div>
 
-            {/* Album Info */}
             <div className="flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full">
               <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
                 Album
               </p>
               
-              {/* DYNAMIC TITLE HERE */}
               <h1 className={`
                 text-white 
                 font-bold 
@@ -120,7 +113,6 @@ export default async function Album(props: AlbumProps) {
         </div>
       </div>
 
-      {/* SECTION 2: SONG LIST */}
       <div className="flex flex-col gap-y-2 p-6 w-full">
         <AlbumContent 
           songs={album.songs} 
