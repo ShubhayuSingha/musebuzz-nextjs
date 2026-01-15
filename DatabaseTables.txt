@@ -1,0 +1,98 @@
+Tables present:
+
+albums
+artists
+liked_songs
+playback_state
+playlist_songs
+playlists
+profiles
+songs
+
+
+
+
+
+Now let's look at the columns of each table:
+
+
+
+albums
+
+id - uuid
+created_at - timestamptz
+title - text
+image_path - text
+artist_id - uuid
+genre - text
+release_type - text (album or single because single songs are an album with just one song)
+
+
+
+artists
+
+id - uuid
+created_at - timestamptz
+name - text
+image_path - text
+
+
+
+liked_songs
+
+user_id - uuid
+song_id - uuid
+created_at - timestamptz
+
+
+
+playback_state
+
+user_id - uuid
+active_song_id - uuid
+is_playing - bool
+volume - int4
+progress_ms - int4
+queue_state - jsonb
+repeat_mode - text
+shuffle_mode - bool
+updated_at - timestamptz
+
+
+
+playlist_songs
+
+playlist_id - uuid
+song_id - uuid
+created_at - timestamptz
+
+
+
+playlists
+
+id - uuid
+created_at - timestamptz
+title - text
+image_path - text
+user_id - uuid
+
+
+
+profiles (this is actually empty for now the users are in the supabase auth)
+
+id - uuid
+updated_at - timestamptz
+full_name - text
+username - text
+avatar_url - text
+
+
+
+songs
+
+id - uuid
+created_at - timestamptz
+title - text
+duration_seconds - int8
+album_id - uuid (single song belongs to the album which is marked album type as single as mentioned or can be also part of a bigger album marked album)
+song_path - text

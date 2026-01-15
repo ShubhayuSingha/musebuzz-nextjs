@@ -1,7 +1,7 @@
 // src/app/layout.tsx
 'use client'; 
 
-import { Inter } from "next/font/google";
+import { Figtree } from "next/font/google"; // 1. Changed to Figtree
 import "./globals.css";
 import 'rc-slider/assets/index.css';
 import Sidebar from "@/components/Sidebar";
@@ -10,13 +10,11 @@ import { useState, useEffect } from "react";
 import ModalProvider from '@/providers/ModalProvider';
 import Header from "@/components/Header";
 import SupabaseProvider from "@/providers/SupabaseProvider";
-
-// 👇 1. Import ToasterProvider
 import ToasterProvider from "@/providers/ToasterProvider";
 
-const inter = Inter({ 
-  subsets: ["latin"],
-  variable: '--font-inter',
+// 2. Configure Figtree
+const font = Figtree({ 
+  subsets: ["latin"] 
 });
 
 export default function RootLayout({
@@ -44,13 +42,13 @@ export default function RootLayout({
   };
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <body
-        className={`antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}
+        // 3. Apply font.className here
+        className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}
         suppressHydrationWarning
       >
         <SupabaseProvider>
-          {/* 👇 2. Add ToasterProvider here */}
           <ToasterProvider />
           <ModalProvider />
           
@@ -58,6 +56,8 @@ export default function RootLayout({
             <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
             
             <main className="flex-1 overflow-y-auto pb-20">
+              {/* Note: We removed the duplicate Header from the Queue page, 
+                  so this global one handles the layout. */}
               <Header />
               {children}
             </main>

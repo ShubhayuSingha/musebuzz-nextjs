@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useUser } from "@supabase/auth-helpers-react";
 import usePlayerStore from "@/stores/usePlayerStore";
-import { BsPlayFill } from "react-icons/bs";
-import LikeButton from "@/components/LikeButton"; // 👈 Import LikeButton
+import { BsPlayFill, BsPauseFill } from "react-icons/bs"; // Added Pause
+import LikeButton from "@/components/LikeButton"; 
+import PlayingAnimation from '@/components/PlayingAnimation'; // Added Visualizer
 
 const formatTime = (seconds: number) => {
   if (!seconds) return "0:00";
@@ -31,8 +32,20 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   }, [user, router]);
 
   const onPlay = (id: string) => {
-    player.setId(id);
-    player.setIds(songs.map((song) => song.id)); 
+    // SMART TOGGLE LOGIC
+    if (player.activeId === id) {
+      if (player.isPlaying) {
+        player.setIsPlaying(false);
+      } else {
+        player.setIsPlaying(true);
+      }
+    } else {
+      player.setId(id);
+      player.setIds(songs.map((song) => song.id), {
+         type: 'playlist',
+         title: 'Liked Songs'
+      });
+    }
   };
 
   if (songs.length === 0) {
@@ -45,53 +58,73 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
   return ( 
     <ol className="flex flex-col gap-y-2 w-full">
-      {songs.map((song, index) => (
-        <li 
-          key={song.id} 
-          className="
-            flex 
-            items-center 
-            justify-between 
-            p-3 
-            rounded-md 
-            hover:bg-purple-950/50 
-            transition 
-            cursor-pointer 
-            group
-          "
-          onClick={() => onPlay(song.id)}
-        >
-          {/* Left side: Number/Play Icon and Title */}
-          <div className="flex items-center gap-x-4">
-            <div className="flex items-center justify-center w-6 relative">
-              <span className="text-neutral-400 font-medium group-hover:opacity-0 transition">
-                {index + 1}
-              </span>
-              <div className="absolute opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                <BsPlayFill size={20} className="text-white" />
+      {songs.map((song, index) => {
+        const isActive = player.activeId === song.id;
+        const isPlaying = player.isPlaying;
+
+        return (
+          <li 
+            key={song.id} 
+            className={`
+              flex 
+              items-center 
+              justify-between 
+              p-3 
+              rounded-md 
+              transition 
+              cursor-pointer 
+              group
+              ${isActive ? 'bg-neutral-800/50' : 'hover:bg-purple-950/50'}
+            `}
+            onClick={() => onPlay(song.id)}
+          >
+            {/* Left Side: Icon/Number/Visualizer */}
+            <div className="flex items-center gap-x-4">
+              <div className="flex items-center justify-center w-6 h-6 relative">
+                 {/* Active & Playing -> Visualizer (Hover: Pause) */}
+                 {isActive && isPlaying ? (
+                    <>
+                      <div className="group-hover:hidden">
+                        <PlayingAnimation />
+                      </div>
+                      <BsPauseFill size={25} className="text-white hidden group-hover:block" />
+                    </>
+                 ) : (
+                    /* Inactive OR Paused -> Number (Hover: Play) */
+                    <>
+                      <span className={`
+                        font-medium 
+                        group-hover:hidden 
+                        ${isActive ? 'text-green-500' : 'text-neutral-400'}
+                      `}>
+                        {index + 1}
+                      </span>
+                      <BsPlayFill size={25} className="text-white hidden group-hover:block" />
+                    </>
+                 )}
+              </div>
+
+              {/* Title */}
+              <div className="flex flex-col">
+                <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
+                  {song.title}
+                </p>
+                <p className="text-neutral-400 text-sm truncate">
+                  {song.author}
+                </p>
               </div>
             </div>
 
-            <div className="flex flex-col">
-              <p className="text-white truncate font-medium">
-                {song.title}
-              </p>
-              <p className="text-neutral-400 text-sm truncate">
-                {song.author}
-              </p>
+            {/* Right Side */}
+            <div className="flex items-center gap-x-4">
+              <LikeButton songId={song.id} />
+              <span className="text-neutral-400 text-sm font-medium">
+                {formatTime(song.duration_seconds)} 
+              </span>
             </div>
-          </div>
-
-          {/* Right side: Like Button and Duration */}
-          <div className="flex items-center gap-x-4">
-            {/* 👇 Add LikeButton here */}
-            <LikeButton songId={song.id} />
-            <span className="text-neutral-400 text-sm font-medium">
-              {formatTime(song.duration_seconds)} 
-            </span>
-          </div>
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ol>
    );
 }

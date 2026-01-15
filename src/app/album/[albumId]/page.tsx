@@ -6,23 +6,28 @@ import AlbumContent from "./AlbumContent";
 
 export const revalidate = 0;
 
+// 1. UPDATE INTERFACE: params is now a Promise
 interface AlbumProps {
-  params: {
+  params: Promise<{
     albumId: string;
-  }
+  }>;
 }
 
-export default async function Album({ params }: AlbumProps) {
+export default async function Album(props: AlbumProps) {
+  // 2. AWAIT THE PARAMS
+  const params = await props.params;
+  const { albumId } = params;
+
   const cookieStore = cookies();
   const supabase = createServerComponentClient({
     cookies: () => cookieStore
   });
 
-  // 1. Fetch Album Data
+  // 1. Fetch Album Data (Use albumId from the awaited params)
   const { data: album } = await supabase
     .from('albums')
     .select('*, songs(*), artists(*)')
-    .eq('id', params.albumId)
+    .eq('id', albumId) // <--- Updated variable
     .single();
 
   if (!album) {
@@ -41,12 +46,12 @@ export default async function Album({ params }: AlbumProps) {
 
   // 3. Dynamic Font Size Logic
   const titleLength = album.title.length;
-  let titleSizeClass = "text-4xl sm:text-6xl lg:text-8xl"; // Default (Huge)
+  let titleSizeClass = "text-4xl sm:text-6xl lg:text-8xl"; 
 
   if (titleLength > 40) {
-    titleSizeClass = "text-2xl sm:text-4xl lg:text-5xl"; // Smallest for very long titles
+    titleSizeClass = "text-2xl sm:text-4xl lg:text-5xl"; 
   } else if (titleLength > 20) {
-    titleSizeClass = "text-3xl sm:text-5xl lg:text-6xl"; // Medium
+    titleSizeClass = "text-3xl sm:text-5xl lg:text-6xl"; 
   }
 
   return (
@@ -117,7 +122,10 @@ export default async function Album({ params }: AlbumProps) {
 
       {/* SECTION 2: SONG LIST */}
       <div className="flex flex-col gap-y-2 p-6 w-full">
-        <AlbumContent songs={album.songs} />
+        <AlbumContent 
+          songs={album.songs} 
+          albumName={album.title}
+        />
       </div>
     </div>
   );

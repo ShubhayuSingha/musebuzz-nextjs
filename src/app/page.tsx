@@ -1,3 +1,5 @@
+// src/app/page.tsx
+
 'use client';
 
 import { useEffect, useState, useRef, MouseEvent } from 'react';
@@ -13,13 +15,12 @@ export default function Home() {
   const [albums, setAlbums] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
 
+  // Refs start as null, so the type implies | null
   const albumScrollRef = useRef<HTMLDivElement>(null);
   const playlistScrollRef = useRef<HTMLDivElement>(null);
 
-  // Drag visuals
   const [isDragging, setIsDragging] = useState(false);
 
-  // Arrow visibility
   const [canScrollLeft, setCanScrollLeft] = useState<Record<SectionKey, boolean>>({
     albums: false,
     playlists: false,
@@ -30,13 +31,11 @@ export default function Home() {
     playlists: true,
   });
 
-  // Drag logic refs
   const isDown = useRef(false);
   const hasMoved = useRef(false);
   const startX = useRef(0);
   const scrollLeft = useRef(0);
 
-  // Momentum refs (MOUSE ONLY)
   const lastX = useRef(0);
   const lastTime = useRef(0);
   const velocity = useRef(0);
@@ -65,9 +64,9 @@ export default function Home() {
     fetchPlaylists();
   }, []);
 
-  // === ARROW VISIBILITY (SOURCE OF TRUTH) ===
+  // === FIX 1: Allow null in RefObject ===
   const updateScrollButtons = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     if (!ref.current) return;
@@ -85,9 +84,9 @@ export default function Home() {
     }));
   };
 
-  // === ARROW CLICK SCROLL ===
+  // === FIX 2: Allow null ===
   const scroll = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     direction: 'left' | 'right'
   ) => {
     if (!ref.current) return;
@@ -100,10 +99,10 @@ export default function Home() {
     });
   };
 
-  // === MOUSE DOWN ===
+  // === FIX 3: Allow null ===
   const handleMouseDown = (
     e: MouseEvent,
-    ref: React.RefObject<HTMLDivElement>
+    ref: React.RefObject<HTMLDivElement | null>
   ) => {
     if (!ref.current) return;
 
@@ -122,10 +121,10 @@ export default function Home() {
     }
   };
 
-  // === MOUSE MOVE (DRAG + VELOCITY TRACKING) ===
+  // === FIX 4: Allow null ===
   const handleMouseMove = (
     e: MouseEvent,
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     if (!isDown.current || !ref.current) return;
@@ -135,7 +134,7 @@ export default function Home() {
     const dt = now - lastTime.current;
 
     if (dt > 0) {
-      velocity.current = dx / dt; // px per ms
+      velocity.current = dx / dt; 
     }
 
     lastX.current = e.pageX;
@@ -156,9 +155,9 @@ export default function Home() {
     }
   };
 
-  // === MOMENTUM SCROLL (MOUSE ONLY) ===
+  // === FIX 5: Allow null ===
   const startMomentum = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     if (!ref.current) return;
@@ -184,9 +183,9 @@ export default function Home() {
     momentumId.current = requestAnimationFrame(step);
   };
 
-  // === MOUSE UP ===
+  // === FIX 6: Allow null ===
   const handleMouseUp = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     isDown.current = false;
@@ -198,9 +197,9 @@ export default function Home() {
     }
   };
 
-  // === MOUSE LEAVE ===
+  // === FIX 7: Allow null ===
   const handleMouseLeave = (
-    ref: React.RefObject<HTMLDivElement>,
+    ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     if (isDown.current && Math.abs(velocity.current) > 0.1) {
@@ -212,10 +211,11 @@ export default function Home() {
     setIsDragging(false);
   };
 
+  // === FIX 8: Allow null ===
   const renderScroller = (
     items: any[],
     ItemComponent: React.FC<any>,
-    scrollRef: React.RefObject<HTMLDivElement>,
+    scrollRef: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => (
     <div className="relative group">
@@ -229,6 +229,7 @@ export default function Home() {
       )}
 
       <div
+        // @ts-ignore
         ref={scrollRef}
         onScroll={() => updateScrollButtons(scrollRef, key)}
         onMouseDown={(e) => handleMouseDown(e, scrollRef)}

@@ -4,12 +4,12 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { HiHome } from 'react-icons/hi';
+import { HiQueueList } from 'react-icons/hi2'; // 1. Added Queue Icon
 import { BiSearch } from 'react-icons/bi';
 import { TbPlaylist } from 'react-icons/tb';
 import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; 
 import { FiMenu } from 'react-icons/fi';
 
-// 1. Add Imports for Auth Logic
 import { useUser } from "@supabase/auth-helpers-react";
 import useAuthModalStore from "@/stores/useAuthModalStore";
 
@@ -21,7 +21,6 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const [showText, setShowText] = useState(!isCollapsed);
   
-  // 2. Initialize Hooks
   const authModal = useAuthModalStore();
   const user = useUser();
 
@@ -36,13 +35,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
     }
   }, [isCollapsed]);
 
-  // 3. The Logic to handle "Liked Songs" click
   const handleLikedClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!user) {
-      e.preventDefault(); // Stop navigation to /liked
-      authModal.onOpen('sign_in'); // Open the login modal
+      e.preventDefault(); 
+      authModal.onOpen('sign_in'); 
     }
-    // If user exists, do nothing (let the Link navigate normally)
   }
 
   const textClasses = `whitespace-nowrap transition-opacity duration-200 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`;
@@ -76,6 +73,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               {showText && <span className={textClasses}>Search</span>}
             </Link>
           </li>
+          
+          {/* 2. ADDED QUEUE LINK HERE */}
+          <li className="mb-4">
+            <Link href="/queue" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
+              <HiQueueList size={26} />
+              {showText && <span className={textClasses}>Queue</span>}
+            </Link>
+          </li>
+
         </ul>
       </nav>
 
@@ -83,7 +89,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       
       <nav>
         <ul>
-          {/* 4. Updated Liked Songs Link with onClick handler */}
           <li className="mb-4">
             <Link 
               href="/liked" 

@@ -3,14 +3,15 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Howl } from "howler";
-import { BsPlayFill, BsPauseFill } from "react-icons/bs";
+import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { HiSpeakerWave, HiSpeakerXMark } from "react-icons/hi2";
+import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
 import Slider from 'rc-slider';
 import Image from "next/image";
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import { supabase } from "@/lib/supabaseClient";
-import LikeButton from "@/components/LikeButton"; // 1. Import the new component
+import LikeButton from "@/components/LikeButton";
 
 interface PlayerContentProps {
   song: any;
@@ -18,16 +19,32 @@ interface PlayerContentProps {
 }
 
 const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
-  const { activeId, setId, ids, volume, setVolume, prevVolume, setPrevVolume } = usePlayerStore();
-  
-  // Note: We removed useUser and authModal because LikeButton handles that internally now.
+  const { 
+    isPlaying, 
+    volume, 
+    activeId, 
+    playNext,       
+    playPrevious,
+    setVolume, 
+    setIsPlaying, 
+    toggleShuffle, 
+    toggleRepeat,
+    isShuffled, 
+    repeatMode,
+    prevVolume,
+    setPrevVolume
+  } = usePlayerStore(); 
+
+  const onPlayNext = playNext; 
 
   const soundRef = useRef<Howl | null>(null);
   const animationFrameRef = useRef<number | null>(null);
-  
-  const [isPlaying, setIsPlaying] = useState(false);
-  // Removed [isLiked, setIsLiked] state
-  
+
+  const repeatModeRef = useRef(repeatMode);
+  useEffect(() => {
+    repeatModeRef.current = repeatMode;
+  }, [repeatMode]);
+
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -48,18 +65,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  const onPlayNext = () => {
-    if (ids.length === 0) return;
-    const currentIndex = ids.findIndex((id) => id === activeId);
-    const nextSong = ids[currentIndex + 1];
-
-    if (nextSong) {
-      setId(nextSong);
-    } else {
-        setId(ids[0]); 
-    }
-  }
-
   const toggleMute = () => {
     if (volume === 0) {
       setVolume(prevVolume);
@@ -69,12 +74,28 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }
 
+  // 1. SYNC VOLUME
   useEffect(() => {
     if (soundRef.current) {
-        soundRef.current.volume(volume);
+      soundRef.current.volume(volume);
     }
   }, [volume]);
 
+  // 2. NEW FIX: SYNC PLAY/PAUSE STATE
+  // This listens to the Store. If you click "Pause" in the Album list,
+  // this effect fires and actually pauses the audio engine.
+  useEffect(() => {
+    const sound = soundRef.current;
+    if (sound) {
+      if (isPlaying && !sound.playing()) {
+        sound.play();
+      } else if (!isPlaying && sound.playing()) {
+        sound.pause();
+      }
+    }
+  }, [isPlaying]);
+
+  // 3. LOAD SONG
   useEffect(() => {
     soundRef.current?.unload();
     if (animationFrameRef.current) {
@@ -85,13 +106,17 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       const newSound = new Howl({
         src: [songPath],
         html5: true,
-        autoplay: true,
-        volume: volume, 
+        autoplay: true, 
+        volume: volume,
         onplay: () => setIsPlaying(true),
         onpause: () => setIsPlaying(false),
         onend: () => {
-            setIsPlaying(false);
-            onPlayNext();
+          if (repeatModeRef.current === 'one') {
+             newSound.play();
+          } else {
+             setIsPlaying(false);
+             onPlayNext(); 
+          }
         },
         onload: () => setDuration(newSound.duration()),
       });
@@ -99,9 +124,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
 
     return () => {
-        soundRef.current?.unload();
+      soundRef.current?.unload();
     }
-  }, [songPath]);
+  }, [songPath]); 
 
   useEffect(() => {
     const animate = () => {
@@ -127,13 +152,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   }, [isPlaying, isDragging]);
 
   const handlePlay = () => {
-    const sound = soundRef.current;
-    if (!sound) return;
-    if (isPlaying) {
-      sound.pause();
-    } else {
-      sound.play();
-    }
+    // We just toggle the state. 
+    // The useEffect above will handle the actual sound.play()/pause()
+    setIsPlaying(!isPlaying);
   };
 
   const handleSliderChange = (value: number | number[]) => {
@@ -164,16 +185,43 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           <p className="text-white font-medium truncate">{song.title}</p>
           <p className="text-neutral-400 text-sm truncate">{song.albums?.artists?.name || "Unknown"}</p>
         </div>
+        <LikeButton songId={song.id} />
       </div>
 
       {/* Center Controls */}
       <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
-        <button 
-          onClick={handlePlay}
-          className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition"
-        >
-          <Icon size={26} className="text-black" />
-        </button>
+        
+        <div className="flex items-center gap-x-6">
+          <BsShuffle 
+            size={20} 
+            onClick={toggleShuffle}
+            className={`cursor-pointer transition ${isShuffled ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
+          />
+          <AiFillStepBackward
+            size={30}
+            onClick={playPrevious}
+            className="text-neutral-400 cursor-pointer hover:text-white transition"
+          />
+          <div 
+            onClick={handlePlay}
+            className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition"
+          >
+            <Icon size={26} className="text-black" />
+          </div>
+          <AiFillStepForward
+            size={30}
+            onClick={onPlayNext}
+            className="text-neutral-400 cursor-pointer hover:text-white transition"
+          />
+          <div onClick={toggleRepeat} className="cursor-pointer">
+              {repeatMode === 'one' ? (
+                 <BsRepeat1 size={20} className="text-green-500 transition" />
+              ) : (
+                 <BsRepeat size={20} className={`transition ${repeatMode === 'context' ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`} />
+              )}
+          </div>
+        </div>
+
         <div className="flex items-center gap-x-2 w-full group">
           <p className="text-neutral-400 text-xs w-12 text-right">{formatTime(currentTime)}</p>
           <Slider 
@@ -195,9 +243,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       
       {/* Right Side */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
-        {/* 2. REPLACED OLD BUTTON WITH COMPONENT */}
-        <LikeButton songId={song.id} />
-
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 
                 onClick={toggleMute} 
@@ -218,8 +263,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                       rail: { backgroundColor: 'rgb(63 63 70)' }
                   }}
               />
-              <p className="absolute top-4 left-0 w-full text-center text-[10px] text-neutral-400 font-medium select-none pointer-events-none">
-                {Math.round(volume * 100)}%
+              <p className="absolute top-4 left-0 w-full text-center text-[10px] text-neutral-400 font-extrabold select-none pointer-events-none">
+                  {Math.round(volume * 100)}%
               </p>
             </div>
         </div>
