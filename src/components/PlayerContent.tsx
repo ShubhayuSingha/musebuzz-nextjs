@@ -4,15 +4,13 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Howl } from "howler";
 import { BsPlayFill, BsPauseFill } from "react-icons/bs";
-import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
 import { HiSpeakerWave, HiSpeakerXMark } from "react-icons/hi2";
 import Slider from 'rc-slider';
 import Image from "next/image";
-import { useUser } from "@supabase/auth-helpers-react";
 
-import useAuthModalStore from "@/stores/useAuthModalStore";
 import usePlayerStore from "@/stores/usePlayerStore";
 import { supabase } from "@/lib/supabaseClient";
+import LikeButton from "@/components/LikeButton"; // 1. Import the new component
 
 interface PlayerContentProps {
   song: any;
@@ -20,17 +18,16 @@ interface PlayerContentProps {
 }
 
 const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
-  // 1. IMPORT 'prevVolume' AND 'setPrevVolume'
   const { activeId, setId, ids, volume, setVolume, prevVolume, setPrevVolume } = usePlayerStore();
   
-  const user = useUser();
-  const authModal = useAuthModalStore();
+  // Note: We removed useUser and authModal because LikeButton handles that internally now.
 
   const soundRef = useRef<Howl | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
+  // Removed [isLiked, setIsLiked] state
+  
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -42,8 +39,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   }, [song]);
 
   const Icon = isPlaying ? BsPauseFill : BsPlayFill;
-  const LikeIcon = isLiked ? AiFillHeart : AiOutlineHeart;
-  
   const VolumeIcon = volume === 0 ? HiSpeakerXMark : HiSpeakerWave;
 
   const formatTime = (secs: number) => {
@@ -65,13 +60,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }
 
-  // 2. UPDATED MUTE LOGIC
   const toggleMute = () => {
     if (volume === 0) {
-      // UNMUTE: Restore the previous volume
       setVolume(prevVolume);
     } else {
-      // MUTE: Save current volume to memory, then set to 0
       setPrevVolume(volume);
       setVolume(0);
     }
@@ -82,27 +74,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         soundRef.current.volume(volume);
     }
   }, [volume]);
-
-  useEffect(() => {
-    if (!user?.id || !activeId) return;
-
-    const checkLikedStatus = async () => {
-      const { data, error } = await supabase
-        .from('liked_songs')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('song_id', activeId)
-        .single();
-
-      if (!error && data) {
-        setIsLiked(true);
-      } else {
-        setIsLiked(false);
-      }
-    };
-
-    checkLikedStatus();
-  }, [activeId, user?.id]);
 
   useEffect(() => {
     soundRef.current?.unload();
@@ -178,27 +149,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   };
 
-  const handleLike = async () => {
-    if (!user) {
-      return authModal.onOpen('sign_in');
-    }
-    if (!activeId) return;
-
-    if (isLiked) {
-      const { error } = await supabase
-        .from('liked_songs')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('song_id', activeId);
-      if (!error) setIsLiked(false);
-    } else {
-      const { error } = await supabase
-        .from('liked_songs')
-        .insert({ song_id: activeId, user_id: user.id });
-      if (!error) setIsLiked(true);
-    }
-  };
-
   return (
     <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3">
       {/* Left Side */}
@@ -245,9 +195,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       
       {/* Right Side */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
-        <button onClick={handleLike}>
-          <LikeIcon size={25} className={isLiked ? 'text-green-500' : 'text-neutral-400'} />
-        </button>
+        {/* 2. REPLACED OLD BUTTON WITH COMPONENT */}
+        <LikeButton songId={song.id} />
 
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 

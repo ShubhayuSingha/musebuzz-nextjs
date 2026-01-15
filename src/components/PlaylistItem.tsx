@@ -4,23 +4,23 @@ import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 
-interface AlbumItemProps {
-  album: any;
+interface PlaylistItemProps {
+  playlist: any;
 }
 
-const FALLBACK_IMAGE = '/images/album-placeholder.png';
+const FALLBACK_IMAGE = '/images/playlist-placeholder.png';
 
-const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
+const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   const router = useRouter();
 
-  const imageUrl = album.image_path
+  const imageUrl = playlist.image_path
     ? supabase.storage
         .from('images')
-        .getPublicUrl(album.image_path).data.publicUrl
+        .getPublicUrl(playlist.image_path).data.publicUrl
     : FALLBACK_IMAGE;
 
   const handleClick = () => {
-    router.push(`/album/${album.id}`);
+    router.push(`/playlist/${playlist.id}`);
   };
 
   return (
@@ -53,7 +53,7 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
           className="object-cover select-none"
           src={imageUrl}
           fill
-          alt={album.title}
+          alt={playlist.title}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
       </div>
@@ -61,17 +61,17 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
       <div className="flex flex-col items-start w-full pt-4 gap-y-1">
         <p
           className="font-semibold truncate w-full"
-          title={album.title}
+          title={playlist.title}
         >
-          {album.title}
+          {playlist.title}
         </p>
 
         <p className="text-neutral-400 text-sm pb-4 w-full truncate">
-          By {album.artists.name}
+          Playlist
         </p>
       </div>
     </div>
   );
 };
 
-export default AlbumItem;
+export default PlaylistItem;

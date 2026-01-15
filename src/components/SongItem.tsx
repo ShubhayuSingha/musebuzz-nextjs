@@ -3,29 +3,26 @@
 
 import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
-import usePlayerStore from '@/stores/usePlayerStore'; // 1. Import the store
+import usePlayerStore from '@/stores/usePlayerStore'; 
 
-// We will define a proper Song type later
 interface SongItemProps {
   song: any;
 }
 
 const SongItem: React.FC<SongItemProps> = ({ song }) => {
-  const { setId } = usePlayerStore(); // 2. Get the 'setId' action
+  const { setId } = usePlayerStore(); 
 
-  // Get the public URL for the image from Supabase Storage
   const { data: imageData } = supabase.storage
     .from('images')
     .getPublicUrl(song.albums.image_path);
 
   const handlePlay = () => {
-    // 3. This function will be called on click
     setId(song.id);
   };
 
   return (
     <div
-      onClick={handlePlay} // 4. Attach the function to the click event
+      onClick={handlePlay} 
       className="
         relative group flex flex-col items-center justify-center 
         rounded-md overflow-hidden gap-x-4 bg-neutral-400/5 
@@ -42,7 +39,10 @@ const SongItem: React.FC<SongItemProps> = ({ song }) => {
         />
       </div>
       <div className="flex flex-col items-start w-full pt-4 gap-y-1">
-        <p className="font-semibold truncate w-full">{song.title}</p>
+        {/* 👇 ADDED title attribute here */}
+        <p className="font-semibold truncate w-full" title={song.title}>
+            {song.title}
+        </p>
         <p className="text-neutral-400 text-sm pb-4 w-full truncate">
           By {song.albums.artists.name}
         </p>

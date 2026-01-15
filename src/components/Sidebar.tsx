@@ -6,8 +6,12 @@ import Link from 'next/link';
 import { HiHome } from 'react-icons/hi';
 import { BiSearch } from 'react-icons/bi';
 import { TbPlaylist } from 'react-icons/tb';
-import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; // 1. Added Heart Icon
+import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; 
 import { FiMenu } from 'react-icons/fi';
+
+// 1. Add Imports for Auth Logic
+import { useUser } from "@supabase/auth-helpers-react";
+import useAuthModalStore from "@/stores/useAuthModalStore";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -16,6 +20,10 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const [showText, setShowText] = useState(!isCollapsed);
+  
+  // 2. Initialize Hooks
+  const authModal = useAuthModalStore();
+  const user = useUser();
 
   useEffect(() => {
     if (isCollapsed) {
@@ -27,6 +35,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       return () => clearTimeout(timer);
     }
   }, [isCollapsed]);
+
+  // 3. The Logic to handle "Liked Songs" click
+  const handleLikedClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (!user) {
+      e.preventDefault(); // Stop navigation to /liked
+      authModal.onOpen('sign_in'); // Open the login modal
+    }
+    // If user exists, do nothing (let the Link navigate normally)
+  }
 
   const textClasses = `whitespace-nowrap transition-opacity duration-200 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`;
 
@@ -66,9 +83,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       
       <nav>
         <ul>
-          {/* 2. NEW: Liked Songs Button */}
+          {/* 4. Updated Liked Songs Link with onClick handler */}
           <li className="mb-4">
-            <Link href="/liked" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
+            <Link 
+              href="/liked" 
+              onClick={handleLikedClick}
+              className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4"
+            >
               <AiFillHeart size={26} />
               {showText && <span className={textClasses}>Liked Songs</span>}
             </Link>

@@ -6,9 +6,8 @@ import { useEffect } from "react";
 import { useUser } from "@supabase/auth-helpers-react";
 import usePlayerStore from "@/stores/usePlayerStore";
 import { BsPlayFill } from "react-icons/bs";
+import LikeButton from "@/components/LikeButton"; // 👈 Import LikeButton
 
-// We'll define a simple helper here in case imports are tricky, 
-// matching your AlbumContent logic.
 const formatTime = (seconds: number) => {
   if (!seconds) return "0:00";
   const minutes = Math.floor(seconds / 60);
@@ -33,7 +32,6 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
   const onPlay = (id: string) => {
     player.setId(id);
-    // This ensures that after the liked song finishes, the next one in the list plays
     player.setIds(songs.map((song) => song.id)); 
   };
 
@@ -65,20 +63,15 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
         >
           {/* Left side: Number/Play Icon and Title */}
           <div className="flex items-center gap-x-4">
-            {/* The Magic Number Container */}
             <div className="flex items-center justify-center w-6 relative">
-              {/* The Number (Visible by default) */}
               <span className="text-neutral-400 font-medium group-hover:opacity-0 transition">
                 {index + 1}
               </span>
-              
-              {/* The Play Icon (Visible on hover) */}
               <div className="absolute opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                 <BsPlayFill size={20} className="text-white" />
               </div>
             </div>
 
-            {/* Song Title & Artist */}
             <div className="flex flex-col">
               <p className="text-white truncate font-medium">
                 {song.title}
@@ -89,10 +82,14 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
             </div>
           </div>
 
-          {/* Right side: Duration */}
-          <span className="text-neutral-400 text-sm font-medium">
-            {formatTime(song.duration_seconds)} 
-          </span>
+          {/* Right side: Like Button and Duration */}
+          <div className="flex items-center gap-x-4">
+            {/* 👇 Add LikeButton here */}
+            <LikeButton songId={song.id} />
+            <span className="text-neutral-400 text-sm font-medium">
+              {formatTime(song.duration_seconds)} 
+            </span>
+          </div>
         </li>
       ))}
     </ol>

@@ -11,6 +11,9 @@ import ModalProvider from '@/providers/ModalProvider';
 import Header from "@/components/Header";
 import SupabaseProvider from "@/providers/SupabaseProvider";
 
+// 👇 1. Import ToasterProvider
+import ToasterProvider from "@/providers/ToasterProvider";
+
 const inter = Inter({ 
   subsets: ["latin"],
   variable: '--font-inter',
@@ -47,17 +50,17 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <SupabaseProvider>
+          {/* 👇 2. Add ToasterProvider here */}
+          <ToasterProvider />
           <ModalProvider />
+          
           <div className="flex flex-1 overflow-hidden">
             <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
             
-            {/* --- FIX IS HERE --- */}
-            {/* Added 'pb-20' to create space for the player at the bottom */}
             <main className="flex-1 overflow-y-auto pb-20">
               <Header />
               {children}
             </main>
-            {/* ------------------- */}
 
           </div>
           <Player />

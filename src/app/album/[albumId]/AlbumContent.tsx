@@ -4,6 +4,7 @@
 import usePlayerStore from '@/stores/usePlayerStore';
 import { formatTime } from '@/lib/helpers';
 import { BsPlayFill } from 'react-icons/bs';
+import LikeButton from '@/components/LikeButton'; // 👈 Import LikeButton
 
 interface AlbumContentProps {
   songs: any[];
@@ -50,10 +51,14 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs }) => {
             <p className="text-white truncate">{song.title}</p>
           </div>
 
-          {/* Right side: Duration */}
-          <span className="text-neutral-400">
-            {formatTime(song.duration_seconds)}
-          </span>
+          {/* Right side: Like Button and Duration */}
+          <div className="flex items-center gap-x-4">
+             {/* 👇 Add LikeButton here */}
+             <LikeButton songId={song.id} />
+             <span className="text-neutral-400">
+               {formatTime(song.duration_seconds)}
+             </span>
+          </div>
         </li>
       ))}
     </ol>
