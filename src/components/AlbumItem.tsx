@@ -1,3 +1,4 @@
+// src/components/AlbumItem.tsx
 'use client';
 
 import { supabase } from '@/lib/supabaseClient';
@@ -27,46 +28,69 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
     <div
       onClick={handleClick}
       className="
-        relative
         group
+        relative
         flex
         flex-col
-        items-center
-        justify-center
-        rounded-md
-        overflow-hidden
-        gap-x-4
-        bg-neutral-400/5
-        cursor-pointer
-        hover:bg-purple-950/50
-        transition
+        rounded-xl
         p-3
-        select-none
+        cursor-pointer
+
+        isolate
+        will-change-transform
+
+        transition-transform
+        duration-300
+        hover:-translate-y-2
       "
     >
+      {/* INSET DEPTH (NO BLEED, NO GPU SPILL) */}
       <div
-        className="relative aspect-square w-full h-full rounded-md overflow-hidden"
+        className="
+          pointer-events-none
+          absolute
+          inset-0
+          rounded-xl
+          opacity-0
+          group-hover:opacity-100
+          transition-opacity
+          duration-300
+          shadow-[inset_0_-14px_22px_-18px_rgba(0,0,0,0.55)]
+        "
+      />
+
+      {/* IMAGE */}
+      <div
+        className="
+          relative
+          aspect-square
+          w-full
+          rounded-lg
+          overflow-hidden          
+        "
         onDragStart={(e) => e.preventDefault()}
       >
         <Image
           draggable={false}
-          className="object-cover select-none"
           src={imageUrl}
           fill
           alt={album.title}
+          className="
+            object-cover
+            transition-transform
+            duration-300
+            ease-out
+          "
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
         />
       </div>
 
-      <div className="flex flex-col items-start w-full pt-4 gap-y-1">
-        <p
-          className="font-semibold truncate w-full"
-          title={album.title}
-        >
+      {/* TEXT */}
+      <div className="flex flex-col w-full pt-4 gap-y-1">
+        <p className="font-semibold truncate" title={album.title}>
           {album.title}
         </p>
-
-        <p className="text-neutral-400 text-sm pb-4 w-full truncate">
+        <p className="text-neutral-400 text-sm truncate">
           By {album.artists.name}
         </p>
       </div>

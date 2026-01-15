@@ -53,8 +53,7 @@ export default async function Album(props: AlbumProps) {
 
   return (
     <div 
-      className="
-        bg-neutral-900 
+      className=" 
         h-full 
         w-full 
         overflow-hidden 

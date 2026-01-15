@@ -1,25 +1,38 @@
 // src/app/page.tsx
-
 'use client';
 
-import { useEffect, useState, useRef, MouseEvent } from 'react';
+import { useEffect, useRef, useState, MouseEvent } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import AlbumItem from '@/components/AlbumItem';
 import PlaylistItem from '@/components/PlaylistItem';
 import Greeting from '@/components/Greeting';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
+import { motion } from 'framer-motion';
 
 type SectionKey = 'albums' | 'playlists';
+
+const STAGGER = 0.08;
+const INITIAL_DELAY = 0.25;
+const DRAG_THRESHOLD = 5; // 👈 key fix
 
 export default function Home() {
   const [albums, setAlbums] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
 
-  // Refs start as null, so the type implies | null
   const albumScrollRef = useRef<HTMLDivElement>(null);
   const playlistScrollRef = useRef<HTMLDivElement>(null);
 
-  const [isDragging, setIsDragging] = useState(false);
+  // native drag state
+  const isDown = useRef(false);
+  const hasMoved = useRef(false);
+  const startX = useRef(0);
+  const scrollStart = useRef(0);
+  const lastX = useRef(0);
+  const lastTime = useRef(0);
+
+  const velocityX = useRef(0);
+  const momentumId = useRef<number | null>(null);
 
   const [canScrollLeft, setCanScrollLeft] = useState<Record<SectionKey, boolean>>({
     albums: false,
@@ -31,131 +44,56 @@ export default function Home() {
     playlists: true,
   });
 
-  const isDown = useRef(false);
-  const hasMoved = useRef(false);
-  const startX = useRef(0);
-  const scrollLeft = useRef(0);
-
-  const lastX = useRef(0);
-  const lastTime = useRef(0);
-  const velocity = useRef(0);
-  const momentumId = useRef<number | null>(null);
+  /* =======================
+     DATA FETCH
+     ======================= */
 
   useEffect(() => {
-    const fetchAlbums = async () => {
-      const { data } = await supabase
-        .from('albums')
-        .select('*, artists(*)')
-        .order('created_at', { ascending: false });
+    supabase
+      .from('albums')
+      .select('*, artists(*)')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => data && setAlbums(data));
 
-      if (data) setAlbums(data);
-    };
-
-    const fetchPlaylists = async () => {
-      const { data } = await supabase
-        .from('playlists')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (data) setPlaylists(data);
-    };
-
-    fetchAlbums();
-    fetchPlaylists();
+    supabase
+      .from('playlists')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => data && setPlaylists(data));
   }, []);
 
-  // === FIX 1: Allow null in RefObject ===
+  /* =======================
+     SCROLL HELPERS
+     ======================= */
+
   const updateScrollButtons = (
     ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     if (!ref.current) return;
-
     const { scrollLeft, scrollWidth, clientWidth } = ref.current;
 
-    setCanScrollLeft((prev) => ({
-      ...prev,
-      [key]: scrollLeft > 0,
-    }));
-
+    setCanScrollLeft((prev) => ({ ...prev, [key]: scrollLeft > 0 }));
     setCanScrollRight((prev) => ({
       ...prev,
       [key]: scrollLeft + clientWidth < scrollWidth - 1,
     }));
   };
 
-  // === FIX 2: Allow null ===
-  const scroll = (
+  const scrollByAmount = (
     ref: React.RefObject<HTMLDivElement | null>,
-    direction: 'left' | 'right'
-  ) => {
-    if (!ref.current) return;
-
-    const scrollAmount = ref.current.clientWidth / 1.5;
-
-    ref.current.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth',
-    });
-  };
-
-  // === FIX 3: Allow null ===
-  const handleMouseDown = (
-    e: MouseEvent,
-    ref: React.RefObject<HTMLDivElement | null>
-  ) => {
-    if (!ref.current) return;
-
-    isDown.current = true;
-    hasMoved.current = false;
-
-    startX.current = e.pageX - ref.current.offsetLeft;
-    scrollLeft.current = ref.current.scrollLeft;
-
-    lastX.current = e.pageX;
-    lastTime.current = performance.now();
-
-    if (momentumId.current) {
-      cancelAnimationFrame(momentumId.current);
-      momentumId.current = null;
-    }
-  };
-
-  // === FIX 4: Allow null ===
-  const handleMouseMove = (
-    e: MouseEvent,
-    ref: React.RefObject<HTMLDivElement | null>,
+    amount: number,
     key: SectionKey
   ) => {
-    if (!isDown.current || !ref.current) return;
-
-    const now = performance.now();
-    const dx = e.pageX - lastX.current;
-    const dt = now - lastTime.current;
-
-    if (dt > 0) {
-      velocity.current = dx / dt; 
-    }
-
-    lastX.current = e.pageX;
-    lastTime.current = now;
-
-    const x = e.pageX - ref.current.offsetLeft;
-    const walk = x - startX.current;
-
-    if (Math.abs(walk) > 5) {
-      e.preventDefault();
-
-      if (!hasMoved.current) {
-        hasMoved.current = true;
-        setIsDragging(true);
-      }
-
-      ref.current.scrollLeft = scrollLeft.current - walk * 2;
-    }
+    if (!ref.current) return;
+    ref.current.scrollBy({ left: amount, behavior: 'smooth' });
+    updateScrollButtons(ref, key);
   };
 
-  // === FIX 5: Allow null ===
+  /* =======================
+     MOMENTUM
+     ======================= */
+
   const startMomentum = (
     ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
@@ -167,15 +105,15 @@ export default function Home() {
     const step = () => {
       if (!ref.current) return;
 
-      ref.current.scrollLeft -= velocity.current * 16;
-      velocity.current *= friction;
+      ref.current.scrollLeft -= velocityX.current;
+      velocityX.current *= friction;
 
       updateScrollButtons(ref, key);
 
-      if (Math.abs(velocity.current) > 0.02) {
+      if (Math.abs(velocityX.current) > 0.5) {
         momentumId.current = requestAnimationFrame(step);
       } else {
-        velocity.current = 0;
+        velocityX.current = 0;
         momentumId.current = null;
       }
     };
@@ -183,35 +121,100 @@ export default function Home() {
     momentumId.current = requestAnimationFrame(step);
   };
 
-  // === FIX 6: Allow null ===
-  const handleMouseUp = (
+  /* =======================
+     NATIVE DRAG HANDLERS
+     ======================= */
+
+  const onMouseDown = (
+    e: MouseEvent,
+    ref: React.RefObject<HTMLDivElement | null>
+  ) => {
+    if (!ref.current) return;
+
+    isDown.current = true;
+    hasMoved.current = false;
+
+    startX.current = e.pageX - ref.current.offsetLeft;
+    scrollStart.current = ref.current.scrollLeft;
+
+    lastX.current = e.pageX;
+    lastTime.current = performance.now();
+
+    if (momentumId.current) {
+      cancelAnimationFrame(momentumId.current);
+      momentumId.current = null;
+    }
+  };
+
+  const onMouseMove = (
+    e: MouseEvent,
+    ref: React.RefObject<HTMLDivElement | null>,
+    key: SectionKey
+  ) => {
+    if (!isDown.current || !ref.current) return;
+
+    const x = e.pageX - ref.current.offsetLeft;
+    const walk = x - startX.current;
+
+    // 👇 threshold check
+    if (!hasMoved.current && Math.abs(walk) < DRAG_THRESHOLD) {
+      return;
+    }
+
+    if (!hasMoved.current) {
+      hasMoved.current = true;
+      setIsDragging(true);
+    }
+
+    e.preventDefault();
+
+    const now = performance.now();
+    const dx = e.pageX - lastX.current;
+    const dt = now - lastTime.current;
+
+    if (dt > 0) velocityX.current = dx / 2;
+
+    lastX.current = e.pageX;
+    lastTime.current = now;
+
+    ref.current.scrollLeft = scrollStart.current - walk;
+    updateScrollButtons(ref, key);
+  };
+
+  const onMouseUp = (
     ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
     isDown.current = false;
-    hasMoved.current = false;
-    setTimeout(() => setIsDragging(false), 0);
 
-    if (Math.abs(velocity.current) > 0.1) {
+    if (hasMoved.current) {
+      setIsDragging(false);
       startMomentum(ref, key);
     }
+
+    hasMoved.current = false;
   };
 
-  // === FIX 7: Allow null ===
-  const handleMouseLeave = (
+  const onMouseLeave = (
     ref: React.RefObject<HTMLDivElement | null>,
     key: SectionKey
   ) => {
-    if (isDown.current && Math.abs(velocity.current) > 0.1) {
+    if (!isDown.current) return;
+
+    isDown.current = false;
+
+    if (hasMoved.current) {
+      setIsDragging(false);
       startMomentum(ref, key);
     }
 
-    isDown.current = false;
     hasMoved.current = false;
-    setIsDragging(false);
   };
 
-  // === FIX 8: Allow null ===
+  /* =======================
+     SCROLLER
+     ======================= */
+
   const renderScroller = (
     items: any[],
     ItemComponent: React.FC<any>,
@@ -221,28 +224,48 @@ export default function Home() {
     <div className="relative group">
       {canScrollLeft[key] && (
         <button
-          onClick={() => scroll(scrollRef, 'left')}
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 hover:bg-black/70 p-2 rounded-full hidden group-hover:block"
+          onClick={() =>
+            scrollByAmount(scrollRef, -scrollRef.current!.clientWidth / 1.5, key)
+          }
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10
+                     bg-black/50 hover:bg-black/70 p-2 rounded-full
+                     hidden group-hover:block"
         >
           <HiChevronLeft size={30} />
         </button>
       )}
 
       <div
-        // @ts-ignore
         ref={scrollRef}
         onScroll={() => updateScrollButtons(scrollRef, key)}
-        onMouseDown={(e) => handleMouseDown(e, scrollRef)}
-        onMouseMove={(e) => handleMouseMove(e, scrollRef, key)}
-        onMouseUp={() => handleMouseUp(scrollRef, key)}
-        onMouseLeave={() => handleMouseLeave(scrollRef, key)}
+        onMouseDown={(e) => onMouseDown(e, scrollRef)}
+        onMouseMove={(e) => onMouseMove(e, scrollRef, key)}
+        onMouseUp={() => onMouseUp(scrollRef, key)}
+        onMouseLeave={() => onMouseLeave(scrollRef, key)}
         className={`
           flex gap-4 overflow-x-auto scrollbar-hide pb-4 select-none
+          min-h-[260px]
           ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
         `}
       >
-        {items.map((item) => (
-          <div key={item.id} className="min-w-[180px] w-[180px]">
+        {items.map((item, index) => (
+          <motion.div
+            key={item.id}
+            className="min-w-[180px] w-[180px]"
+            initial={{ opacity: 0, y: 60, scale: 0.85 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              transition: {
+                type: 'spring',
+                stiffness: 180,
+                damping: 18,
+                mass: 0.8,
+                delay: INITIAL_DELAY + index * STAGGER,
+              },
+            }}
+          >
             <div className={isDragging ? 'pointer-events-none' : ''}>
               <ItemComponent
                 {...{
@@ -250,14 +273,18 @@ export default function Home() {
                 }}
               />
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 
       {canScrollRight[key] && (
         <button
-          onClick={() => scroll(scrollRef, 'right')}
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-black/50 hover:bg-black/70 p-2 rounded-full hidden group-hover:block"
+          onClick={() =>
+            scrollByAmount(scrollRef, scrollRef.current!.clientWidth / 1.5, key)
+          }
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10
+                     bg-black/50 hover:bg-black/70 p-2 rounded-full
+                     hidden group-hover:block"
         >
           <HiChevronRight size={30} />
         </button>
@@ -265,12 +292,18 @@ export default function Home() {
     </div>
   );
 
+  /* =======================
+     INIT
+     ======================= */
+
   useEffect(() => {
-    setTimeout(() => {
-      updateScrollButtons(albumScrollRef, 'albums');
-      updateScrollButtons(playlistScrollRef, 'playlists');
-    }, 0);
+    updateScrollButtons(albumScrollRef, 'albums');
+    updateScrollButtons(playlistScrollRef, 'playlists');
   }, [albums, playlists]);
+
+  /* =======================
+     RENDER
+     ======================= */
 
   return (
     <div className="p-8 select-none">

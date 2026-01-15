@@ -1,19 +1,93 @@
 // src/app/liked/components/LikedContent.tsx
 'use client';
 
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { useUser } from "@supabase/auth-helpers-react";
-import usePlayerStore from "@/stores/usePlayerStore";
-import { BsPlayFill, BsPauseFill } from "react-icons/bs"; // Added Pause
-import LikeButton from "@/components/LikeButton"; 
-import PlayingAnimation from '@/components/PlayingAnimation'; // Added Visualizer
+import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { useUser } from '@supabase/auth-helpers-react';
+import usePlayerStore from '@/stores/usePlayerStore';
+import { BsPlayFill, BsPauseFill } from 'react-icons/bs';
+import LikeButton from '@/components/LikeButton';
+import PlayingAnimation from '@/components/PlayingAnimation';
+import { motion, Variants } from 'framer-motion';
+
+/* =======================
+   HELPERS
+   ======================= */
 
 const formatTime = (seconds: number) => {
-  if (!seconds) return "0:00";
+  if (!seconds) return '0:00';
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+};
+
+const formatAddedDate = (dateStr: string) => {
+  const date = new Date(dateStr);
+  const now = new Date();
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffSeconds < 10) {
+    return 'just now';
+  }
+
+  if (diffSeconds < 60) {
+    return `${diffSeconds} second${diffSeconds !== 1 ? 's' : ''} ago`;
+  }
+
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
+  }
+
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+  }
+
+  if (diffDays < 14) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+  }
+
+  if (diffWeeks < 8) {
+    return `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''} ago`;
+  }
+
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+/* =======================
+   FRAMER VARIANTS
+   ======================= */
+
+const listVariants: Variants = {
+  hidden: {},
+  show: {
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.15,
+    },
+  },
+};
+
+const rowVariants: Variants = {
+  hidden: { opacity: 0, y: 24 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 220,
+      damping: 22,
+    },
+  },
 };
 
 interface LikedContentProps {
@@ -26,107 +100,110 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   const player = usePlayerStore();
 
   useEffect(() => {
-    if (!user) {
-      router.replace('/');
-    }
+    if (!user) router.replace('/');
   }, [user, router]);
 
   const onPlay = (id: string) => {
-    // SMART TOGGLE LOGIC
     if (player.activeId === id) {
-      if (player.isPlaying) {
-        player.setIsPlaying(false);
-      } else {
-        player.setIsPlaying(true);
-      }
+      player.setIsPlaying(!player.isPlaying);
     } else {
       player.setId(id);
-      player.setIds(songs.map((song) => song.id), {
-         type: 'playlist',
-         title: 'Liked Songs'
-      });
+      player.setIds(
+        songs.map((song) => song.id),
+        { type: 'playlist', title: 'Liked Songs' }
+      );
     }
   };
 
-  if (songs.length === 0) {
-    return (
-      <div className="flex flex-col gap-y-2 w-full px-6 text-neutral-400 font-medium">
-        No liked songs found.
-      </div>
-    );
-  }
-
-  return ( 
-    <ol className="flex flex-col gap-y-2 w-full">
+  return (
+    <motion.ol
+      variants={listVariants}
+      initial="hidden"
+      animate="show"
+      className="flex flex-col gap-y-1 w-full"
+    >
       {songs.map((song, index) => {
         const isActive = player.activeId === song.id;
         const isPlaying = player.isPlaying;
 
         return (
-          <li 
-            key={song.id} 
+          <motion.li
+            key={song.id}
+            variants={rowVariants}
+            whileTap={{ scale: 0.996 }}
+            onClick={() => onPlay(song.id)}
             className={`
-              flex 
-              items-center 
-              justify-between 
-              p-3 
-              rounded-md 
-              transition 
-              cursor-pointer 
               group
+              grid
+              grid-cols-[40px_4fr_3fr_2fr_40px_50px]
+              items-center
+              px-3
+              py-2
+              rounded-md
+              cursor-pointer
+              transition-colors
               ${isActive ? 'bg-neutral-800/50' : 'hover:bg-purple-950/50'}
             `}
-            onClick={() => onPlay(song.id)}
           >
-            {/* Left Side: Icon/Number/Visualizer */}
-            <div className="flex items-center gap-x-4">
-              <div className="flex items-center justify-center w-6 h-6 relative">
-                 {/* Active & Playing -> Visualizer (Hover: Pause) */}
-                 {isActive && isPlaying ? (
-                    <>
-                      <div className="group-hover:hidden">
-                        <PlayingAnimation />
-                      </div>
-                      <BsPauseFill size={25} className="text-white hidden group-hover:block" />
-                    </>
-                 ) : (
-                    /* Inactive OR Paused -> Number (Hover: Play) */
-                    <>
-                      <span className={`
-                        font-medium 
-                        group-hover:hidden 
-                        ${isActive ? 'text-green-500' : 'text-neutral-400'}
-                      `}>
-                        {index + 1}
-                      </span>
-                      <BsPlayFill size={25} className="text-white hidden group-hover:block" />
-                    </>
-                 )}
-              </div>
-
-              {/* Title */}
-              <div className="flex flex-col">
-                <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
-                  {song.title}
-                </p>
-                <p className="text-neutral-400 text-sm truncate">
-                  {song.author}
-                </p>
-              </div>
+            {/* INDEX / PLAY */}
+            <div className="flex justify-center">
+              {isActive && isPlaying ? (
+                <>
+                  <div className="group-hover:hidden">
+                    <PlayingAnimation />
+                  </div>
+                  <BsPauseFill
+                    size={22}
+                    className="hidden group-hover:block text-white"
+                  />
+                </>
+              ) : (
+                <>
+                  <span className="group-hover:hidden text-neutral-400">
+                    {index + 1}
+                  </span>
+                  <BsPlayFill
+                    size={22}
+                    className="hidden group-hover:block text-white"
+                  />
+                </>
+              )}
             </div>
 
-            {/* Right Side */}
-            <div className="flex items-center gap-x-4">
+            {/* TITLE + ARTIST */}
+            <div className="min-w-0">
+              <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
+                {song.title}
+              </p>
+              <p className="text-sm text-neutral-400 truncate">
+                {song.author}
+              </p>
+            </div>
+
+            {/* ALBUM (MIDDLE COLUMN) */}
+            <p className="text-sm text-neutral-400 truncate">
+              {song.album_title}
+            </p>
+
+            {/* DATE ADDED */}
+            <p className="text-sm text-neutral-400">
+              {formatAddedDate(song.liked_created_at)}
+            </p>
+
+            {/* LIKE */}
+            <div className="flex justify-center">
               <LikeButton songId={song.id} />
-              <span className="text-neutral-400 text-sm font-medium">
-                {formatTime(song.duration_seconds)} 
-              </span>
             </div>
-          </li>
+
+            {/* DURATION */}
+            <p className="text-sm text-neutral-400 text-right">
+              {formatTime(song.duration_seconds)}
+            </p>
+          </motion.li>
         );
       })}
-    </ol>
-   );
-}
- 
+    </motion.ol>
+  );
+};
+
 export default LikedContent;
