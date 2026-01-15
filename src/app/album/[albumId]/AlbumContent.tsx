@@ -54,10 +54,13 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
       player.setIsPlaying(!player.isPlaying);
     } else {
       player.setId(id);
-      player.setIds(songs.map((song) => song.id), {
-        type: 'album',
-        title: albumName,
-      });
+      player.setIds(
+        songs.map((song) => song.id),
+        {
+          type: 'album',
+          title: albumName,
+        }
+      );
     }
   };
 
@@ -70,7 +73,7 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
       variants={listVariants}
       initial="hidden"
       animate="show"
-      className="mt-4 flex flex-col gap-y-2"
+      className="mt-4 flex flex-col gap-y-1"
     >
       {songs.map((song, index) => {
         const isActive = player.activeId === song.id;
@@ -81,12 +84,14 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
             key={song.id}
             variants={rowVariants}
             whileTap={{ scale: 0.996 }}
+            onClick={() => onPlay(song.id)}
             className={`
               group
-              flex
+              grid
+              grid-cols-[40px_1fr_40px_60px]
               items-center
-              justify-between
-              p-3
+              px-3
+              py-2
               rounded-md
               cursor-pointer
               transition-colors
@@ -97,70 +102,66 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
                   : 'hover:bg-neutral-800/50'
               }
             `}
-            onClick={() => onPlay(song.id)}
           >
-            {/* LEFT SIDE */}
-            <div className="flex items-center gap-x-4 min-w-0">
-              <div className="flex items-center justify-center w-6 h-6 relative">
-                {isActive && isPlaying ? (
-                  <>
-                    <div className="group-hover:hidden">
-                      <PlayingAnimation />
-                    </div>
-                    <BsPauseFill
-                      size={25}
-                      className="text-white hidden group-hover:block"
-                    />
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className={`
-                        font-medium
-                        group-hover:hidden
-                        ${
-                          isActive
-                            ? 'text-green-500'
-                            : 'text-neutral-400'
-                        }
-                      `}
-                    >
-                      {index + 1}
-                    </span>
-                    <BsPlayFill
-                      size={25}
-                      className="text-white hidden group-hover:block"
-                    />
-                  </>
-                )}
-              </div>
-
-              {/* TITLE + AUTHOR */}
-              <div className="flex flex-col min-w-0">
-                <p
-                  className={`
-                    truncate
-                    font-medium
-                    ${
-                      isActive ? 'text-green-500' : 'text-white'
-                    }
-                  `}
-                >
-                  {song.title}
-                </p>
-                <p className="text-neutral-400 text-sm truncate">
-                  {song.author}
-                </p>
-              </div>
+            {/* INDEX / PLAY */}
+            <div className="flex justify-center">
+              {isActive && isPlaying ? (
+                <>
+                  <div className="group-hover:hidden">
+                    <PlayingAnimation />
+                  </div>
+                  <BsPauseFill
+                    size={22}
+                    className="hidden group-hover:block text-white"
+                  />
+                </>
+              ) : (
+                <>
+                  <span
+                    className={`
+                      group-hover:hidden
+                      ${
+                        isActive
+                          ? 'text-green-500'
+                          : 'text-neutral-400'
+                      }
+                    `}
+                  >
+                    {index + 1}
+                  </span>
+                  <BsPlayFill
+                    size={22}
+                    className="hidden group-hover:block text-white"
+                  />
+                </>
+              )}
             </div>
 
-            {/* RIGHT SIDE */}
-            <div className="flex items-center gap-x-4">
+            {/* TITLE + ARTIST */}
+            <div className="min-w-0">
+              <p
+                className={`
+                  truncate
+                  font-medium
+                  ${isActive ? 'text-green-500' : 'text-white'}
+                `}
+              >
+                {song.title}
+              </p>
+              <p className="text-sm text-neutral-400 truncate">
+                {song.author}
+              </p>
+            </div>
+
+            {/* LIKE */}
+            <div className="flex justify-center">
               <LikeButton songId={song.id} />
-              <span className="text-neutral-400 text-sm font-medium">
-                {formatTime(song.duration_seconds)}
-              </span>
             </div>
+
+            {/* DURATION */}
+            <span className="text-sm text-neutral-400 text-right font-medium">
+              {formatTime(song.duration_seconds)}
+            </span>
           </motion.li>
         );
       })}
