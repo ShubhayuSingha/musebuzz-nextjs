@@ -1,8 +1,9 @@
 // src/providers/ModalProvider.tsx
 'use client';
 
-import AuthModal from '@/components/AuthModal';
 import { useEffect, useState } from 'react';
+import AuthModal from '@/components/AuthModal';
+import UpdateModal from '@/components/UpdateModal'; // 1. Import the new modal
 
 const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -19,6 +20,7 @@ const ModalProvider = () => {
   return (
     <>
       <AuthModal />
+      <UpdateModal /> {/* 2. Add the update modal here */}
     </>
   );
 };
