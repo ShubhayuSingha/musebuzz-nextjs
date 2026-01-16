@@ -30,7 +30,8 @@ interface PlayerStore {
   repeatMode: 'off' | 'context' | 'one';
 
   // --- ACTIONS ---
-  setId: (id: string) => void;
+  // UPDATED ACTION: setId now accepts an optional context to track source
+  setId: (id: string, context?: PlayerContext) => void;
   // 3. UPDATED ACTION: Accepts optional 'context'
   setIds: (ids: string[], context?: PlayerContext) => void; 
   
@@ -65,7 +66,12 @@ const usePlayerStore = create<PlayerStore>()(
       repeatMode: 'off',
 
       // --- BASIC SETTERS ---
-      setId: (id: string) => set({ activeId: id, isPlaying: true }),
+      // UPDATED: Now supports context so clicking a song in a list updates the 'where'
+      setId: (id: string, context?: PlayerContext) => set({ 
+        activeId: id, 
+        isPlaying: true,
+        ...(context ? { activeContext: context } : {}) 
+      }),
       
       // 4. UPDATED IMPLEMENTATION: Save the context!
       setIds: (ids: string[], context?: PlayerContext) => set({ 
@@ -114,8 +120,6 @@ const usePlayerStore = create<PlayerStore>()(
             }
 
             // 4. Construct the final list: [Current Song, ...Shuffled Others]
-            // This ensures the current song is always at Index 0, 
-            // so ALL other songs appear in the "Upcoming" queue.
             if (state.activeId) {
               newShuffledOrder = [state.activeId, ...otherIds];
             } else {

@@ -6,13 +6,12 @@ import Button from './Button';
 
 /** * 📝 EDIT THESE THREE CONSTANTS FOR EVERY UPDATE 📝
  */
-const UPDATE_TITLE = "Fresh Update Pushed! ⚡";
-const UPDATE_DESCRIPTION = "We've added popups for new updates so you can stay in the loop.";
+const UPDATE_TITLE = "Context Aware Playback! ⚡";
+const UPDATE_DESCRIPTION = "Now the player is fully aware from where your song has been played.";
 const CHANGES = [
-  "Added automatic update notification system",
-  "Improved UI with heavy Framer Motion animations",
-  "Fixed seeking jitter with tabular-nums",
-  "Security patch for Next.js 15"
+  "Isolated song playback state",
+  "Albums and Liked Songs playlist songs do not overlap with each other",
+  
 ];
 
 // Grabs the unique Git ID provided by Vercel

@@ -23,6 +23,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     isPlaying, 
     volume, 
     activeId, 
+    activeContext, 
     playNext,       
     playPrevious,
     setVolume, 
@@ -74,14 +75,14 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }
 
-  // 1. SYNC VOLUME
+  // 1. SYNC VOLUME - Updates the audio volume without re-loading the song
   useEffect(() => {
     if (soundRef.current) {
       soundRef.current.volume(volume);
     }
   }, [volume]);
 
-  // 2. NEW FIX: SYNC PLAY/PAUSE STATE
+  // 2. SYNC PLAY/PAUSE STATE
   useEffect(() => {
     const sound = soundRef.current;
     if (sound) {
@@ -93,9 +94,15 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [isPlaying]);
 
-  // 3. LOAD SONG
+  // 3. LOAD SONG & CONTEXTUAL RESTART
+  // We exclude 'volume' here so the song doesn't restart when you adjust it.
   useEffect(() => {
+    // Reset UI state immediately
+    setCurrentTime(0); 
+    setDuration(0);
+
     soundRef.current?.unload();
+    
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
@@ -105,7 +112,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         src: [songPath],
         html5: true,
         autoplay: true, 
-        volume: volume,
+        volume: volume, 
         onplay: () => setIsPlaying(true),
         onpause: () => setIsPlaying(false),
         onend: () => {
@@ -124,11 +131,20 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     return () => {
       soundRef.current?.unload();
     }
-  }, [songPath]); 
+  }, [
+    songPath, 
+    activeContext?.type, 
+    activeContext?.title, 
+    setIsPlaying, 
+    onPlayNext
+  ]); 
 
+  // 4. PROGRESS ANIMATION - Added activeContext and activeId to dependencies
+  // This ensures the animation loop restarts/resyncs when the context switches
   useEffect(() => {
     const animate = () => {
       const sound = soundRef.current;
+      // We check sound.playing() to ensure we only update when the audio is moving
       if (sound && sound.playing() && !isDragging) {
         setCurrentTime(sound.seek());
       }
@@ -147,11 +163,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, isDragging]);
+    // By adding context and ID here, Step 4 "re-hooks" into the new sound instance
+    // created by Step 3, preventing the time from staying at 0:00.
+  }, [isPlaying, isDragging, activeId, activeContext?.type, activeContext?.title]);
 
   const handlePlay = () => {
-    // We just toggle the state. 
-    // The useEffect above will handle the actual sound.play()/pause()
     setIsPlaying(!isPlaying);
   };
 
@@ -169,26 +185,27 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   };
 
   return (
-    <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3">
-      {/* Left Side */}
+    <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3 z-50">
+      {/* Left Side: Metadata */}
       <div className="flex w-full justify-start items-center gap-x-4">
-        <div className="relative h-14 w-14 rounded-md overflow-hidden">
+        <div className="relative h-14 w-14 rounded-md overflow-hidden shadow-md">
             {imageUrl ? (
              <Image fill src={imageUrl} alt={song.title} className="object-cover" />
             ) : (
              <div className="bg-neutral-800 h-full w-full" />
             )}
         </div>
-        <div className="hidden md:block">
+        <div className="hidden md:block min-w-0">
           <p className="text-white font-medium truncate">{song.title}</p>
-          <p className="text-neutral-400 text-sm truncate">{song.albums?.artists?.name || "Unknown"}</p>
+          <p className="text-neutral-400 text-sm truncate">
+            {song.albums?.artists?.name || "Unknown Artist"}
+          </p>
         </div>
         <LikeButton songId={song.id} />
       </div>
 
-      {/* Center Controls */}
+      {/* Center: Controls */}
       <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
-        
         <div className="flex items-center gap-x-6">
           <BsShuffle 
             size={20} 
@@ -198,18 +215,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           <AiFillStepBackward
             size={30}
             onClick={playPrevious}
-            className="text-neutral-400 cursor-pointer hover:text-white transition"
+            className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90"
           />
           <div 
             onClick={handlePlay}
-            className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition"
+            className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition shadow-lg"
           >
             <Icon size={26} className="text-black" />
           </div>
           <AiFillStepForward
             size={30}
             onClick={onPlayNext}
-            className="text-neutral-400 cursor-pointer hover:text-white transition"
+            className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90"
           />
           <div onClick={toggleRepeat} className="cursor-pointer">
               {repeatMode === 'one' ? (
@@ -220,9 +237,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           </div>
         </div>
 
-        <div className="flex items-center gap-x-2 w-full group">
-          {/* FIX: Added tabular-nums here */}
-          <p className="text-neutral-400 text-xs w-12 text-right tabular-nums">{formatTime(currentTime)}</p>
+        {/* Seekbar */}
+        <div className="flex items-center gap-x-3 w-full group px-2">
+          <p className="text-neutral-400 text-[10px] w-10 text-right tabular-nums">
+            {formatTime(currentTime)}
+          </p>
           
           <Slider 
             min={0}
@@ -233,23 +252,30 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             step={0.1}
             styles={{
               track: { backgroundColor: '#fff' },
-              handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' },
+              handle: { 
+                backgroundColor: '#fff', 
+                border: 'none', 
+                boxShadow: 'none', 
+                opacity: isDragging ? 1 : 0 
+              },
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
+            className="group-hover:opacity-100"
           />
 
-          {/* FIX: Added tabular-nums here */}
-          <p className="text-neutral-400 text-xs w-12 text-left tabular-nums">{formatTime(duration)}</p>
+          <p className="text-neutral-400 text-[10px] w-10 text-left tabular-nums">
+            {formatTime(duration)}
+          </p>
         </div>
       </div>
       
-      {/* Right Side */}
+      {/* Right Side: Volume */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 
                 onClick={toggleMute} 
                 className="cursor-pointer hover:text-white transition text-neutral-400" 
-                size={28} 
+                size={24} 
             />
             
             <div className="relative w-full flex items-center">
@@ -265,7 +291,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                       rail: { backgroundColor: 'rgb(63 63 70)' }
                   }}
               />
-              <p className="absolute top-4 left-0 w-full text-center text-[10px] text-neutral-400 font-extrabold select-none pointer-events-none">
+              <p className="absolute -top-5 left-0 w-full text-center text-[9px] text-neutral-500 font-bold select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
                   {Math.round(volume * 100)}%
               </p>
             </div>

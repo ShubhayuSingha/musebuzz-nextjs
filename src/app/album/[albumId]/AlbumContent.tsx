@@ -1,4 +1,3 @@
-// src/app/album/[albumId]/AlbumContent.tsx
 'use client';
 
 import usePlayerStore from '@/stores/usePlayerStore';
@@ -14,7 +13,7 @@ interface AlbumContentProps {
 }
 
 /* =======================
-   FRAMER MOTION VARIANTS
+    FRAMER MOTION VARIANTS
    ======================= */
 
 const listVariants: Variants = {
@@ -50,10 +49,17 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
   const player = usePlayerStore();
 
   const onPlay = (id: string) => {
-    if (player.activeId === id) {
+    // Check if this specific song in THIS specific album is already active
+    const isCurrentContextActive = 
+      player.activeId === id && 
+      player.activeContext?.type === 'album' && 
+      player.activeContext?.title === albumName;
+
+    if (isCurrentContextActive) {
       player.setIsPlaying(!player.isPlaying);
     } else {
-      player.setId(id);
+      // Pass the context to setId so the store knows where the song started
+      player.setId(id, { type: 'album', title: albumName });
       player.setIds(
         songs.map((song) => song.id),
         {
@@ -76,7 +82,12 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
       className="mt-4 flex flex-col gap-y-1"
     >
       {songs.map((song, index) => {
-        const isActive = player.activeId === song.id;
+        // Updated isActive logic to include context check
+        const isActive = 
+          player.activeId === song.id && 
+          player.activeContext?.type === 'album' && 
+          player.activeContext?.title === albumName;
+          
         const isPlaying = player.isPlaying;
 
         return (

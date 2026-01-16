@@ -1,4 +1,3 @@
-// src/app/liked/components/LikedContent.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -11,7 +10,7 @@ import PlayingAnimation from '@/components/PlayingAnimation';
 import { motion, Variants } from 'framer-motion';
 
 /* =======================
-   HELPERS
+    HELPERS
    ======================= */
 
 const formatTime = (seconds: number) => {
@@ -64,7 +63,7 @@ const formatAddedDate = (dateStr: string) => {
 };
 
 /* =======================
-   FRAMER VARIANTS
+    FRAMER VARIANTS
    ======================= */
 
 const listVariants: Variants = {
@@ -104,10 +103,17 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   }, [user, router]);
 
   const onPlay = (id: string) => {
-    if (player.activeId === id) {
+    // Check if song is active specifically in the Liked Songs context
+    const isCurrentContextActive = 
+      player.activeId === id && 
+      player.activeContext?.type === 'playlist' && 
+      player.activeContext?.title === 'Liked Songs';
+
+    if (isCurrentContextActive) {
       player.setIsPlaying(!player.isPlaying);
     } else {
-      player.setId(id);
+      // Pass the context to setId
+      player.setId(id, { type: 'playlist', title: 'Liked Songs' });
       player.setIds(
         songs.map((song) => song.id),
         { type: 'playlist', title: 'Liked Songs' }
@@ -123,7 +129,12 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
       className="flex flex-col gap-y-1 w-full"
     >
       {songs.map((song, index) => {
-        const isActive = player.activeId === song.id;
+        // Highlight green ONLY if playing from this context
+        const isActive = 
+          player.activeId === song.id && 
+          player.activeContext?.type === 'playlist' && 
+          player.activeContext?.title === 'Liked Songs';
+
         const isPlaying = player.isPlaying;
 
         return (
@@ -159,7 +170,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                 </>
               ) : (
                 <>
-                  <span className="group-hover:hidden text-neutral-400">
+                  <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
                     {index + 1}
                   </span>
                   <BsPlayFill
