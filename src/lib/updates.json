@@ -1,4 +1,21 @@
 [
+
+  {
+    "versionName": "v1.0.4",
+    "date": "2026-01-16",
+    "time": "",
+    "title": "⚡ Quality of Life Improvements ⚡",
+    "description": "A lot of tiny changes to make your life easier. Still there are some very specific bugs which need to be taken care of.",
+    "changes": [
+      "Liked Songs playlist with framer-motion animation",
+      "Like Songs playlist heading for easy column identification",
+      "Clickable album name on the Liked Songs playlist",
+      "Added the 'Add To Queue' button beside the heart button",
+      "You can now add songs from anywhere to the queue",
+      "You can click on album names to redirect to respective album in queue page",
+      "Added queue page animation, handled wrapping of songs at start and end"
+    ]
+  },
   {
     "versionName": "v1.0.3",
     "date": "2026-01-16",

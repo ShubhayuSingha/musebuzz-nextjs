@@ -32,7 +32,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     isShuffled, 
     repeatMode,
     prevVolume,
-    setPrevVolume
+    setPrevVolume,
+    activeIdSignature 
   } = usePlayerStore(); 
 
   const onPlayNext = playNext; 
@@ -105,7 +106,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       const newSound = new Howl({
         src: [songPath],
         html5: true,
-        autoplay: true, 
+        // FIX 1: Disable autoplay so we respect the store's isPlaying state
+        autoplay: false, 
         volume: volume, 
         onplay: () => setIsPlaying(true),
         onpause: () => setIsPlaying(false),
@@ -113,13 +115,21 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           if (repeatModeRef.current === 'one') {
              newSound.play();
           } else {
-             setIsPlaying(false);
+             // We intentionally DO NOT set isPlaying(false) here immediately,
+             // we let the store decide the next state in playNext().
              onPlayNext(); 
           }
         },
         onload: () => setDuration(newSound.duration()),
       });
+      
       soundRef.current = newSound;
+
+      // FIX 2: Manually trigger play ONLY if the store says we are currently playing.
+      // If the queue finished and reset to start, isPlaying will be false, so this won't run.
+      if (isPlaying) {
+        newSound.play();
+      }
     }
 
     return () => {
@@ -127,10 +137,17 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [
     songPath, 
-    activeContext?.type, 
-    activeContext?.title, 
+    activeIdSignature, 
+    // Remove setIsPlaying and onPlayNext from deps to prevent re-creation loops,
+    // though adding them is technically correct in strict mode, they are stable functions.
+    // Ideally we include them:
     setIsPlaying, 
-    onPlayNext
+    onPlayNext,
+    // Add isPlaying to deps so we know if we should start immediately?
+    // NO. If we add isPlaying here, it will re-load the song on pause/play.
+    // We only want the value of isPlaying at the MOMENT of song load.
+    // So we purposefully omit it from dependency array or use a ref if linter complains.
+    // For now, React Hooks behavior captures the current value of isPlaying correctly on mount.
   ]); 
 
   useEffect(() => {
@@ -154,7 +171,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, isDragging, activeId, activeContext?.type, activeContext?.title]);
+  }, [isPlaying, isDragging, activeId, activeIdSignature]);
 
   const handlePlay = () => {
     setIsPlaying(!isPlaying);
@@ -238,17 +255,14 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             step={0.1}
             styles={{
               track: { backgroundColor: '#fff' },
-              // UPDATED: Handle now responds to the parent's group-hover state
               handle: { 
                 backgroundColor: '#fff', 
                 border: 'none', 
                 boxShadow: 'none', 
-                // Using !important via inline style to override default rc-slider behavior if needed
                 opacity: isDragging ? 1 : undefined 
               },
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
-            // Added custom className to trigger handle visibility on hover
             className="group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:opacity-0 [&_.rc-slider-handle]:transition-opacity"
           />
 

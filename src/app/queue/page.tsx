@@ -1,18 +1,47 @@
-// src/app/queue/page.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import Image from "next/image";
-// 1. UPDATE IMPORTS: Use the same icons as Album/Liked pages
+import { useRouter } from "next/navigation"; 
 import { BsPlayFill, BsPauseFill } from "react-icons/bs"; 
-import PlayingAnimation from "@/components/PlayingAnimation"; // Import Visualizer
+import PlayingAnimation from "@/components/PlayingAnimation"; 
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import { supabase } from "@/lib/supabaseClient";
 import { Song } from "@/types"; 
 import LikeButton from "@/components/LikeButton";
 
+// 1. Import Framer Motion
+import { motion, AnimatePresence, Variants } from "framer-motion";
+
+// 2. Define Animation Variants (Similar to LikedContent)
+const rowVariants: Variants = {
+  hidden: { 
+    opacity: 0, 
+    y: 10, 
+    scale: 0.98 
+  },
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    scale: 1,
+    transition: { 
+      type: "spring", 
+      stiffness: 300, 
+      damping: 30,
+      mass: 0.8
+    } 
+  },
+  exit: { 
+    opacity: 0, 
+    scale: 0.95, 
+    transition: { duration: 0.2 } 
+  }
+};
+
 export default function QueuePage() {
+  const router = useRouter();
+
   const { 
     activeId, 
     bucketA, 
@@ -22,18 +51,39 @@ export default function QueuePage() {
     activeContext, 
     setId, 
     isPlaying,
-    setIsPlaying // Need this for the toggle logic
+    setIsPlaying,
+    lastActiveContextId,
+    playQueueItem 
   } = usePlayerStore();
 
   const [songs, setSongs] = useState<Record<string, Song>>({});
   const [loading, setLoading] = useState(true);
 
+  const [upcomingContextIds, setUpcomingContextIds] = useState<string[]>([]);
+  
+  const lastKnownIdRef = useRef<string | undefined>(undefined);
+
   const mainQueueIds = isShuffled ? shuffledOrder : bucketA;
 
-  const currentIndex = mainQueueIds.findIndex((id) => id === activeId);
-  const upcomingContextIds = (currentIndex !== -1) 
-    ? mainQueueIds.slice(currentIndex + 1) 
-    : mainQueueIds;
+  useEffect(() => {
+    const currentIndex = mainQueueIds.findIndex((id) => id === activeId);
+
+    if (currentIndex !== -1) {
+      lastKnownIdRef.current = activeId;
+      setUpcomingContextIds(mainQueueIds.slice(currentIndex + 1));
+    } else {
+      if (lastKnownIdRef.current) {
+        const lastIndex = mainQueueIds.findIndex(id => id === lastKnownIdRef.current);
+        if (lastIndex !== -1) {
+           setUpcomingContextIds(mainQueueIds.slice(lastIndex + 1));
+           return;
+        }
+      }
+      if (upcomingContextIds.length === 0 && mainQueueIds.length > 0) {
+          setUpcomingContextIds(mainQueueIds); 
+      }
+    }
+  }, [activeId, mainQueueIds, lastActiveContextId]);
 
   const allIds = useMemo(() => {
     const ids = new Set([
@@ -76,7 +126,13 @@ export default function QueuePage() {
     return `Next from ${state} ${type}: ${title}`;
   };
 
-  // 2. UPDATED ROW RENDERER with Visualizer & Toggle Logic
+  const formatTime = (seconds: number) => {
+    if (!seconds) return '0:00';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  };
+
   const renderRow = (id: string, idx: number, source: string) => {
     const song = songs[id];
     if (!song) return null;
@@ -89,63 +145,79 @@ export default function QueuePage() {
       
     // @ts-ignore
     const artistName = song.albums?.artists?.name || song.author || "Unknown Artist";
+    // @ts-ignore
+    const albumName = song.albums?.title || "Unknown Album";
     
-    // Check Status
-    const isActive = activeId === id;
+    const isActive = activeId === id && source === 'active';
     
-    // SMART TOGGLE HANDLER
     const handlePlay = () => {
       if (isActive) {
-        // Toggle Play/Pause if it's the current song
         setIsPlaying(!isPlaying);
       } else {
-        // Otherwise, set it as the new active song
-        setId(id);
+        if (source.startsWith('queue-')) {
+           playQueueItem(idx);
+        } else {
+           setId(id);
+        }
       }
     };
 
     return (
-      <div 
+      // 3. Convert div to motion.div
+      <motion.div 
+        layout="position" // This enables smooth reordering/shuffling
         key={`${source}-${id}-${idx}`} 
+        variants={rowVariants}
+        initial="hidden"
+        animate="show"
+        exit="exit"
         className={`
-          group flex items-center gap-x-4 w-full p-2 rounded-md hover:bg-neutral-400/10 transition cursor-pointer
-          ${isActive ? 'bg-neutral-700/50' : ''}
+          group 
+          grid 
+          grid-cols-[40px_50px_4fr_3fr_40px_50px] 
+          gap-x-4 
+          items-center 
+          w-full 
+          px-3 
+          py-2 
+          rounded-md 
+          hover:bg-neutral-800/50 
+          transition-colors 
+          cursor-pointer
+          ${isActive ? 'bg-neutral-800/50' : ''}
         `}
         onClick={handlePlay}
       >
-        {/* Left Side: Icon / Visualizer / Number */}
-        <div className="flex items-center justify-center w-[40px] h-[40px] text-neutral-400 relative">
-           
-           {/* CASE 1: Active & Playing -> Visualizer (Hover: Pause) */}
+        {/* 1. INDEX / PLAY */}
+        <div className="flex justify-center items-center text-neutral-400">
            {isActive && isPlaying ? (
              <>
                <div className="group-hover:hidden">
                  <PlayingAnimation />
                </div>
-               <BsPauseFill size={25} className="text-white hidden group-hover:block" />
+               <BsPauseFill size={22} className="text-white hidden group-hover:block" />
              </>
            ) : (
-             /* CASE 2: Not Playing -> Number (Hover: Play) */
              <>
-                <span className={`
-                  group-hover:hidden 
-                  ${isActive ? 'text-green-500 font-medium' : ''}
-                `}>
-                  {idx + 1}
-                </span>
-                <BsPlayFill size={25} className="hidden group-hover:block text-white"/>
+               <span className={`
+                 group-hover:hidden 
+                 ${isActive ? 'text-green-500 font-medium' : ''}
+               `}>
+                 {idx + 1}
+               </span>
+               <BsPlayFill size={22} className="hidden group-hover:block text-white"/>
              </>
            )}
         </div>
 
-        {/* Album Art */}
-        <div className="relative min-h-[48px] min-w-[48px] overflow-hidden rounded-md">
+        {/* 2. ALBUM ART */}
+        <div className="relative h-[48px] w-[48px] overflow-hidden rounded-md shadow-sm">
           <Image fill src={imageUrl} alt={song.title} className="object-cover" />
         </div>
 
-        {/* Title & Artist */}
-        <div className="flex flex-col gap-y-1 overflow-hidden">
-          <p className={`text-base truncate ${isActive ? 'text-green-500 font-medium' : 'text-white'}`}>
+        {/* 3. TITLE & ARTIST */}
+        <div className="flex flex-col gap-y-1 min-w-0 overflow-hidden">
+          <p className={`truncate font-medium text-base ${isActive ? 'text-green-500' : 'text-white'}`}>
             {song.title}
           </p>
           <p className="text-sm text-neutral-400 truncate">
@@ -153,14 +225,31 @@ export default function QueuePage() {
           </p>
         </div>
 
-        {/* Right Side */}
-        <div className="ml-auto flex items-center gap-x-4">
+        {/* 4. ALBUM NAME */}
+        <div className="flex items-center">
+            <p 
+              className="text-sm text-neutral-400 truncate hover:text-white hover:underline cursor-pointer transition"
+              onClick={(e) => {
+                e.stopPropagation(); 
+                router.push(`/album/${song.album_id}`);
+              }}
+            >
+                {albumName}
+            </p>
+        </div>
+
+        {/* 5. LIKE BUTTON */}
+        <div className="flex justify-center">
            <LikeButton songId={song.id} />
-           <p className="text-sm text-neutral-400 hidden md:block">
-             {Math.floor(song.duration_seconds / 60)}:{(song.duration_seconds % 60).toString().padStart(2, '0')}
+        </div>
+
+        {/* 6. DURATION */}
+        <div className="flex justify-end">
+           <p className="text-sm text-neutral-400 font-medium tabular-nums">
+             {formatTime(song.duration_seconds)}
            </p>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -169,13 +258,17 @@ export default function QueuePage() {
       <div className="px-6 py-4 flex flex-col gap-y-8 pb-24">
         
         <div className="mt-4 mb-2">
-          <h1 className="text-white text-3xl font-semibold">Queue</h1>
+          <h1 className="text-white text-3xl font-bold">Queue</h1>
         </div>
 
         {/* NOW PLAYING */}
         <div>
            <h2 className="text-white text-xl font-bold mb-4">Now Playing</h2>
-           {activeId ? renderRow(activeId, 0, 'active') : <p className="text-neutral-400">Nothing playing.</p>}
+           {/* Wrap in AnimatePresence to animate the swap if active song changes */}
+           <AnimatePresence mode="popLayout">
+             {activeId && renderRow(activeId, 0, 'active')}
+           </AnimatePresence>
+           {!activeId && <p className="text-neutral-400">Nothing playing.</p>}
         </div>
 
         {/* PRIORITY QUEUE */}
@@ -183,11 +276,14 @@ export default function QueuePage() {
           <div>
             <div className="flex items-center gap-x-2 mb-4">
                 <h2 className="text-white text-xl font-bold">Next in Queue</h2>
-                <span className="text-xs bg-neutral-700 text-neutral-300 px-2 py-1 rounded-full">Priority</span>
+                <span className="text-xs bg-neutral-800 text-neutral-300 px-2 py-1 rounded-full border border-neutral-700">Priority</span>
             </div>
-            <div className="flex flex-col gap-y-2">
-              {bucketB.map((item, idx) => renderRow(item.id, idx, `queue-${item.uid}`))}
-            </div>
+            {/* 4. AnimatePresence for Priority Queue */}
+            <motion.div className="flex flex-col gap-y-1">
+              <AnimatePresence mode="popLayout">
+                {bucketB.map((item, idx) => renderRow(item.id, idx, `queue-${item.uid}`))}
+              </AnimatePresence>
+            </motion.div>
           </div>
         )}
 
@@ -197,12 +293,16 @@ export default function QueuePage() {
             <div className="flex items-center justify-between mb-4">
                 <h2 className="text-white text-xl font-bold">{getContextLabel()}</h2>
             </div>
-            <div 
-              key={`${isShuffled}-${activeId}`}
-              className="flex flex-col gap-y-2 animate-fade-in"
+            {/* 5. Standard motion div for list container */}
+            <motion.div 
+              // Using a key here forces a re-render/animation when shuffle toggles
+              key={`${isShuffled}-${activeId}`} 
+              className="flex flex-col gap-y-1"
             >
-              {upcomingContextIds.map((id, idx) => renderRow(id, idx, 'context'))}
-            </div>
+              <AnimatePresence mode="popLayout" initial={false}>
+                {upcomingContextIds.map((id, idx) => renderRow(id, idx, 'context'))}
+              </AnimatePresence>
+            </motion.div>
           </div>
         )}
 
