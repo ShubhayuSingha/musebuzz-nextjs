@@ -3,6 +3,18 @@
   {
     "versionName": "v1.0.4",
     "date": "2026-01-16",
+    "time": "22:20",
+    "title": "⚡ Search Function! ⚡",
+    "description": "Now you can search for a song easily.",
+    "changes": [
+      "Added search bar",
+      "You can add to queue directly from search",
+      "You can like from search bar as well"
+    ]
+  },
+  {
+    "versionName": "v1.0.4",
+    "date": "2026-01-16",
     "time": "",
     "title": "⚡ Quality of Life Improvements ⚡",
     "description": "A lot of tiny changes to make your life easier. Still there are some very specific bugs which need to be taken care of.",
@@ -16,6 +28,7 @@
       "Added queue page animation, handled wrapping of songs at start and end"
     ]
   },
+
   {
     "versionName": "v1.0.3",
     "date": "2026-01-16",

@@ -5,6 +5,7 @@ import Button from "./Button";
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
+import GlobalSearch from "@/components/GlobalSearch"; // 1. Import the component
 
 const Header = () => {
   const { onOpen } = useAuthModalStore();
@@ -31,9 +32,18 @@ const Header = () => {
         border-neutral-700
       "
     >
-      <div className="w-full flex items-center justify-between">
-        <div className="hidden md:flex gap-x-2 items-center" />
+      <div className="w-full flex items-center justify-between gap-x-4">
         
+        {/* 2. Search Bar Section 
+           - Replaced the empty div
+           - Added 'flex-1' so it takes up available space up to its max-width
+           - Removed 'hidden' so it is visible on mobile too
+        */}
+        <div className="flex-1 flex items-center max-w-[500px]">
+           <GlobalSearch />
+        </div>
+        
+        {/* Auth Buttons Section */}
         <div className="flex justify-end items-center gap-x-4">
           {user ? (
             <Button 
@@ -46,7 +56,6 @@ const Header = () => {
             <>
               <Button 
                 onClick={() => onOpen('sign_up')}
-                // PRESERVED YOUR FIX: 'py-2' ensures consistent height
                 className="bg-transparent text-neutral-300 font-medium whitespace-nowrap py-2"
               >
                 Sign up

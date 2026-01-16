@@ -242,7 +242,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         </div>
 
         <div className="flex items-center gap-x-3 w-full group px-2">
-          <p className="text-neutral-400 text-[10px] w-10 text-right tabular-nums">
+          <p className="text-neutral-400 text-[12px] w-10 text-right tabular-nums">
             {formatTime(currentTime)}
           </p>
           
@@ -266,7 +266,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             className="group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:opacity-0 [&_.rc-slider-handle]:transition-opacity"
           />
 
-          <p className="text-neutral-400 text-[10px] w-10 text-left tabular-nums">
+          <p className="text-neutral-400 text-[12px] w-10 text-left tabular-nums">
             {formatTime(duration)}
           </p>
         </div>

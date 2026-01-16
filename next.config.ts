@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'zniinqiqnwndnowzzjyt.supabase.co',
+        port: '',
+        pathname: '/storage/v1/object/public/**', // <--- Added specific path pattern for Supabase Storage
       },
     ],
   },

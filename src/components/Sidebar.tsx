@@ -5,7 +5,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { HiHome } from 'react-icons/hi';
 import { HiQueueList } from 'react-icons/hi2'; // 1. Added Queue Icon
-import { BiSearch } from 'react-icons/bi';
 import { TbPlaylist } from 'react-icons/tb';
 import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; 
 import { FiMenu } from 'react-icons/fi';
@@ -65,12 +64,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             <Link href="/" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
               <HiHome size={26} />
               {showText && <span className={textClasses}>Home</span>}
-            </Link>
-          </li>
-          <li className="mb-4">
-            <Link href="/search" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
-              <BiSearch size={26} />
-              {showText && <span className={textClasses}>Search</span>}
             </Link>
           </li>
           
