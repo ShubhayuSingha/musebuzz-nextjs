@@ -1,6 +1,4 @@
 // src/components/Modal.tsx
-'use client';
-
 import * as Dialog from '@radix-ui/react-dialog';
 import { IoMdClose } from 'react-icons/io';
 
@@ -22,14 +20,24 @@ const Modal: React.FC<ModalProps> = ({
   return (
     <Dialog.Root open={isOpen} defaultOpen={isOpen} onOpenChange={onChange}>
       <Dialog.Portal>
+        {/* 1. OVERLAY (The Background) 
+            - Added 'z-[100]' to ensure it sits ABOVE the Navbar (which is z-50)
+            - Added 'backdrop-blur-sm' to actually blur the content behind it
+        */}
         <Dialog.Overlay 
           className="
+            fixed 
+            inset-0 
             bg-neutral-900/90 
             backdrop-blur-sm 
             fixed 
-            inset-0
+            z-[100]  /* <-- THIS FIXES THE NAVBAR ISSUE */
           " 
         />
+        
+        {/* 2. CONTENT (The Modal Box)
+            - Added 'z-[100]' here too so the box itself is above the overlay
+        */}
         <Dialog.Content 
           className="
             fixed 
@@ -51,33 +59,22 @@ const Modal: React.FC<ModalProps> = ({
             bg-neutral-800 
             p-[25px] 
             focus:outline-none
+            z-[100] /* <-- THIS FIXES THE CONTENT STACKING */
           "
         >
-          <Dialog.Title 
-            className="
-              text-xl 
-              text-center 
-              font-bold 
-              mb-4
-            "
-          >
+          <Dialog.Title className="text-xl text-center font-bold mb-4">
             {title}
           </Dialog.Title>
-          <Dialog.Description 
-            className="
-              mb-5 
-              text-sm 
-              leading-normal 
-              text-center
-            "
-          >
+          <Dialog.Description className="mb-5 text-sm leading-normal text-center">
             {description}
           </Dialog.Description>
+          
           <div>
             {children}
           </div>
+
           <Dialog.Close asChild>
-            <button 
+            <button
               className="
                 text-neutral-400 
                 hover:text-white 
@@ -101,6 +98,6 @@ const Modal: React.FC<ModalProps> = ({
       </Dialog.Portal>
     </Dialog.Root>
   );
-};
+}
 
 export default Modal;
