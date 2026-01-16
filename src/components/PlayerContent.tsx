@@ -1,4 +1,3 @@
-// src/components/PlayerContent.tsx
 'use client';
 
 import { useEffect, useRef, useState, useMemo } from "react";
@@ -75,14 +74,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }
 
-  // 1. SYNC VOLUME - Updates the audio volume without re-loading the song
   useEffect(() => {
     if (soundRef.current) {
       soundRef.current.volume(volume);
     }
   }, [volume]);
 
-  // 2. SYNC PLAY/PAUSE STATE
   useEffect(() => {
     const sound = soundRef.current;
     if (sound) {
@@ -94,10 +91,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [isPlaying]);
 
-  // 3. LOAD SONG & CONTEXTUAL RESTART
-  // We exclude 'volume' here so the song doesn't restart when you adjust it.
   useEffect(() => {
-    // Reset UI state immediately
     setCurrentTime(0); 
     setDuration(0);
 
@@ -139,12 +133,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     onPlayNext
   ]); 
 
-  // 4. PROGRESS ANIMATION - Added activeContext and activeId to dependencies
-  // This ensures the animation loop restarts/resyncs when the context switches
   useEffect(() => {
     const animate = () => {
       const sound = soundRef.current;
-      // We check sound.playing() to ensure we only update when the audio is moving
       if (sound && sound.playing() && !isDragging) {
         setCurrentTime(sound.seek());
       }
@@ -163,8 +154,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-    // By adding context and ID here, Step 4 "re-hooks" into the new sound instance
-    // created by Step 3, preventing the time from staying at 0:00.
   }, [isPlaying, isDragging, activeId, activeContext?.type, activeContext?.title]);
 
   const handlePlay = () => {
@@ -186,7 +175,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   return (
     <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3 z-50">
-      {/* Left Side: Metadata */}
       <div className="flex w-full justify-start items-center gap-x-4">
         <div className="relative h-14 w-14 rounded-md overflow-hidden shadow-md">
             {imageUrl ? (
@@ -204,7 +192,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         <LikeButton songId={song.id} />
       </div>
 
-      {/* Center: Controls */}
       <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
         <div className="flex items-center gap-x-6">
           <BsShuffle 
@@ -237,7 +224,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           </div>
         </div>
 
-        {/* Seekbar */}
         <div className="flex items-center gap-x-3 w-full group px-2">
           <p className="text-neutral-400 text-[10px] w-10 text-right tabular-nums">
             {formatTime(currentTime)}
@@ -252,15 +238,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             step={0.1}
             styles={{
               track: { backgroundColor: '#fff' },
+              // UPDATED: Handle now responds to the parent's group-hover state
               handle: { 
                 backgroundColor: '#fff', 
                 border: 'none', 
                 boxShadow: 'none', 
-                opacity: isDragging ? 1 : 0 
+                // Using !important via inline style to override default rc-slider behavior if needed
+                opacity: isDragging ? 1 : undefined 
               },
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
-            className="group-hover:opacity-100"
+            // Added custom className to trigger handle visibility on hover
+            className="group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:opacity-0 [&_.rc-slider-handle]:transition-opacity"
           />
 
           <p className="text-neutral-400 text-[10px] w-10 text-left tabular-nums">
@@ -269,7 +258,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         </div>
       </div>
       
-      {/* Right Side: Volume */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 

@@ -1,0 +1,40 @@
+[
+  {
+    "versionName": "v1.0.3",
+    "date": "2026-01-16",
+    "time": "14:55",
+    "title": "⚡ New Modal Fetch Method ⚡",
+    "description": "Now changing just a JSON file will automatically fetch the update details for the modal.",
+    "changes": [
+      "Fixed an issue with Liked Songs playlist where in view liked songs didn't appear",
+      "Fixed seekbar and timer syncing issues when switching contexts",
+      "Corrected volume slider behavior to prevent accidental song restarts",
+      "Added smooth hover effects to the playback slider handle"
+    ]
+  },
+  {
+    "versionName": "v1.0.2",
+    "date": "2026-01-16",
+    "time": "14:45",
+    "title": "Context Aware Playback! ⚡",
+    "description": "Now the player is fully aware of exactly where your song is being played from.",
+    "changes": [
+      "Isolated song playback state between Album and Liked contexts",
+      "Fixed seekbar and timer syncing issues when switching contexts",
+      "Corrected volume slider behavior to prevent accidental song restarts",
+      "Added smooth hover effects to the playback slider handle"
+    ]
+  },
+  {
+    "versionName": "v1.0.1",
+    "date": "2026-01-15",
+    "time": "10:30",
+    "title": "Initial Release",
+    "description": "Welcome to MuseBuzz!",
+    "changes": [
+      "Core music streaming engine live",
+      "Supabase authentication integration",
+      "Full library and album support"
+    ]
+  }
+]

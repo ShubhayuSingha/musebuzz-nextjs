@@ -1,7 +1,0 @@
-const UPDATE_TITLE = "Context Aware Playback! ⚡";
-const UPDATE_DESCRIPTION = "Now the player is fully aware from where your song has been played.";
-const CHANGES = [
-  "Isolated song playback state",
-  "Albums and Liked Songs playlist songs do not overlap with each other",
-  
-];
