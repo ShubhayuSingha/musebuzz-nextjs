@@ -45,7 +45,7 @@ export default function Home() {
   });
 
   /* =======================
-     DATA FETCH
+      DATA FETCH
      ======================= */
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export default function Home() {
   }, []);
 
   /* =======================
-     SCROLL HELPERS
+      SCROLL HELPERS
      ======================= */
 
   const updateScrollButtons = (
@@ -91,7 +91,7 @@ export default function Home() {
   };
 
   /* =======================
-     MOMENTUM
+      MOMENTUM
      ======================= */
 
   const startMomentum = (
@@ -122,7 +122,7 @@ export default function Home() {
   };
 
   /* =======================
-     NATIVE DRAG HANDLERS
+      NATIVE DRAG HANDLERS
      ======================= */
 
   const onMouseDown = (
@@ -212,7 +212,7 @@ export default function Home() {
   };
 
   /* =======================
-     SCROLLER
+      SCROLLER
      ======================= */
 
   const renderScroller = (
@@ -227,9 +227,10 @@ export default function Home() {
           onClick={() =>
             scrollByAmount(scrollRef, -scrollRef.current!.clientWidth / 1.5, key)
           }
+          // FIX: Changed bg-black/50 hover:bg-black/70 to bg-white text-black hover:bg-neutral-200
           className="absolute left-0 top-1/2 -translate-y-1/2 z-10
-                     bg-black/50 hover:bg-black/70 p-2 rounded-full
-                     hidden group-hover:block"
+                     bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
+                     hidden group-hover:block shadow-md transition"
         >
           <HiChevronLeft size={30} />
         </button>
@@ -282,9 +283,10 @@ export default function Home() {
           onClick={() =>
             scrollByAmount(scrollRef, scrollRef.current!.clientWidth / 1.5, key)
           }
+          // FIX: Changed bg-black/50 hover:bg-black/70 to bg-white text-black hover:bg-neutral-200
           className="absolute right-0 top-1/2 -translate-y-1/2 z-10
-                     bg-black/50 hover:bg-black/70 p-2 rounded-full
-                     hidden group-hover:block"
+                     bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
+                     hidden group-hover:block shadow-md transition"
         >
           <HiChevronRight size={30} />
         </button>
@@ -293,7 +295,7 @@ export default function Home() {
   );
 
   /* =======================
-     INIT
+      INIT
      ======================= */
 
   useEffect(() => {
@@ -302,7 +304,7 @@ export default function Home() {
   }, [albums, playlists]);
 
   /* =======================
-     RENDER
+      RENDER
      ======================= */
 
   return (

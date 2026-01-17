@@ -1,18 +1,22 @@
 // src/app/layout.tsx
 'use client'; 
 
-import { Figtree } from "next/font/google"; // 1. Changed to Figtree
+import { Figtree } from "next/font/google"; 
 import "./globals.css";
 import 'rc-slider/assets/index.css';
+import { useState, useEffect } from "react";
+
+// Components
 import Sidebar from "@/components/Sidebar";
 import Player from "@/components/Player";
-import { useState, useEffect } from "react";
-import ModalProvider from '@/providers/ModalProvider';
 import Header from "@/components/Header";
+import Queue from "@/components/Queue"; 
+
+// Providers
+import ModalProvider from '@/providers/ModalProvider';
 import SupabaseProvider from "@/providers/SupabaseProvider";
 import ToasterProvider from "@/providers/ToasterProvider";
 
-// 2. Configure Figtree
 const font = Figtree({ 
   subsets: ["latin"] 
 });
@@ -44,7 +48,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        // 3. Apply font.className here
         className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}
         suppressHydrationWarning
       >
@@ -52,17 +55,22 @@ export default function RootLayout({
           <ToasterProvider />
           <ModalProvider />
           
+          {/* MAIN FLEX CONTAINER */}
           <div className="flex flex-1 overflow-hidden">
             <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
             
-            <main className="flex-1 overflow-y-auto pb-20">
-              {/* Note: We removed the duplicate Header from the Queue page, 
-                  so this global one handles the layout. */}
+            {/* 👇 FIXED: Added 'min-w-0' 
+                This forces the main content to shrink when Queue opens, 
+                even if the Home page grid wants to stay wide. */}
+            <main className="flex-1 overflow-y-auto pb-20 min-w-0">
               <Header />
               {children}
             </main>
+            
+            <Queue />
 
           </div>
+          
           <Player />
         </SupabaseProvider>
       </body>

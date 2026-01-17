@@ -1,7 +1,6 @@
-// src/components/LikeButton.tsx
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
 import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
@@ -9,7 +8,8 @@ import { toast } from "react-hot-toast";
 
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { supabase } from "@/lib/supabaseClient";
-import useLikeStore from "@/stores/useLikeStore"; 
+import useLikeStore from "@/stores/useLikeStore";
+import usePlayerStore from "@/stores/usePlayerStore";
 
 interface LikeButtonProps {
   songId: string;
@@ -20,34 +20,10 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   const { onOpen } = useAuthModalStore();
   const user = useUser();
   
-  // Connect to the store
-  const { refreshTrigger, toggleRefresh } = useLikeStore();
+  const { hasLikedId, addLikedId, removeLikedId } = useLikeStore();
+  const { removeFromContext, prependToContext } = usePlayerStore();
 
-  const [isLiked, setIsLiked] = useState(false);
-
-  useEffect(() => {
-    if (!user?.id || !songId) {
-      return;
-    }
-
-    const checkLikedStatus = async () => {
-      const { data, error } = await supabase
-        .from('liked_songs')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('song_id', songId)
-        .single();
-
-      if (!error && data) {
-        setIsLiked(true);
-      } else {
-        setIsLiked(false);
-      }
-    }
-
-    checkLikedStatus();
-    // Dependency added: runs whenever the trigger changes
-  }, [songId, user?.id, refreshTrigger]);
+  const isLiked = hasLikedId(songId);
 
   const handleLike = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -57,40 +33,79 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
     }
 
     if (isLiked) {
-      const { error } = await supabase
-        .from('liked_songs')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('song_id', songId);
+      // --- UNLIKE ---
+      
+      // 1. Optimistic Update (Immediate Feedback)
+      removeLikedId(songId); 
+      removeFromContext(songId); 
+      toast('Unliked!', { icon: '💔' });
 
-      if (error) {
-        toast.error(error.message);
-      } else {
-        setIsLiked(false);
-        // 👇 CHANGED: Custom Broken Heart Icon
-        toast('Unliked!', { icon: '💔' });
+      // 2. DB Request
+      try {
+        const { error } = await supabase
+          .from('liked_songs')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('song_id', songId);
+
+        if (error) throw error;
+        
+        // 3. Background Refresh (The Missing Piece)
+        // This silently updates the server components to match the new DB state
+        router.refresh();
+
+      } catch (error: any) {
+        // Revert Optimistic Update on Failure
+        addLikedId(songId);
+        prependToContext(songId);
+        console.error("Unlike failed:", error.message);
+        toast.error("Could not unlike");
       }
-    } else {
-      const { error } = await supabase
-        .from('liked_songs')
-        .insert({
-          song_id: songId,
-          user_id: user.id
-        });
 
-      if (error) {
-        toast.error(error.message);
-      } else {
-        setIsLiked(true);
-        // 👇 CHANGED: Custom Heart Icon
-        toast('Liked!', { icon: '❤️' });
+    } else {
+      // --- LIKE ---
+
+      // 1. Optimistic Update (Immediate Feedback)
+      addLikedId(songId);
+      prependToContext(songId); 
+      toast('Liked!', { icon: '❤️' });
+
+      // 2. DB Request
+      try {
+        const { error } = await supabase
+          .from('liked_songs')
+          .upsert(
+            { 
+              song_id: songId, 
+              user_id: user.id 
+            }, 
+            { 
+              onConflict: 'song_id, user_id', 
+              ignoreDuplicates: true          
+            }
+          );
+
+        if (error) throw error;
+
+        // 3. Background Refresh (The Missing Piece)
+        // This ensures the "Liked Songs" page will show this song immediately 
+        // if you navigate there, without a full page reload.
+        router.refresh();
+
+      } catch (error: any) {
+        if (error.code === '23505') {
+            // Unique violation means it's already there. We are good.
+            // We still refresh just to be safe.
+            router.refresh();
+        } else {
+            // Genuine failure -> Revert UI
+            removeLikedId(songId);
+            removeFromContext(songId);
+            console.error("Like failed:", error.message);
+            toast.error("Could not like");
+        }
       }
     }
-    
-    // Signal sent: Tell everyone to update immediately
-    toggleRefresh();
-    
-    router.refresh(); 
   }
 
   const Icon = isLiked ? AiFillHeart : AiOutlineHeart;
@@ -98,10 +113,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   return (
     <button 
       onClick={handleLike}
-      className="
-        hover:opacity-75 
-        transition
-      "
+      className="hover:opacity-75 transition"
     >
       <Icon size={25} color={isLiked ? '#8f04b1ff' : 'white'} />
     </button>

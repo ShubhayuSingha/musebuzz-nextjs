@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Howl } from "howler";
 import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1 } from "react-icons/bs";
-import { HiSpeakerWave, HiSpeakerXMark } from "react-icons/hi2";
+import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2"; // Added HiQueueList
 import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
 import Slider from 'rc-slider';
 import Image from "next/image";
 
 import usePlayerStore from "@/stores/usePlayerStore";
+import useQueueStore from "@/stores/useQueueStore"; // 1. Import Queue Store
 import { supabase } from "@/lib/supabaseClient";
 import LikeButton from "@/components/LikeButton";
 
@@ -35,6 +36,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     setPrevVolume,
     activeIdSignature 
   } = usePlayerStore(); 
+
+  // 2. Get Queue UI State
+  const { toggle, isOpen } = useQueueStore();
 
   const onPlayNext = playNext; 
 
@@ -106,7 +110,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       const newSound = new Howl({
         src: [songPath],
         html5: true,
-        // FIX 1: Disable autoplay so we respect the store's isPlaying state
         autoplay: false, 
         volume: volume, 
         onplay: () => setIsPlaying(true),
@@ -115,8 +118,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           if (repeatModeRef.current === 'one') {
              newSound.play();
           } else {
-             // We intentionally DO NOT set isPlaying(false) here immediately,
-             // we let the store decide the next state in playNext().
              onPlayNext(); 
           }
         },
@@ -125,8 +126,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       
       soundRef.current = newSound;
 
-      // FIX 2: Manually trigger play ONLY if the store says we are currently playing.
-      // If the queue finished and reset to start, isPlaying will be false, so this won't run.
       if (isPlaying) {
         newSound.play();
       }
@@ -135,20 +134,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     return () => {
       soundRef.current?.unload();
     }
-  }, [
-    songPath, 
-    activeIdSignature, 
-    // Remove setIsPlaying and onPlayNext from deps to prevent re-creation loops,
-    // though adding them is technically correct in strict mode, they are stable functions.
-    // Ideally we include them:
-    setIsPlaying, 
-    onPlayNext,
-    // Add isPlaying to deps so we know if we should start immediately?
-    // NO. If we add isPlaying here, it will re-load the song on pause/play.
-    // We only want the value of isPlaying at the MOMENT of song load.
-    // So we purposefully omit it from dependency array or use a ref if linter complains.
-    // For now, React Hooks behavior captures the current value of isPlaying correctly on mount.
-  ]); 
+  }, [songPath, activeIdSignature, setIsPlaying, onPlayNext]); 
 
   useEffect(() => {
     const animate = () => {
@@ -192,6 +178,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   return (
     <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3 z-50">
+      
+      {/* LEFT: Song Info */}
       <div className="flex w-full justify-start items-center gap-x-4">
         <div className="relative h-14 w-14 rounded-md overflow-hidden shadow-md">
             {imageUrl ? (
@@ -209,6 +197,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         <LikeButton songId={song.id} />
       </div>
 
+      {/* CENTER: Player Controls */}
       <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
         <div className="flex items-center gap-x-6">
           <BsShuffle 
@@ -272,7 +261,19 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         </div>
       </div>
       
+      {/* RIGHT: Volume & Queue */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
+        
+        {/* 3. NEW QUEUE BUTTON */}
+        <div 
+            onClick={toggle}
+            className={`cursor-pointer transition ${isOpen ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
+            title="Queue"
+        >
+            <HiQueueList size={22} />
+        </div>
+
+        {/* Volume Controls */}
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 
                 onClick={toggleMute} 
@@ -293,11 +294,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                       rail: { backgroundColor: 'rgb(63 63 70)' }
                   }}
               />
-              <p className="absolute -top-5 left-0 w-full text-center text-[9px] text-neutral-500 font-bold select-none pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
-                  {Math.round(volume * 100)}%
-              </p>
             </div>
         </div>
+
       </div>
     </div>
   );

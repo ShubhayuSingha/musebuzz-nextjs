@@ -4,13 +4,15 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { HiHome } from 'react-icons/hi';
-import { HiQueueList } from 'react-icons/hi2'; // 1. Added Queue Icon
+// Removed HiQueueList import
 import { TbPlaylist } from 'react-icons/tb';
 import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; 
 import { FiMenu } from 'react-icons/fi';
 
 import { useUser } from "@supabase/auth-helpers-react";
 import useAuthModalStore from "@/stores/useAuthModalStore";
+
+import LikeDataLoader from "@/components/LikeDataLoader";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -52,6 +54,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         ${isCollapsed ? 'w-15' : 'w-64'}
       `}
     >
+      {/* Data Loader runs logic invisibly */}
+      <LikeDataLoader />
+
       <div className="flex items-center justify-start gap-x-4 mb-10 h-10 px-4">
         <button onClick={onToggle} className="rounded-full hover:bg-white/10 transition">
           <FiMenu size={26} />
@@ -67,13 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             </Link>
           </li>
           
-          {/* 2. ADDED QUEUE LINK HERE */}
-          <li className="mb-4">
-            <Link href="/queue" className="h-10 flex items-center gap-x-4 text-lg hover:text-zinc-400 transition-colors duration-200 px-4">
-              <HiQueueList size={26} />
-              {showText && <span className={textClasses}>Queue</span>}
-            </Link>
-          </li>
+          {/* QUEUE LINK REMOVED FROM HERE */}
 
         </ul>
       </nav>

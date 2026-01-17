@@ -1,5 +1,20 @@
 [
 
+{
+    "versionName": "v1.0.5",
+    "date": "18th January 2025", 
+    "time": "01:10 AM IST",
+    "title": "⚡ Modern Queue ⚡",
+    "description": "Rearrange songs in the queue.",
+    "changes": [
+      "Changed the queue to a small component from a dedicated page",
+      "Move the songs around the queue as you wish",
+      "Improved queue animations",
+      "Changed the home horizontal arrow colours for better visibility",
+      "Local cached like button to prevent appearance delay"
+    ]
+  },
+
   {
     "versionName": "v1.0.4",
     "date": "2026-01-16",
