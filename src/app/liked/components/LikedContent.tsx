@@ -1,14 +1,13 @@
 // src/app/liked/components/LikedContent.tsx
+
 'use client';
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
-// Removed BsPlusCircle from here
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; 
 import LikeButton from '@/components/LikeButton';
-// 1. Import new component
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
@@ -84,26 +83,32 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   }, [user, router]);
 
   const onPlay = (id: string) => {
+    const context = { type: 'liked' as const, title: 'Liked Songs', id: 'liked-songs' };
+
     const isCurrentContextActive = 
-      player.activeId === id && 
-      player.activeContext?.type === 'playlist' && 
-      player.activeContext?.title === 'Liked Songs';
+      player.activeContext?.type === 'liked' && 
+      player.activeContext?.id === 'liked-songs';
 
     if (isCurrentContextActive) {
-      player.setIsPlaying(!player.isPlaying);
+      if (player.activeId === id && !player.isPlayingPriority) {
+          player.setIsPlaying(!player.isPlaying);
+          return;
+      }
+      // 🟢 CALL NEW ACTION: Plucks song and inserts it (if shuffle ON)
+      player.playFromContext(id, context); 
     } else {
-      player.setId(id, { type: 'playlist', title: 'Liked Songs' });
       player.setIds(
         songs.map((song) => song.id),
-        { type: 'playlist', title: 'Liked Songs' }
+        context,
+        user?.id 
       );
+      player.setId(id, context);
     }
   };
 
   return (
     <div className="flex flex-col gap-y-2 w-full">
-      
-      {/* TABLE HEADER */}
+      {/* HEADER */}
       <div className="
         grid 
         grid-cols-[40px_4fr_3fr_2fr_80px_50px] 
@@ -125,7 +130,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
         <div>Title</div>
         <div>Album</div>
         <div>Date Added</div>
-        <div>{/* Space for Add + Heart */}</div>
+        <div>{/* Actions */}</div>
         <div className="flex justify-end pr-2">
           <BsClock size={16} />
         </div>
@@ -136,8 +141,9 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
           {songs.map((song, index) => {
             const isActive = 
               player.activeId === song.id && 
-              player.activeContext?.type === 'playlist' && 
-              player.activeContext?.title === 'Liked Songs';
+              !player.isPlayingPriority && 
+              player.activeContext?.type === 'liked' && 
+              player.activeContext?.id === 'liked-songs';
 
             const isPlaying = player.isPlaying;
 
@@ -190,8 +196,8 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                   )}
                 </div>
 
-                {/* TITLE + ARTIST */}
-                <div className="min-w-0">
+                {/* TITLE */}
+                <div className="min-w-0 pr-4">
                   <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
                     {song.title}
                   </p>
@@ -200,7 +206,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                   </p>
                 </div>
 
-                {/* ALBUM (CLICKABLE) */}
+                {/* ALBUM */}
                 <p 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -211,14 +217,13 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                   {song.album_title}
                 </p>
 
-                {/* DATE ADDED */}
+                {/* DATE */}
                 <p className="text-sm text-neutral-400">
                   {formatAddedDate(song.liked_created_at)}
                 </p>
 
-                {/* ACTIONS: QUEUE + LIKE */}
+                {/* ACTIONS */}
                 <div className="flex justify-center items-center gap-x-3">
-                  {/* 2. Use New Component */}
                   <AddToQueueButton songId={song.id} />
                   <LikeButton songId={song.id} />
                 </div>

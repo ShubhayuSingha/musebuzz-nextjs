@@ -1,366 +1,509 @@
 // src/stores/usePlayerStore.ts
+
+'use client';
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { QueueItem } from '@/types'; 
-import { v4 as uuidv4 } from 'uuid'; 
+import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/lib/supabaseClient';
+import { saveContextSettings, loadContextSettings } from '@/lib/playerContextSettings';
+
+/* =========================
+   TYPES
+========================= */
+
+export interface QueueItem {
+  id: string;      
+  uid: string;     
+}
 
 export interface PlayerContext {
   type: 'album' | 'playlist' | 'liked';
   title: string;
+  id?: string;
 }
 
 interface PlayerStore {
-  // --- STATE ---
+  /* Playback State */
   activeId?: string;
   activeIdSignature: number; 
-  isPlayingPriority: boolean; 
   isPlaying: boolean;
+  isPlayingPriority: boolean; 
   volume: number;
-  prevVolume: number; 
+  prevVolume: number;
 
-  bucketA: string[];          // Context Queue (Album/Playlist)
-  bucketB: QueueItem[];       // Priority Queue (User added)
-
-  activeContext?: PlayerContext; 
-  lastActiveContextId?: string; 
-
-  shuffledOrder: string[];    
+  /* Buckets */
+  sourceContextIds: string[]; 
+  bucketA: string[];          
+  bucketB: QueueItem[];       
+  
   isShuffled: boolean;
+  shuffledOrder: string[];    
+
+  /* Context Logic */
+  activeContext?: PlayerContext;
+  lastActiveContextId?: string; 
   repeatMode: 'off' | 'context' | 'one';
 
-  // --- ACTIONS ---
+  /* Core Actions */
   setId: (id: string, context?: PlayerContext) => void;
-  setIds: (ids: string[], context?: PlayerContext) => void; 
-  addToQueue: (id: string) => void; 
+  setIds: (ids: string[], context?: PlayerContext, userId?: string) => void;
+  playFromContext: (id: string, context: PlayerContext) => void; 
+
+  /* 🟢 NEW: Synchronize Liked Songs Queue */
+  syncLikedSongs: (songId: string, action: 'add' | 'remove') => void;
+
+  /* Queue Management */
+  setBucketB: (newQueue: QueueItem[]) => void;
+  addToQueue: (id: string) => void;
   playQueueItem: (index: number) => void; 
-  
-  // LOGIC: Seamless Drag & Drop
-  updateQueueFromUnified: (unifiedList: any[]) => void;
-  
-  // LOGIC: Removal Actions
+  removeFromPriority: (uid: string) => void;
+  reorderQueue: (from: number, to: number) => void;
+
+  /* Context Management */
+  setContextList: (newOrder: string[]) => void;
+  reorderContext: (from: number, to: number) => void;
   removeFromContext: (songId: string) => void;
-  removeFromPriority: (uid: string) => void; // New action for removing from Priority
-  
-  // LOGIC: New Like (Prepends to list or inserts randomly if shuffled)
   prependToContext: (songId: string) => void;
 
+  /* Settings */
   setIsPlaying: (value: boolean) => void;
   setVolume: (value: number) => void;
   setPrevVolume: (value: number) => void;
-  
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+
+  /* Navigation */
   playNext: () => void;
   playPrevious: () => void;
+
   reset: () => void;
 }
+
+/* =========================
+   STORE
+========================= */
 
 const usePlayerStore = create<PlayerStore>()(
   persist(
     (set, get) => ({
-      // --- INITIAL STATE ---
+      /* ---------- INITIAL STATE ---------- */
       activeId: undefined,
-      activeIdSignature: 0, 
-      isPlayingPriority: false, 
-      lastActiveContextId: undefined,
+      activeIdSignature: 0,
+      isPlayingPriority: false,
       isPlaying: false,
       volume: 0.3,
       prevVolume: 0.3,
 
+      sourceContextIds: [],
       bucketA: [],
-      bucketB: [],
-      activeContext: undefined, 
       shuffledOrder: [],
+      bucketB: [], 
+
       isShuffled: false,
+      activeContext: undefined,
+      lastActiveContextId: undefined,
       repeatMode: 'off',
 
-      // --- ACTIONS ---
+      /* ---------- CORE SETTERS ---------- */
 
-      setId: (id: string, context?: PlayerContext) => {
+      setId: (id, context) => {
         const state = get();
-        const isInContext = state.bucketA.includes(id);
-
-        set({ 
+        set({
           activeId: id,
           activeIdSignature: state.activeIdSignature + 1,
           isPlaying: true,
           isPlayingPriority: false, 
           ...(context ? { activeContext: context } : {}),
-          // Update history reference if we are playing from the context
-          ...(isInContext ? { lastActiveContextId: id } : {}) 
+          lastActiveContextId: id, 
         });
       },
-      
-      setIds: (ids: string[], context?: PlayerContext) => {
+
+      setIds: (ids, context, userId) => {
         const state = get();
-        
-        // If the current song exists in the NEW list, keep track of it
-        const currentIdInNewList = state.activeId && ids.includes(state.activeId) 
-          ? state.activeId 
-          : undefined;
-
-        set({ 
-          bucketA: ids, 
-          activeContext: context,
-          // CRITICAL: We DO NOT clear bucketB here. Priority persists across context switches.
-          bucketB: state.bucketB,        
-          
-          shuffledOrder: [], 
-          isShuffled: false,
-          isPlaying: true,
-          isPlayingPriority: false, 
-          lastActiveContextId: currentIdInNewList 
-        });
-      },
-
-      playQueueItem: (index: number) => {
-        const { bucketB, activeIdSignature } = get();
-        const itemToPlay = bucketB[index];
-        if (!itemToPlay) return;
-
-        const newQueue = [...bucketB];
-        // Remove from priority queue immediately (It is "consumed")
-        newQueue.splice(index, 1);
+        const keepActive = state.activeId && ids.includes(state.activeId) ? state.activeId : undefined;
 
         set({
-          activeId: itemToPlay.id,
-          activeIdSignature: activeIdSignature + 1,
-          bucketB: newQueue,
+          sourceContextIds: ids,
+          bucketA: ids, 
+          shuffledOrder: [],
+          isShuffled: false,
+          activeContext: context,
           isPlaying: true,
-          isPlayingPriority: true 
+          isPlayingPriority: false, 
+          lastActiveContextId: keepActive || ids[0],
+        });
+
+        if (userId && context) {
+            loadContextSettings(userId, context).then((settings) => {
+                if (!settings) return;
+                const currentState = get();
+                const updates: Partial<PlayerStore> = { repeatMode: settings.repeat_mode };
+
+                if (settings.shuffle_mode) {
+                    const activeId = currentState.activeId || ids[0];
+                    const source = [...ids];
+                    const rest = source.filter(id => id !== activeId);
+
+                    for (let i = rest.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [rest[i], rest[j]] = [rest[j], rest[i]];
+                    }
+
+                    const newOrder = [activeId, ...rest];
+
+                    updates.isShuffled = true;
+                    updates.shuffledOrder = newOrder;
+                    updates.bucketA = newOrder;
+                }
+                set(updates);
+            });
+        }
+      },
+
+      playFromContext: (id, context) => {
+        const state = get();
+        const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
+
+        if (!isShuffled) {
+            state.setId(id, context);
+            return;
+        }
+
+        const anchorId = isPlayingPriority ? lastActiveContextId : activeId;
+
+        if (!anchorId || !bucketA.includes(anchorId)) {
+            state.setId(id, context);
+            return;
+        }
+
+        const list = [...bucketA];
+        const listWithoutTarget = list.filter(itemId => itemId !== id);
+        const anchorIndex = listWithoutTarget.indexOf(anchorId);
+        
+        // Inject immediately after anchor
+        listWithoutTarget.splice(anchorIndex + 1, 0, id);
+
+        set({
+            bucketA: listWithoutTarget,
+            shuffledOrder: listWithoutTarget, 
+            activeId: id,
+            activeIdSignature: state.activeIdSignature + 1,
+            isPlaying: true,
+            isPlayingPriority: false, 
+            lastActiveContextId: id,
+            activeContext: context 
         });
       },
 
-      updateQueueFromUnified: (unifiedList: any[]) => {
-        const { isShuffled, bucketA, activeId, lastActiveContextId, shuffledOrder } = get();
+      /* 🟢 NEW: Synchronize Liked Songs Queue */
+      syncLikedSongs: (songId, action) => {
+        const state = get();
 
-        // 1. Find the Divider
-        const dividerIndex = unifiedList.findIndex(item => item.isDivider);
-        
-        let newBucketB: QueueItem[] = [];
-        let newUpcomingIds: string[] = [];
+        // 1. Only run this if we are currently listening to "Liked Songs"
+        //    (Checks for ID: 'liked-songs' which we set in LikedContent.tsx)
+        if (state.activeContext?.id !== 'liked-songs') return;
 
-        // Edge Case: If divider is missing (e.g. context became empty), assume all items are Priority
-        if (dividerIndex === -1) {
-             newBucketB = unifiedList.map(item => ({
-                id: item.id,
-                uid: item.uid && !item.uid.startsWith('ctx-') ? item.uid : uuidv4() 
-             }));
-        } else {
-             // Split the list
-             newBucketB = unifiedList.slice(0, dividerIndex).map(item => ({
-                id: item.id,
-                uid: item.uid && !item.uid.startsWith('ctx-') ? item.uid : uuidv4() 
-             }));
-             newUpcomingIds = unifiedList.slice(dividerIndex + 1).map(item => item.id);
+        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
+        const currentList = [...bucketA]; // Determine which list to update
+
+        // A. REMOVE LOGIC
+        if (action === 'remove') {
+            const newList = currentList.filter(id => id !== songId);
+            set({ 
+                bucketA: newList,
+                shuffledOrder: isShuffled ? newList : [],
+                sourceContextIds: sourceContextIds.filter(id => id !== songId) // Keep source in sync
+            });
+            return;
         }
 
-        // 4. Merge Context (History + Current + New Upcoming)
-        const currentList = isShuffled ? shuffledOrder : bucketA;
-        const currentRefId = activeId || lastActiveContextId;
-        const splitIndex = currentList.findIndex(id => id === currentRefId);
-        
-        // Keep history intact (0 to current index)
-        const historyAndCurrent = splitIndex !== -1 ? currentList.slice(0, splitIndex + 1) : [];
-        
-        const finalContextList = [...historyAndCurrent, ...newUpcomingIds];
+        // B. ADD LOGIC
+        if (action === 'add') {
+            // Prevent duplicates
+            if (currentList.includes(songId)) return;
 
-        if (isShuffled) {
-           set({ bucketB: newBucketB, shuffledOrder: finalContextList });
-        } else {
-           set({ bucketB: newBucketB, bucketA: finalContextList });
-        }
-      },
+            // Update Source (Always add to top for linear history)
+            const newSource = [songId, ...sourceContextIds];
 
-      removeFromContext: (songId: string) => {
-         const { activeContext, bucketA, shuffledOrder, isShuffled } = get();
-         
-         const isLikedContext = 
-            activeContext?.type === 'liked' || 
-            (activeContext?.type === 'playlist' && activeContext?.title === 'Liked Songs');
-
-         if (isLikedContext) {
-             const newBucketA = bucketA.filter(id => id !== songId);
-             
-             let changes: any = { bucketA: newBucketA };
-
-             if (isShuffled) {
-                 const newShuffledOrder = shuffledOrder.filter(id => id !== songId);
-                 changes.shuffledOrder = newShuffledOrder;
-             }
-
-             set(changes);
-         }
-      },
-
-      removeFromPriority: (uid: string) => {
-        const { bucketB } = get();
-        // Filter out the specific item by its Unique ID
-        const newBucketB = bucketB.filter((item) => item.uid !== uid);
-        set({ bucketB: newBucketB });
-      },
-
-      prependToContext: (songId: string) => {
-        const { activeContext, bucketA, shuffledOrder, isShuffled } = get();
-
-        const isLikedContext = 
-            activeContext?.type === 'liked' || 
-            (activeContext?.type === 'playlist' && activeContext?.title === 'Liked Songs');
-
-        if (isLikedContext) {
-            // 1. Always add to TOP of Main Bucket
-            const newBucketA = [songId, ...bucketA];
+            // Update Queue (Bucket A)
+            const activeIndex = activeId ? currentList.indexOf(activeId) : -1;
             
-            let changes: any = { bucketA: newBucketA };
+            // Logic: Insert randomly between (currentIndex + 1) and (End of List)
+            // Range logic: min = activeIndex + 1, max = length
+            const min = activeIndex + 1;
+            const max = currentList.length;
+            
+            // Random index calculation
+            const randomIndex = Math.floor(Math.random() * (max - min + 1)) + min;
 
-            // 2. Handle Shuffle: Insert at random position
-            if (isShuffled) {
-                 const newShuffledOrder = [...shuffledOrder];
-                 const randomIndex = Math.floor(Math.random() * (newShuffledOrder.length + 1));
-                 newShuffledOrder.splice(randomIndex, 0, songId);
-                 
-                 changes.shuffledOrder = newShuffledOrder;
-            }
+            currentList.splice(randomIndex, 0, songId);
 
-            set(changes);
+            set({
+                bucketA: currentList,
+                shuffledOrder: isShuffled ? currentList : [], // If shuffled, bucketA is the source of truth
+                sourceContextIds: newSource
+            });
         }
       },
 
-      setIsPlaying: (value: boolean) => set({ isPlaying: value }),
-      setVolume: (value: number) => set({ volume: value }),
-      setPrevVolume: (value: number) => set({ prevVolume: value }),
+      /* ---------- QUEUE MANAGEMENT (BUCKET B) ---------- */
 
-      reset: () => set({ 
-        bucketA: [], bucketB: [], activeId: undefined, isPlaying: false, activeContext: undefined, lastActiveContextId: undefined, isPlayingPriority: false
-      }),
+      setBucketB: (newQueue) => set({ bucketB: newQueue }),
 
-      addToQueue: (id: string) => {
-        const newItem: QueueItem = { id: id, uid: uuidv4() };
+      addToQueue: (id) => {
+        const newItem: QueueItem = { id, uid: uuidv4() };
         set((state) => ({ bucketB: [...state.bucketB, newItem] }));
       },
 
-      toggleShuffle: () => {
-        set((state) => {
-          const newShuffleState = !state.isShuffled;
-          let newShuffledOrder: string[] = [];
+      playQueueItem: (index) => {
+        const { bucketB, activeIdSignature } = get();
+        const item = bucketB[index];
+        if (!item) return;
 
-          if (newShuffleState) {
-            const allIds = [...state.bucketA];
-            const otherIds = allIds.filter(id => id !== state.activeId);
-            for (let i = otherIds.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [otherIds[i], otherIds[j]] = [otherIds[j], otherIds[i]];
-            }
-            if (state.activeId) {
-              newShuffledOrder = [state.activeId, ...otherIds];
-            } else {
-              newShuffledOrder = otherIds;
-            }
-          }
-          return { isShuffled: newShuffleState, shuffledOrder: newShuffledOrder };
+        const nextPriorityQueue = bucketB.slice(index + 1);
+
+        set({
+          activeId: item.id,
+          activeIdSignature: activeIdSignature + 1,
+          bucketB: nextPriorityQueue, 
+          isPlaying: true,
+          isPlayingPriority: true, 
         });
+      },
+
+      removeFromPriority: (uid) =>
+        set((state) => ({
+          bucketB: state.bucketB.filter((i) => i.uid !== uid),
+        })),
+
+      reorderQueue: (from, to) => {
+        set((state) => {
+          const copy = [...state.bucketB];
+          const [moved] = copy.splice(from, 1);
+          copy.splice(to, 0, moved);
+          return { bucketB: copy };
+        });
+      },
+
+      /* ---------- CONTEXT MANAGEMENT (BUCKET A) ---------- */
+
+      setContextList: (newOrder) => {
+        const { isShuffled } = get();
+        set(isShuffled ? { shuffledOrder: newOrder, bucketA: newOrder } : { bucketA: newOrder });
+      },
+
+      reorderContext: (from, to) => {
+        set((state) => {
+          const list = state.isShuffled ? [...state.shuffledOrder] : [...state.bucketA];
+          const [moved] = list.splice(from, 1);
+          list.splice(to, 0, moved);
+
+          return state.isShuffled
+            ? { shuffledOrder: list, bucketA: list } 
+            : { bucketA: list };
+        });
+      },
+
+      removeFromContext: (songId) => {
+        const { isShuffled, bucketA, shuffledOrder } = get();
+        set({
+            bucketA: bucketA.filter(id => id !== songId),
+            shuffledOrder: isShuffled ? shuffledOrder.filter(id => id !== songId) : []
+        });
+      },
+
+      prependToContext: (songId) => {
+        const { isShuffled, bucketA, shuffledOrder } = get();
+        if (isShuffled) {
+            set({ 
+                bucketA: [songId, ...bucketA],
+                shuffledOrder: [songId, ...shuffledOrder]
+            });
+        } else {
+            set({ bucketA: [songId, ...bucketA] });
+        }
+      },
+
+      /* ---------- PLAYBACK MODES ---------- */
+
+      toggleShuffle: () => {
+        const state = get();
+        const next = !state.isShuffled;
+
+        if (!next) {
+          set({
+            isShuffled: false,
+            shuffledOrder: [],
+            bucketA: state.sourceContextIds,
+          });
+        } else {
+          const source = [...state.sourceContextIds];
+          if (!source.length) return;
+
+          const activeId = state.activeId;
+          const rest = activeId ? source.filter((id) => id !== activeId) : [...source];
+
+          for (let i = rest.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [rest[i], rest[j]] = [rest[j], rest[i]];
+          }
+
+          const newOrder = activeId ? [activeId, ...rest] : rest;
+
+          set({
+            isShuffled: true,
+            shuffledOrder: newOrder,
+            bucketA: newOrder, 
+          });
+        }
+
+        const context = state.activeContext;
+        if (context?.id) {
+          supabase.auth.getUser().then(({ data }) => {
+            if (!data.user) return;
+            saveContextSettings(data.user.id, context, {
+              shuffle_mode: next,
+              repeat_mode: state.repeatMode,
+            });
+          });
+        }
       },
 
       toggleRepeat: () => {
         set((state) => {
-          const modes = ['off', 'context', 'one'];
-          const nextIndex = (modes.indexOf(state.repeatMode) + 1) % modes.length;
-          return { repeatMode: modes[nextIndex] as 'off' | 'context' | 'one' };
+          const modes: PlayerStore['repeatMode'][] = ['off', 'context', 'one'];
+          const next = modes[(modes.indexOf(state.repeatMode) + 1) % modes.length];
+
+          const context = state.activeContext;
+          if (context?.id) {
+            supabase.auth.getUser().then(({ data }) => {
+              if (!data.user) return;
+              saveContextSettings(data.user.id, context, {
+                shuffle_mode: state.isShuffled,
+                repeat_mode: next,
+              });
+            });
+          }
+          return { repeatMode: next };
         });
       },
 
+      /* ---------- NAVIGATION Logic ---------- */
+
       playNext: () => {
-        const { activeId, bucketA, bucketB, shuffledOrder, isShuffled, repeatMode, lastActiveContextId, activeIdSignature, isPlayingPriority } = get();
+        const {
+          bucketA,
+          bucketB,
+          activeId,
+          activeIdSignature,
+          lastActiveContextId,
+          isPlayingPriority,
+          repeatMode
+        } = get();
 
-        // 1. Play Priority first
         if (bucketB.length > 0) {
-          const nextItem = bucketB[0];
-          const remainingQueue = bucketB.slice(1);
-          set({ activeId: nextItem.id, activeIdSignature: activeIdSignature + 1, bucketB: remainingQueue, isPlayingPriority: true });
-          return;
-        }
-
-        // 2. Play Context (Album/Playlist)
-        const currentList = isShuffled ? shuffledOrder : bucketA;
-        let currentIndex = -1;
-
-        // FIX: Resume from history if we were in Priority Mode
-        if (isPlayingPriority && lastActiveContextId) {
-             currentIndex = currentList.findIndex((id) => id === lastActiveContextId);
-        } else {
-             currentIndex = currentList.findIndex((id) => id === activeId);
-             // Fallback if activeId is missing
-             if (currentIndex === -1 && lastActiveContextId) {
-                currentIndex = currentList.findIndex((id) => id === lastActiveContextId);
-             }
-        }
-
-        let nextIndex = currentIndex + 1;
-
-        // 3. End of Playlist Handling
-        if (nextIndex >= currentList.length) {
-          // If Repeat is OFF: Go to start and PAUSE
-          if (repeatMode === 'off') {
-            if (currentList.length > 0) {
-                set({ 
-                    activeId: currentList[0], // Reset to Song 1
-                    activeIdSignature: activeIdSignature + 1,
-                    lastActiveContextId: currentList[0],
-                    isPlaying: false, // PAUSE
-                    isPlayingPriority: false 
-                });
-            } else {
-                set({ isPlaying: false, isPlayingPriority: false });
-            }
+            const [next, ...rest] = bucketB;
+            set({
+                activeId: next.id,
+                activeIdSignature: activeIdSignature + 1,
+                bucketB: rest, 
+                isPlayingPriority: true,
+                isPlaying: true
+            });
             return;
-          }
-          // If Repeat is ON: Loop to 0 and CONTINUE PLAYING
-          nextIndex = 0; 
         }
 
-        const nextSongId = currentList[nextIndex];
+        if (!bucketA.length) return;
+
+        const refId = isPlayingPriority ? lastActiveContextId : activeId;
+        const currentIdx = refId ? bucketA.indexOf(refId) : -1;
         
-        set({ 
-            activeId: nextSongId, 
-            activeIdSignature: activeIdSignature + 1, 
-            lastActiveContextId: nextSongId, 
-            isPlayingPriority: false,
-            isPlaying: true // Ensure playback continues
+        let nextIdx = currentIdx + 1;
+
+        if (nextIdx >= bucketA.length) {
+            if (repeatMode === 'off') {
+                set({ isPlaying: false, isPlayingPriority: false });
+                return;
+            }
+            if (repeatMode === 'context') {
+                nextIdx = 0; 
+            }
+        }
+
+        const nextId = bucketA[nextIdx];
+        set({
+            activeId: nextId,
+            activeIdSignature: activeIdSignature + 1,
+            lastActiveContextId: nextId, 
+            isPlayingPriority: false, 
+            isPlaying: true
         });
       },
 
       playPrevious: () => {
-        const { activeId, bucketA, shuffledOrder, isShuffled, lastActiveContextId, activeIdSignature, isPlayingPriority } = get();
-        
-        // If playing priority, go back to last context song
-        if (isPlayingPriority) {
-           if (lastActiveContextId) {
-              set({ activeId: lastActiveContextId, activeIdSignature: activeIdSignature + 1, isPlayingPriority: false });
-              return;
-           }
+        const {
+          bucketA,
+          activeId,
+          activeIdSignature,
+          lastActiveContextId,
+          isPlayingPriority
+        } = get();
+
+        if (isPlayingPriority && lastActiveContextId) {
+            set({
+                activeId: lastActiveContextId,
+                activeIdSignature: activeIdSignature + 1,
+                isPlayingPriority: false, 
+                isPlaying: true
+            });
+            return;
         }
 
-        const currentList = isShuffled ? shuffledOrder : bucketA;
-        let currentIndex = currentList.findIndex((id) => id === activeId);
+        if (!bucketA.length) return;
 
-        if (currentIndex === -1 && lastActiveContextId) {
-             set({ activeId: lastActiveContextId, activeIdSignature: activeIdSignature + 1, isPlayingPriority: false });
-             return;
-        }
+        let idx = activeId ? bucketA.indexOf(activeId) : -1;
+        let prevIdx = idx - 1;
+        if (prevIdx < 0) prevIdx = 0;
 
-        let prevIndex = currentIndex - 1;
-        if (prevIndex < 0) {
-          prevIndex = currentList.length > 0 ? currentList.length - 1 : 0;
-        }
+        const prevId = bucketA[prevIdx];
 
-        const prevSongId = currentList[prevIndex];
-        set({ activeId: prevSongId, activeIdSignature: activeIdSignature + 1, lastActiveContextId: prevSongId, isPlayingPriority: false });
-      }
+        set({
+            activeId: prevId,
+            activeIdSignature: activeIdSignature + 1,
+            lastActiveContextId: prevId,
+            isPlayingPriority: false,
+            isPlaying: true
+        });
+      },
+
+      /* ---------- MISC ---------- */
+
+      setIsPlaying: (value) => set({ isPlaying: value }),
+      setVolume: (value) => set({ volume: value }),
+      setPrevVolume: (value) => set({ prevVolume: value }),
+
+      reset: () =>
+        set({
+          sourceContextIds: [],
+          bucketA: [],
+          shuffledOrder: [],
+          bucketB: [],
+          activeId: undefined,
+          isPlaying: false,
+          activeContext: undefined,
+          lastActiveContextId: undefined,
+          isPlayingPriority: false,
+          isShuffled: false,
+        }),
     }),
     {
-      name: 'musebuzz-player-storage', 
-      storage: createJSONStorage(() => localStorage), 
-      partialize: (state) => ({ volume: state.volume, prevVolume: state.prevVolume }),
+      name: 'musebuzz-player-storage',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        volume: state.volume,
+        prevVolume: state.prevVolume,
+      }),
     }
   )
 );

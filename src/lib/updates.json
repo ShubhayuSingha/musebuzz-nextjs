@@ -1,5 +1,19 @@
 [
 
+  {
+    "versionName": "v1.0.6",
+    "date": "21th January 2025", 
+    "time": "12:10 AM IST",
+    "title": "⚡Stabilised Features and Simplified Approach⚡",
+    "description": "Added persistency to liked songs, changed queue mechanisms, changed vibes.",
+    "changes": [
+      "If you turn on 'shuffle' or change 'repeat' mode for a playlist or album, that status is stored in the database. So, even when you come back later, it is remembered.",
+      "Queue window on the right is resizable now. The last size is stored in your browser's cache so it is device specific, not account specific so you don't have to constantly change it.",
+      "You can no longer drag songs from the context queue to the priority queue and vice-versa. This prevents unnecessary bugs and stabilises queue performance. An easy mechanism is introduced, if you click and drag a context queue song right, you can add it to the priority queue and then re-arrange it from there if you absolutely need to.",
+      "You can remove songs from the priority and context queue by using the 'X' button or by dragging left.",
+      "Changed main seek slider and volume slider colour from white to purple to match the theme."
+    ]
+  },
 {
     "versionName": "v1.0.5",
     "date": "18th January 2025", 

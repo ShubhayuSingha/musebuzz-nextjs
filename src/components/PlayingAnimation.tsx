@@ -4,7 +4,7 @@
 const PlayingAnimation = () => {
   return (
     /* Container: aligns items to the bottom, small gap */
-    <div className="flex items-end gap-[2px] h-4 w-5 justify-center">
+    <div className="flex items-end gap-[1px] h-4 w-5 justify-center">
       {/* Bar 1: Standard bounce speed, full height */}
       <span className="w-[3px] bg-green-500 rounded-sm animate-[bounce_1s_infinite] h-[80%]" />
       

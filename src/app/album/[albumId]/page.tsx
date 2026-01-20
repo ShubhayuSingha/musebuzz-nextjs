@@ -1,4 +1,5 @@
 // src/app/album/[albumId]/page.tsx
+
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import Image from "next/image";
@@ -16,7 +17,7 @@ export default async function Album(props: AlbumProps) {
   const params = await props.params;
   const { albumId } = params;
 
-  // 🔴 FIX: Add 'await' here because cookies() is now async in Next.js 15
+  // Next.js 15: cookies() is async
   const cookieStore = await cookies();
   
   const supabase = createServerComponentClient({
@@ -113,9 +114,11 @@ export default async function Album(props: AlbumProps) {
       </div>
 
       <div className="flex flex-col gap-y-2 p-6 w-full">
+        {/* 🟢 FIX: Added albumId prop here */}
         <AlbumContent 
           songs={album.songs} 
           albumName={album.title}
+          albumId={album.id} 
         />
       </div>
     </div>

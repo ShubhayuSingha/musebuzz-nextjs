@@ -1,3 +1,5 @@
+// src/components/LikeButton.tsx
+
 'use client';
 
 import { useState } from "react";
@@ -21,7 +23,9 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   const user = useUser();
   
   const { hasLikedId, addLikedId, removeLikedId } = useLikeStore();
-  const { removeFromContext, prependToContext } = usePlayerStore();
+  
+  // 🟢 CHANGED: We now use syncLikedSongs instead of the old context helpers
+  const { syncLikedSongs } = usePlayerStore();
 
   const isLiked = hasLikedId(songId);
 
@@ -37,7 +41,8 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
       
       // 1. Optimistic Update (Immediate Feedback)
       removeLikedId(songId); 
-      removeFromContext(songId); 
+      // 🟢 SYNC: Remove from queue immediately if Context is Liked Songs
+      syncLikedSongs(songId, 'remove'); 
       toast('Unliked!', { icon: '💔' });
 
       // 2. DB Request
@@ -50,14 +55,14 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
 
         if (error) throw error;
         
-        // 3. Background Refresh (The Missing Piece)
-        // This silently updates the server components to match the new DB state
+        // 3. Background Refresh
         router.refresh();
 
       } catch (error: any) {
         // Revert Optimistic Update on Failure
         addLikedId(songId);
-        prependToContext(songId);
+        // 🟢 REVERT: Add it back to queue if DB failed
+        syncLikedSongs(songId, 'add');
         console.error("Unlike failed:", error.message);
         toast.error("Could not unlike");
       }
@@ -67,7 +72,8 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
 
       // 1. Optimistic Update (Immediate Feedback)
       addLikedId(songId);
-      prependToContext(songId); 
+      // 🟢 SYNC: Add to queue (Randomly if shuffled) if Context is Liked Songs
+      syncLikedSongs(songId, 'add'); 
       toast('Liked!', { icon: '❤️' });
 
       // 2. DB Request
@@ -87,20 +93,18 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
 
         if (error) throw error;
 
-        // 3. Background Refresh (The Missing Piece)
-        // This ensures the "Liked Songs" page will show this song immediately 
-        // if you navigate there, without a full page reload.
+        // 3. Background Refresh
         router.refresh();
 
       } catch (error: any) {
         if (error.code === '23505') {
             // Unique violation means it's already there. We are good.
-            // We still refresh just to be safe.
             router.refresh();
         } else {
             // Genuine failure -> Revert UI
             removeLikedId(songId);
-            removeFromContext(songId);
+            // 🟢 REVERT: Remove from queue if DB failed
+            syncLikedSongs(songId, 'remove');
             console.error("Like failed:", error.message);
             toast.error("Could not like");
         }

@@ -1,11 +1,12 @@
+// src/app/album/[albumId]/AlbumContent.tsx
+
 'use client';
 
 import usePlayerStore from '@/stores/usePlayerStore';
+import { useUser } from '@supabase/auth-helpers-react';
 import { formatTime } from '@/lib/helpers';
-// Removed BsPlusCircle and toast imports
 import { BsPlayFill, BsPauseFill } from 'react-icons/bs';
 import LikeButton from '@/components/LikeButton';
-// 1. Import the new button
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
 import { motion, Variants } from 'framer-motion';
@@ -13,9 +14,9 @@ import { motion, Variants } from 'framer-motion';
 interface AlbumContentProps {
   songs: any[];
   albumName: string;
+  albumId: string;
 }
 
-/* ... VARIANTS remain exactly the same ... */
 const listVariants: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.05, delayChildren: 0.15 } },
@@ -26,20 +27,37 @@ const rowVariants: Variants = {
   show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 220, damping: 22, mass: 0.7 } },
 };
 
-const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
+const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }) => {
   const player = usePlayerStore();
+  const user = useUser();
 
   const onPlay = (id: string) => {
+    // 1. Identify the Context
+    const context = { type: 'album' as const, title: albumName, id: albumId };
+
     const isCurrentContextActive = 
-      player.activeId === id && 
       player.activeContext?.type === 'album' && 
-      player.activeContext?.title === albumName;
+      player.activeContext?.id === albumId;
 
     if (isCurrentContextActive) {
-      player.setIsPlaying(!player.isPlaying);
+      // 🟢 Logic: If already playing this album, use the smart logic
+      if (player.activeId === id && !player.isPlayingPriority) {
+          player.setIsPlaying(!player.isPlaying);
+          return;
+      }
+      
+      // 🟢 CALL NEW ACTION: Plucks song and inserts it (if shuffle ON)
+      player.playFromContext(id, context);
+
     } else {
-      player.setId(id, { type: 'album', title: albumName });
-      player.setIds(songs.map((song) => song.id), { type: 'album', title: albumName });
+      // 🟢 New Context: Load and Hydrate
+      player.setIds(
+        songs.map((song) => song.id),
+        context,
+        user?.id 
+      );
+      // Play specific song
+      player.setId(id, context);
     }
   };
 
@@ -55,10 +73,13 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
       className="mt-4 flex flex-col gap-y-1"
     >
       {songs.map((song, index) => {
+        // Only highlight if actively playing from THIS context (not priority)
         const isActive = 
           player.activeId === song.id && 
+          !player.isPlayingPriority && 
           player.activeContext?.type === 'album' && 
-          player.activeContext?.title === albumName;
+          player.activeContext?.id === albumId;
+          
         const isPlaying = player.isPlaying;
 
         return (
@@ -89,13 +110,13 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName }) => {
               )}
             </div>
 
-            {/* TITLE + ARTIST */}
+            {/* TITLE */}
             <div className="min-w-0">
               <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
               <p className="text-sm text-neutral-400 truncate">{song.author}</p>
             </div>
 
-            {/* 2. ACTIONS: New Component Used Here */}
+            {/* ACTIONS */}
             <div className="flex justify-center items-center gap-x-3">
               <AddToQueueButton songId={song.id} />
               <LikeButton songId={song.id} />

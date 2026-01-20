@@ -1,15 +1,17 @@
+// src/components/PlayerContent.tsx
+
 'use client';
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Howl } from "howler";
 import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1 } from "react-icons/bs";
-import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2"; // Added HiQueueList
+import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2"; 
 import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
 import Slider from 'rc-slider';
 import Image from "next/image";
 
 import usePlayerStore from "@/stores/usePlayerStore";
-import useQueueStore from "@/stores/useQueueStore"; // 1. Import Queue Store
+import useQueueStore from "@/stores/useQueueStore"; 
 import { supabase } from "@/lib/supabaseClient";
 import LikeButton from "@/components/LikeButton";
 
@@ -37,9 +39,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     activeIdSignature 
   } = usePlayerStore(); 
 
-  // 2. Get Queue UI State
   const { toggle, isOpen } = useQueueStore();
-
   const onPlayNext = playNext; 
 
   const soundRef = useRef<Howl | null>(null);
@@ -78,6 +78,20 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       setVolume(0);
     }
   }
+
+  const handlePrevious = () => {
+    if (soundRef.current) {
+        const currentSeek = soundRef.current.seek();
+        if (typeof currentSeek === 'number' && currentSeek > 2) {
+            soundRef.current.seek(0);
+            setCurrentTime(0); 
+        } else {
+            playPrevious();
+        }
+    } else {
+        playPrevious();
+    }
+  };
 
   useEffect(() => {
     if (soundRef.current) {
@@ -207,7 +221,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           />
           <AiFillStepBackward
             size={30}
-            onClick={playPrevious}
+            onClick={handlePrevious} 
             className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90"
           />
           <div 
@@ -243,16 +257,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             onChangeComplete={handleSliderAfterChange}
             step={0.1}
             styles={{
-              track: { backgroundColor: '#fff' },
+              track: { backgroundColor: '#a855f7' }, 
               handle: { 
                 backgroundColor: '#fff', 
                 border: 'none', 
                 boxShadow: 'none', 
-                opacity: isDragging ? 1 : undefined 
+                // We rely on CSS classes for opacity and cursor to ensure overrides work
               },
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
-            className="group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:opacity-0 [&_.rc-slider-handle]:transition-opacity"
+            className="
+              !cursor-pointer
+              [&_.rc-slider-handle]:!cursor-pointer
+              [&_.rc-slider-handle]:opacity-0
+              group-hover:[&_.rc-slider-handle]:opacity-100
+              [&_.rc-slider-handle]:transition-opacity
+            "
           />
 
           <p className="text-neutral-400 text-[12px] w-10 text-left tabular-nums">
@@ -264,7 +284,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       {/* RIGHT: Volume & Queue */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
         
-        {/* 3. NEW QUEUE BUTTON */}
         <div 
             onClick={toggle}
             className={`cursor-pointer transition ${isOpen ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
@@ -273,7 +292,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             <HiQueueList size={22} />
         </div>
 
-        {/* Volume Controls */}
         <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon 
                 onClick={toggleMute} 
@@ -281,7 +299,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 size={24} 
             />
             
-            <div className="relative w-full flex items-center">
+            <div className="relative w-full flex items-center group/volume">
               <Slider 
                   min={0}
                   max={1}
@@ -289,10 +307,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                   value={volume}
                   onChange={(value) => setVolume(value as number)}
                   styles={{
-                      track: { backgroundColor: '#fff' },
-                      handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' },
+                      track: { backgroundColor: '#a855f7' }, 
+                      handle: { 
+                          backgroundColor: '#fff', 
+                          border: 'none', 
+                          boxShadow: 'none',
+                          // Removed inline opacity so class works
+                      },
                       rail: { backgroundColor: 'rgb(63 63 70)' }
                   }}
+                  className="
+                    !cursor-pointer
+                    [&_.rc-slider-handle]:!cursor-pointer
+                    [&_.rc-slider-handle]:opacity-0
+                    group-hover/volume:[&_.rc-slider-handle]:opacity-100
+                    [&_.rc-slider-handle]:transition-opacity
+                  "
               />
             </div>
         </div>
