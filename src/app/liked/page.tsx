@@ -70,7 +70,7 @@ export default async function Liked() {
 
             <div className="flex flex-col gap-y-2 mt-4 md:mt-0 mb-2">
               <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
-                Playlist
+                Liked Songs
               </p>
               <h1 className="text-white text-4xl sm:text-6xl lg:text-8xl font-bold drop-shadow-lg">
                 Liked Songs

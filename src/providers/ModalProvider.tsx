@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import AuthModal from '@/components/AuthModal';
 import UpdateModal from '@/components/UpdateModal'; // 1. Import the new modal
+import AddToPlaylistModal from "@/components/AddToPlaylistModal";
 
 const ModalProvider = () => {
   const [isMounted, setIsMounted] = useState(false);
@@ -21,6 +22,7 @@ const ModalProvider = () => {
     <>
       <AuthModal />
       <UpdateModal /> {/* 2. Add the update modal here */}
+      <AddToPlaylistModal />
     </>
   );
 };

@@ -5,8 +5,11 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '@/lib/supabaseClient'; 
 import { saveContextSettings, loadContextSettings } from '@/lib/playerContextSettings';
+
+// 🟢 NEW: Import Playlist Store to trigger updates
+import usePlaylistStore from '@/stores/usePlaylistStore'; 
 
 /* =========================
    TYPES
@@ -50,8 +53,9 @@ interface PlayerStore {
   setIds: (ids: string[], context?: PlayerContext, userId?: string) => void;
   playFromContext: (id: string, context: PlayerContext) => void; 
 
-  /* 🟢 NEW: Synchronize Liked Songs Queue */
+  /* Synchronize Queues */
   syncLikedSongs: (songId: string, action: 'add' | 'remove') => void;
+  syncPlaylistQueue: (songId: string, playlistId: string, action: 'add' | 'remove') => void;
 
   /* Queue Management */
   setBucketB: (newQueue: QueueItem[]) => void;
@@ -79,6 +83,26 @@ interface PlayerStore {
 
   reset: () => void;
 }
+
+/* =========================
+   HELPER: Update Last Accessed
+========================= */
+const updateLastAccessed = async (context?: PlayerContext) => {
+    // Only update if it is a personal playlist
+    if (context?.type === 'playlist' && context.id) {
+        const now = new Date().toISOString();
+        
+        const { error } = await supabase
+            .from('playlists')
+            .update({ last_accessed_at: now })
+            .eq('id', context.id);
+
+        // 🟢 TRIGGER: If update succeeded, tell the rest of the app to refresh
+        if (!error) {
+            usePlaylistStore.getState().refreshPlaylists();
+        }
+    }
+};
 
 /* =========================
    STORE
@@ -117,6 +141,8 @@ const usePlayerStore = create<PlayerStore>()(
           ...(context ? { activeContext: context } : {}),
           lastActiveContextId: id, 
         });
+
+        if (context) updateLastAccessed(context);
       },
 
       setIds: (ids, context, userId) => {
@@ -133,6 +159,8 @@ const usePlayerStore = create<PlayerStore>()(
           isPlayingPriority: false, 
           lastActiveContextId: keepActive || ids[0],
         });
+
+        if (context) updateLastAccessed(context);
 
         if (userId && context) {
             loadContextSettings(userId, context).then((settings) => {
@@ -163,6 +191,10 @@ const usePlayerStore = create<PlayerStore>()(
 
       playFromContext: (id, context) => {
         const state = get();
+        
+        // 🟢 Update timestamp & Trigger Refresh
+        updateLastAccessed(context);
+
         const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
 
         if (!isShuffled) {
@@ -181,7 +213,6 @@ const usePlayerStore = create<PlayerStore>()(
         const listWithoutTarget = list.filter(itemId => itemId !== id);
         const anchorIndex = listWithoutTarget.indexOf(anchorId);
         
-        // Inject immediately after anchor
         listWithoutTarget.splice(anchorIndex + 1, 0, id);
 
         set({
@@ -196,52 +227,83 @@ const usePlayerStore = create<PlayerStore>()(
         });
       },
 
-      /* 🟢 NEW: Synchronize Liked Songs Queue */
+      /* Sync Liked Songs */
       syncLikedSongs: (songId, action) => {
         const state = get();
-
-        // 1. Only run this if we are currently listening to "Liked Songs"
-        //    (Checks for ID: 'liked-songs' which we set in LikedContent.tsx)
         if (state.activeContext?.id !== 'liked-songs') return;
 
         const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
-        const currentList = [...bucketA]; // Determine which list to update
+        const currentList = [...bucketA]; 
 
-        // A. REMOVE LOGIC
         if (action === 'remove') {
             const newList = currentList.filter(id => id !== songId);
             set({ 
                 bucketA: newList,
                 shuffledOrder: isShuffled ? newList : [],
-                sourceContextIds: sourceContextIds.filter(id => id !== songId) // Keep source in sync
+                sourceContextIds: sourceContextIds.filter(id => id !== songId) 
             });
             return;
         }
 
-        // B. ADD LOGIC
         if (action === 'add') {
-            // Prevent duplicates
             if (currentList.includes(songId)) return;
-
-            // Update Source (Always add to top for linear history)
             const newSource = [songId, ...sourceContextIds];
 
-            // Update Queue (Bucket A)
             const activeIndex = activeId ? currentList.indexOf(activeId) : -1;
-            
-            // Logic: Insert randomly between (currentIndex + 1) and (End of List)
-            // Range logic: min = activeIndex + 1, max = length
             const min = activeIndex + 1;
             const max = currentList.length;
-            
-            // Random index calculation
             const randomIndex = Math.floor(Math.random() * (max - min + 1)) + min;
 
             currentList.splice(randomIndex, 0, songId);
 
             set({
                 bucketA: currentList,
-                shuffledOrder: isShuffled ? currentList : [], // If shuffled, bucketA is the source of truth
+                shuffledOrder: isShuffled ? currentList : [],
+                sourceContextIds: newSource
+            });
+        }
+      },
+
+      /* Sync Custom Playlists */
+      syncPlaylistQueue: (songId, playlistId, action) => {
+        const state = get();
+        
+        if (state.activeContext?.id !== playlistId) return;
+
+        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
+        const currentList = [...bucketA]; 
+
+        // A. REMOVE
+        if (action === 'remove') {
+            const newList = currentList.filter(id => id !== songId);
+            set({ 
+                bucketA: newList,
+                shuffledOrder: isShuffled ? newList : [],
+                sourceContextIds: sourceContextIds.filter(id => id !== songId) 
+            });
+            return;
+        }
+
+        // B. ADD
+        if (action === 'add') {
+            if (currentList.includes(songId)) return;
+
+            const newSource = [...sourceContextIds, songId];
+
+            const activeIndex = activeId ? currentList.indexOf(activeId) : -1;
+            
+            if (isShuffled) {
+                const min = activeIndex + 1;
+                const max = currentList.length;
+                const randomIndex = Math.floor(Math.random() * (max - min + 1)) + min;
+                currentList.splice(randomIndex, 0, songId);
+            } else {
+                currentList.push(songId);
+            }
+
+            set({
+                bucketA: currentList,
+                shuffledOrder: isShuffled ? currentList : [],
                 sourceContextIds: newSource
             });
         }

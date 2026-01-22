@@ -1,4 +1,3 @@
-// src/components/GlobalSearch.tsx
 'use client';
 
 import { useState, useRef, useEffect } from "react";
@@ -13,6 +12,8 @@ import { supabase } from "@/lib/supabaseClient";
 
 import LikeButton from "@/components/LikeButton";
 import AddToQueueButton from "@/components/AddToQueueButton";
+// 🟢 IMPORT: Context Menu Wrapper
+import SongContextMenu from "@/components/SongContextMenu";
 
 const PLACEHOLDER_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -40,14 +41,12 @@ const GlobalSearch = () => {
   }, []);
 
   const handleSongPlay = (id: string) => {
-    // 1. Set the active song
     player.setId(id);
-    // 2. Clear the queue context by setting it to ONLY this song.
     player.setIds([id]); 
   };
 
   const clearSearch = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent bubbling to wrapper click
+    e.stopPropagation(); 
     setQuery("");
     inputRef.current?.focus();
   };
@@ -63,9 +62,7 @@ const GlobalSearch = () => {
     <div ref={containerRef} className="relative w-full max-w-[400px] z-50">
       {/* --- SEARCH BAR --- */}
       <div 
-        // FIX 1: Clicking anywhere on the bar focuses the input
         onClick={() => inputRef.current?.focus()}
-        // FIX 2: Added 'cursor-text' to indicate the whole area is typeable
         className="relative flex items-center bg-neutral-800 rounded-full px-4 py-3 group focus-within:ring-2 focus-within:ring-white transition cursor-text"
       >
         <BiSearch className="text-neutral-400 group-focus-within:text-white shrink-0" size={24} />
@@ -120,35 +117,37 @@ const GlobalSearch = () => {
                <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Songs</h3>
                <div className="flex flex-col gap-y-1">
                  {results.songs.map((song) => (
-                   <div 
-                     key={song.id} 
-                     onClick={() => handleSongPlay(song.id)}
-                     className="flex items-center justify-between p-2 rounded-md hover:bg-neutral-800 cursor-pointer group"
-                   >
-                      <div className="flex items-center gap-x-3 overflow-hidden">
-                        <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                          <Image 
-                             fill 
-                             src={getImageUrl(song.albums?.image_path)}
-                             alt={song.title} 
-                             className="object-cover"
-                             unoptimized 
-                          />
-                          <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
-                             <BsPlayFill size={20} className="text-white" />
-                          </div>
-                        </div>
-                        <div className="flex flex-col overflow-hidden">
-                           <p className="text-sm font-medium text-white truncate">{song.title}</p>
-                           <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
-                        </div>
-                      </div>
+                   // 🟢 WRAPPER: Right-click context menu enabled here
+                   <SongContextMenu key={song.id} songId={song.id}>
+                       <div 
+                         onClick={() => handleSongPlay(song.id)}
+                         className="flex items-center justify-between p-2 rounded-md hover:bg-neutral-800 cursor-pointer group"
+                       >
+                         <div className="flex items-center gap-x-3 overflow-hidden">
+                           <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
+                             <Image 
+                               fill 
+                               src={getImageUrl(song.albums?.image_path)}
+                               alt={song.title} 
+                               className="object-cover"
+                               unoptimized 
+                             />
+                             <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
+                                <BsPlayFill size={20} className="text-white" />
+                             </div>
+                           </div>
+                           <div className="flex flex-col overflow-hidden">
+                              <p className="text-sm font-medium text-white truncate">{song.title}</p>
+                              <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
+                           </div>
+                         </div>
 
-                      <div className="flex items-center gap-x-3 pl-2" onClick={(e) => e.stopPropagation()}>
-                         <AddToQueueButton songId={song.id} />
-                         <LikeButton songId={song.id} />
-                      </div>
-                   </div>
+                         <div className="flex items-center gap-x-3 pl-2" onClick={(e) => e.stopPropagation()}>
+                             <AddToQueueButton songId={song.id} />
+                             <LikeButton songId={song.id} />
+                         </div>
+                       </div>
+                   </SongContextMenu>
                  ))}
                </div>
             </div>

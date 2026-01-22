@@ -1,5 +1,3 @@
-// src/app/album/[albumId]/page.tsx
-
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import Image from "next/image";
@@ -17,7 +15,6 @@ export default async function Album(props: AlbumProps) {
   const params = await props.params;
   const { albumId } = params;
 
-  // Next.js 15: cookies() is async
   const cookieStore = await cookies();
   
   const supabase = createServerComponentClient({
@@ -43,13 +40,15 @@ export default async function Album(props: AlbumProps) {
     .from('images')
     .getPublicUrl(album.image_path);
 
+  // 🟢 REFINED SIZING LOGIC
+  // We stepped down the sizes slightly to prevent aggressive wrapping on "Medium" length titles.
   const titleLength = album.title.length;
-  let titleSizeClass = "text-4xl sm:text-6xl lg:text-8xl"; 
+  let titleSizeClass = "text-4xl sm:text-5xl lg:text-7xl"; // Default (Short titles)
 
   if (titleLength > 40) {
-    titleSizeClass = "text-2xl sm:text-4xl lg:text-5xl"; 
-  } else if (titleLength > 20) {
-    titleSizeClass = "text-3xl sm:text-5xl lg:text-6xl"; 
+    titleSizeClass = "text-2xl sm:text-3xl lg:text-4xl"; // Very long
+  } else if (titleLength > 15) { // Threshold lowered to 15 to catch "Reputation"-length words sooner
+    titleSizeClass = "text-3xl sm:text-4xl lg:text-5xl"; // Medium
   }
 
   return (
@@ -88,12 +87,18 @@ export default async function Album(props: AlbumProps) {
                 Album
               </p>
               
+              {/* 🟢 FIX: 
+                  1. 'leading-none' keeps the text block tight vertically.
+                  2. 'pb-1' adds just enough breathing room for descenders (g, j) without creating extra height.
+              */}
               <h1 className={`
                 text-white 
                 font-bold 
                 drop-shadow-lg 
                 line-clamp-2 
                 break-words
+                leading-none
+                pb-1
                 ${titleSizeClass}
               `}>
                 {album.title}
@@ -114,7 +119,6 @@ export default async function Album(props: AlbumProps) {
       </div>
 
       <div className="flex flex-col gap-y-2 p-6 w-full">
-        {/* 🟢 FIX: Added albumId prop here */}
         <AlbumContent 
           songs={album.songs} 
           albumName={album.title}

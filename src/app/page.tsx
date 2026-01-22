@@ -1,21 +1,28 @@
 // src/app/page.tsx
+
 'use client';
 
 import { useEffect, useRef, useState, MouseEvent } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { useUser } from '@supabase/auth-helpers-react'; 
 import AlbumItem from '@/components/AlbumItem';
 import PlaylistItem from '@/components/PlaylistItem';
 import Greeting from '@/components/Greeting';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
 import { motion } from 'framer-motion';
 
+import usePlaylistStore from '@/stores/usePlaylistStore';
+
 type SectionKey = 'albums' | 'playlists';
 
 const STAGGER = 0.08;
 const INITIAL_DELAY = 0.25;
-const DRAG_THRESHOLD = 5; // 👈 key fix
+const DRAG_THRESHOLD = 5;
 
 export default function Home() {
+  const { version } = usePlaylistStore();
+  const user = useUser();
+
   const [albums, setAlbums] = useState<any[]>([]);
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -45,25 +52,46 @@ export default function Home() {
   });
 
   /* =======================
-      DATA FETCH
+       DATA FETCH
      ======================= */
 
   useEffect(() => {
+    // 1. Fetch Albums
     supabase
       .from('albums')
       .select('*, artists(*)')
       .order('created_at', { ascending: false })
       .then(({ data }) => data && setAlbums(data));
 
-    supabase
-      .from('playlists')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => data && setPlaylists(data));
-  }, []);
+    // 2. Fetch Playlists (Only MY playlists)
+    if (user) {
+        supabase
+          .from('playlists')
+          .select('*')
+          .eq('user_id', user.id) 
+          // 🟢 FIX: Sort by Recently Accessed
+          .order('last_accessed_at', { ascending: false }) 
+          .then(({ data }) => {
+             if (data) {
+                // Inject 'Liked Songs' card at the front
+                const likedSongsCard = {
+                   id: 'liked', 
+                   title: 'Liked Songs',
+                   user_id: user.id,
+                   image_path: null
+                };
+                
+                setPlaylists([likedSongsCard, ...data]);
+             }
+          });
+    } else {
+        setPlaylists([]);
+    }
+      
+  }, [version, user]);
 
   /* =======================
-      SCROLL HELPERS
+       SCROLL HELPERS
      ======================= */
 
   const updateScrollButtons = (
@@ -91,7 +119,7 @@ export default function Home() {
   };
 
   /* =======================
-      MOMENTUM
+       MOMENTUM
      ======================= */
 
   const startMomentum = (
@@ -122,7 +150,7 @@ export default function Home() {
   };
 
   /* =======================
-      NATIVE DRAG HANDLERS
+       NATIVE DRAG HANDLERS
      ======================= */
 
   const onMouseDown = (
@@ -156,7 +184,6 @@ export default function Home() {
     const x = e.pageX - ref.current.offsetLeft;
     const walk = x - startX.current;
 
-    // 👇 threshold check
     if (!hasMoved.current && Math.abs(walk) < DRAG_THRESHOLD) {
       return;
     }
@@ -212,7 +239,7 @@ export default function Home() {
   };
 
   /* =======================
-      SCROLLER
+       SCROLLER
      ======================= */
 
   const renderScroller = (
@@ -227,7 +254,6 @@ export default function Home() {
           onClick={() =>
             scrollByAmount(scrollRef, -scrollRef.current!.clientWidth / 1.5, key)
           }
-          // FIX: Changed bg-black/50 hover:bg-black/70 to bg-white text-black hover:bg-neutral-200
           className="absolute left-0 top-1/2 -translate-y-1/2 z-10
                      bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
                      hidden group-hover:block shadow-md transition"
@@ -283,7 +309,6 @@ export default function Home() {
           onClick={() =>
             scrollByAmount(scrollRef, scrollRef.current!.clientWidth / 1.5, key)
           }
-          // FIX: Changed bg-black/50 hover:bg-black/70 to bg-white text-black hover:bg-neutral-200
           className="absolute right-0 top-1/2 -translate-y-1/2 z-10
                      bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
                      hidden group-hover:block shadow-md transition"
@@ -295,7 +320,7 @@ export default function Home() {
   );
 
   /* =======================
-      INIT
+       INIT
      ======================= */
 
   useEffect(() => {
@@ -304,7 +329,7 @@ export default function Home() {
   }, [albums, playlists]);
 
   /* =======================
-      RENDER
+       RENDER
      ======================= */
 
   return (
@@ -318,7 +343,7 @@ export default function Home() {
       </div>
 
       <div className="mt-12">
-        <h2 className="text-2xl font-semibold mb-4">For You</h2>
+        <h2 className="text-2xl font-semibold mb-4">Your Playlists</h2>
         {renderScroller(playlists, PlaylistItem, playlistScrollRef, 'playlists')}
       </div>
     </div>

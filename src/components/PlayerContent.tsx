@@ -1,5 +1,3 @@
-// src/components/PlayerContent.tsx
-
 'use client';
 
 import { useEffect, useRef, useState, useMemo } from "react";
@@ -110,11 +108,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [isPlaying]);
 
+  // 🟢 FIXED: Aggressive cleanup to prevent "Ghost Audio" (Old song playing briefly)
   useEffect(() => {
+    // 1. Reset UI
     setCurrentTime(0); 
     setDuration(0);
 
-    soundRef.current?.unload();
+    // 2. FORCE STOP the old sound immediately
+    if (soundRef.current) {
+        soundRef.current.stop(); // Stops audio buffer
+        soundRef.current.unload(); // Destroys instance
+        soundRef.current = null; // Prevents race conditions
+    }
     
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
@@ -146,7 +151,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
 
     return () => {
-      soundRef.current?.unload();
+      // Cleanup on unmount or change
+      if (soundRef.current) {
+          soundRef.current.stop();
+          soundRef.current.unload();
+      }
     }
   }, [songPath, activeIdSignature, setIsPlaying, onPlayNext]); 
 
@@ -262,7 +271,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 backgroundColor: '#fff', 
                 border: 'none', 
                 boxShadow: 'none', 
-                // We rely on CSS classes for opacity and cursor to ensure overrides work
               },
               rail: { backgroundColor: 'rgb(63 63 70)' }
             }}
@@ -299,7 +307,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 size={24} 
             />
             
-            <div className="relative w-full flex items-center group/volume">
+            {/* 🟢 MODIFIED: Added 'group' here and hover logic to slider below */}
+            <div className="relative w-full flex items-center group">
               <Slider 
                   min={0}
                   max={1}
@@ -312,7 +321,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                           backgroundColor: '#fff', 
                           border: 'none', 
                           boxShadow: 'none',
-                          // Removed inline opacity so class works
                       },
                       rail: { backgroundColor: 'rgb(63 63 70)' }
                   }}
@@ -320,7 +328,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                     !cursor-pointer
                     [&_.rc-slider-handle]:!cursor-pointer
                     [&_.rc-slider-handle]:opacity-0
-                    group-hover/volume:[&_.rc-slider-handle]:opacity-100
+                    group-hover:[&_.rc-slider-handle]:opacity-100
                     [&_.rc-slider-handle]:transition-opacity
                   "
               />

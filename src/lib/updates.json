@@ -1,5 +1,18 @@
 [
-
+  {
+    "versionName": "v1.0.7 current",
+    "date": "21th January 2025", 
+    "time": "12:10 AM IST",
+    "title": "⚡Custom Playlists⚡",
+    "description": "You can now create custom playlists.",
+    "changes": [
+      "You can now create custom playlists, rename them, delete them.",
+      "There is a new right-click context menu that appears on the global search, album songs, liked songs and other playlists from where you can add songs to a specific playlist. In playlists section, you can also remove songs by right-clicking.",
+      "The 'Song Addition to Playlist' modal opens up and displays all your playlists in alphabetical order.",
+      "Later, we will build the 'Your Library' page, but for now, you can see all your playlists in the homepage, under the title 'Your Playlists'. You can see your last 5 recently accessed playlists on the sidebar.",
+      "Changed the look of the volume slider where it appears only on hover."
+    ]
+  },
   {
     "versionName": "v1.0.6",
     "date": "21th January 2025", 
