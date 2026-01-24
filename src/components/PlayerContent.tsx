@@ -1,6 +1,8 @@
+// src/components/PlayerContent.tsx
+
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Howl } from "howler";
 import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2"; 
@@ -10,7 +12,7 @@ import Image from "next/image";
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import useQueueStore from "@/stores/useQueueStore"; 
-import { supabase } from "@/lib/supabaseClient";
+import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react"; 
 import LikeButton from "@/components/LikeButton";
 
 interface PlayerContentProps {
@@ -19,6 +21,9 @@ interface PlayerContentProps {
 }
 
 const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
+  const supabase = useSupabaseClient(); 
+  const user = useUser(); 
+
   const { 
     isPlaying, 
     volume, 
@@ -34,7 +39,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     repeatMode,
     prevVolume,
     setPrevVolume,
-    activeIdSignature 
+    activeIdSignature,
+    ids, 
+    bucketB,       
+    shuffledOrder, 
+    isPlayingPriority,
+    lastActiveContextId // 🟢 Get this to save it
   } = usePlayerStore(); 
 
   const { toggle, isOpen } = useQueueStore();
@@ -42,6 +52,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   const soundRef = useRef<Howl | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const saveIntervalRef = useRef<NodeJS.Timeout | null>(null); 
+  
+  // FIX: Add Ref to track the latest save function
+  const saveProgressRef = useRef<((manualSeek?: number) => void) | null>(null);
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => {
@@ -56,7 +71,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     if (!song?.albums?.image_path) return null;
     const { data: imageData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
     return imageData.publicUrl;
-  }, [song]);
+  }, [song, supabase]); 
 
   const Icon = isPlaying ? BsPauseFill : BsPlayFill;
   const VolumeIcon = volume === 0 ? HiSpeakerXMark : HiSpeakerWave;
@@ -76,6 +91,48 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       setVolume(0);
     }
   }
+
+  // DB SAVE FUNCTION
+  const saveProgress = useCallback(async (manualSeek?: number) => {
+    if (!user || !activeId) return;
+
+    let progress = manualSeek;
+    if (progress === undefined && soundRef.current) {
+        progress = soundRef.current.seek() as number;
+    }
+    
+    if (typeof progress !== 'number') return;
+
+    const queueState = {
+        ids: ids,                        
+        context: activeContext,          
+        priority: bucketB,               
+        shuffledOrder: shuffledOrder,    
+        isShuffled: isShuffled,          
+        isPlayingPriority: isPlayingPriority,
+        lastActiveId: lastActiveContextId // 🟢 Save the bookmark
+    };
+
+    const payload = {
+        user_id: user.id,
+        active_song_id: activeId,
+        progress_ms: Math.floor(progress * 1000),
+        is_playing: isPlaying, 
+        queue_state: queueState, 
+        updated_at: new Date().toISOString(),
+    };
+
+    supabase.from('playback_state').upsert(payload).then(({ error }) => {
+        if (error) console.error("Sync Error:", error.message);
+    });
+
+  }, [user, activeId, volume, isPlaying, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId, supabase]);
+
+  // FIX: Keep the Ref updated
+  useEffect(() => {
+    saveProgressRef.current = saveProgress;
+  }, [saveProgress]);
+
 
   const handlePrevious = () => {
     if (soundRef.current) {
@@ -97,61 +154,114 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [volume]);
 
+  // PLAY/PAUSE + INTERVAL SAVE LOGIC
   useEffect(() => {
     const sound = soundRef.current;
+    
     if (sound) {
       if (isPlaying && !sound.playing()) {
         sound.play();
+        
+        if (!saveIntervalRef.current) {
+            saveIntervalRef.current = setInterval(() => {
+                // FIX: Call via Ref to avoid stale closure
+                if (saveProgressRef.current) {
+                    saveProgressRef.current();
+                }
+            }, 20000); 
+        }
+
       } else if (!isPlaying && sound.playing()) {
         sound.pause();
-      }
-    }
-  }, [isPlaying]);
-
-  // 🟢 FIXED: Aggressive cleanup to prevent "Ghost Audio" (Old song playing briefly)
-  useEffect(() => {
-    // 1. Reset UI
-    setCurrentTime(0); 
-    setDuration(0);
-
-    // 2. FORCE STOP the old sound immediately
-    if (soundRef.current) {
-        soundRef.current.stop(); // Stops audio buffer
-        soundRef.current.unload(); // Destroys instance
-        soundRef.current = null; // Prevents race conditions
-    }
-    
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-
-    if (songPath) {
-      const newSound = new Howl({
-        src: [songPath],
-        html5: true,
-        autoplay: false, 
-        volume: volume, 
-        onplay: () => setIsPlaying(true),
-        onpause: () => setIsPlaying(false),
-        onend: () => {
-          if (repeatModeRef.current === 'one') {
-             newSound.play();
-          } else {
-             onPlayNext(); 
-          }
-        },
-        onload: () => setDuration(newSound.duration()),
-      });
-      
-      soundRef.current = newSound;
-
-      if (isPlaying) {
-        newSound.play();
+        saveProgress(); 
+        
+        if (saveIntervalRef.current) {
+            clearInterval(saveIntervalRef.current);
+            saveIntervalRef.current = null;
+        }
       }
     }
 
     return () => {
-      // Cleanup on unmount or change
+        if (saveIntervalRef.current) {
+            clearInterval(saveIntervalRef.current);
+            saveIntervalRef.current = null;
+        }
+    }
+  }, [isPlaying, saveProgress]);
+
+  // EXIT SAVE
+  useEffect(() => {
+      const handleBeforeUnload = () => {
+          if (soundRef.current) {
+             saveProgress(soundRef.current.seek() as number);
+          }
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [saveProgress]);
+
+
+  // SAFETY GAP + LOAD LOGIC
+  useEffect(() => {
+    if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+    }
+    
+    if (soundRef.current) {
+        soundRef.current.stop();
+        soundRef.current.unload();
+        soundRef.current = null;
+    }
+    
+    setCurrentTime(0); 
+    setDuration(0);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
+        if (!songPath) return;
+
+        const newSound = new Howl({
+            src: [songPath],
+            html5: true,
+            autoplay: false, 
+            volume: volume, 
+            onplay: () => setIsPlaying(true),
+            onpause: () => setIsPlaying(false),
+            onend: () => {
+              if (repeatModeRef.current === 'one') {
+                  newSound.play();
+              } else {
+                  onPlayNext(); 
+              }
+            },
+            onload: () => {
+                setDuration(newSound.duration());
+                const restoreTime = sessionStorage.getItem('restore_seek');
+                if (restoreTime) {
+                    const seekSeconds = parseFloat(restoreTime);
+                    if (!isNaN(seekSeconds)) {
+                        newSound.seek(seekSeconds);
+                        setCurrentTime(seekSeconds);
+                    }
+                    sessionStorage.removeItem('restore_seek');
+                }
+            },
+        });
+        
+        soundRef.current = newSound;
+
+        if (isPlaying) {
+            newSound.play();
+        }
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
       if (soundRef.current) {
           soundRef.current.stop();
           soundRef.current.unload();
@@ -196,13 +306,14 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     if (sound) {
       sound.seek(value as number); 
       setIsDragging(false); 
+      saveProgress(value as number); 
     }
   };
 
   return (
     <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3 z-50">
       
-      {/* LEFT: Song Info */}
+      {/* LEFT */}
       <div className="flex w-full justify-start items-center gap-x-4">
         <div className="relative h-14 w-14 rounded-md overflow-hidden shadow-md">
             {imageUrl ? (
@@ -220,7 +331,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         <LikeButton songId={song.id} />
       </div>
 
-      {/* CENTER: Player Controls */}
+      {/* CENTER */}
       <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
         <div className="flex items-center gap-x-6">
           <BsShuffle 
@@ -289,7 +400,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         </div>
       </div>
       
-      {/* RIGHT: Volume & Queue */}
+      {/* RIGHT */}
       <div className="flex w-full justify-end items-center pr-2 gap-x-4">
         
         <div 
@@ -307,7 +418,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 size={24} 
             />
             
-            {/* 🟢 MODIFIED: Added 'group' here and hover logic to slider below */}
             <div className="relative w-full flex items-center group">
               <Slider 
                   min={0}

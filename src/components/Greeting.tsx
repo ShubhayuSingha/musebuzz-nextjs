@@ -51,6 +51,7 @@ const allGreetings = [
   'Kia ora',        // Māori (New Zealand)
   'Aloha',          // Hawaiian  
   'Ola',            // Yoruba (Nigeria)
+  'ନମସ୍କାର'          // Odia  
 ];
 
 const shuffleArray = (array: string[]) => {

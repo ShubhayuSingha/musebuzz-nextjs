@@ -1,5 +1,16 @@
 [
   {
+    "versionName": "v1.0.8",
+    "date": "24th January 2025", 
+    "time": "10:50 PM IST",
+    "title": "⚡Persistent Player⚡",
+    "description": "Closing the browser while playing won't remove your current song and queue.",
+    "changes": [
+      "You can play a song from a context and go away. When you come back, that song will be there along with the context and the timestamp.",
+      "Added Odia Language to the greetings."
+    ]
+  },
+  {
     "versionName": "v1.0.7",
     "date": "22th January 2025", 
     "time": "11:10 PM IST",

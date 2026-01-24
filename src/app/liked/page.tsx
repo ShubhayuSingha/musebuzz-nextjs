@@ -1,4 +1,3 @@
-// src/app/liked/page.tsx
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import LikedContent from "./components/LikedContent";
@@ -34,7 +33,7 @@ export default async function Liked() {
         ...item.songs,
         author: item.songs.albums?.artists?.name || "Unknown Artist",
         album_title: item.songs.albums?.title || "Unknown Album",
-        liked_created_at: item.created_at, // ✅ FIX FOR INVALID DATE
+        liked_created_at: item.created_at, 
       }))
     : [];
 
@@ -52,33 +51,51 @@ export default async function Liked() {
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
           <div className="flex flex-col md:flex-row items-end gap-x-5">
-            <div
-              className="
-                relative
-                h-32
-                w-32
-                lg:h-52
-                lg:w-52
-                bg-gradient-to-br from-violet-600 to-blue-600
-                rounded-md
+            
+            {/* IMAGE */}
+            <div className="
+                relative h-32 w-32 lg:h-52 lg:w-52 rounded-md 
+                overflow-hidden shadow-2xl flex-shrink-0 
+                bg-gradient-to-br from-violet-600 to-blue-600 
                 flex items-center justify-center
-                shadow-2xl
-              "
-            >
+            ">
               <span className="text-white text-7xl lg:text-8xl">❤️</span>
             </div>
 
-            <div className="flex flex-col gap-y-2 mt-4 md:mt-0 mb-2">
+            {/* TEXT CONTENT */}
+            {/* Matches PlaylistHeader: min-w-0, justify-end, lg:h-52 */}
+            <div className="
+                flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full flex-1 min-w-0 
+                justify-end lg:h-52
+            ">
               <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
-                Liked Songs
+                Playlist
               </p>
-              <h1 className="text-white text-4xl sm:text-6xl lg:text-8xl font-bold drop-shadow-lg">
-                Liked Songs
-              </h1>
-              <p className="text-neutral-300 text-sm font-medium mt-2">
-                {songs.length} {songs.length === 1 ? "song" : "songs"}
-              </p>
+              
+              <div className="flex items-center gap-x-4">
+                 <h1 className="text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 text-4xl sm:text-5xl lg:text-6xl">
+                    Liked Songs
+                 </h1>
+              </div>
+
+              <div className="flex items-center gap-x-2 mt-2">
+                  {/* User Avatar Placeholder */}
+                  <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
+                      <span className="text-[10px] text-black font-bold">U</span>
+                  </div>
+                  
+                  <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer">
+                      You
+                  </p>
+                  
+                  <span className="text-neutral-400 text-sm">•</span>
+                  
+                  <p className="text-neutral-400 text-sm font-medium">
+                      {songs.length} {songs.length === 1 ? "song" : "songs"}
+                  </p>
+              </div>
             </div>
+
           </div>
         </div>
       </div>

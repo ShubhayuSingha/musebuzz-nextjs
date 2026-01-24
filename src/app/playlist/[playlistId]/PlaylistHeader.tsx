@@ -6,7 +6,7 @@ import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { toast } from 'react-hot-toast';
 import Image from 'next/image';
 import { BsMusicNoteBeamed } from 'react-icons/bs';
-import { FiEdit2, FiTrash } from 'react-icons/fi'; // 🟢 Added FiTrash
+import { FiEdit2, FiTrash } from 'react-icons/fi'; 
 import { HiCheck, HiX } from 'react-icons/hi'; 
 import usePlaylistStore from '@/stores/usePlaylistStore';
 
@@ -24,7 +24,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
   const { refreshPlaylists } = usePlaylistStore();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false); // 🟢 State for Delete Modal
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   
   const [title, setTitle] = useState(playlist.title);
   const [description, setDescription] = useState(playlist.description || ''); 
@@ -54,7 +54,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
     setIsLoading(false);
   };
 
-  // --- 🟢 DELETE LOGIC ---
+  // --- DELETE LOGIC ---
   const handleDelete = async () => {
     setIsLoading(true);
 
@@ -68,15 +68,15 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
       setIsLoading(false);
     } else {
       toast.success('Playlist deleted');
-      refreshPlaylists(); // Update Sidebar immediately
+      refreshPlaylists(); 
       router.refresh();
-      router.push('/'); // Redirect to Home
+      router.push('/'); 
     }
   };
 
-  // Sizing Logic
+  // 🟢 SIZING LOGIC
   const titleLength = title.length;
-  let titleSizeClass = "text-4xl sm:text-5xl lg:text-7xl"; 
+  let titleSizeClass = "text-4xl sm:text-5xl lg:text-6xl"; 
   if (titleLength > 40) titleSizeClass = "text-2xl sm:text-3xl lg:text-4xl"; 
   else if (titleLength > 15) titleSizeClass = "text-3xl sm:text-4xl lg:text-5xl"; 
 
@@ -84,7 +84,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
 
   return (
     <>
-      {/* 🟢 DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL */}
       {showDeleteModal && (
         <div className="fixed inset-0 bg-neutral-900/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
            <div className="bg-neutral-800 border border-neutral-700 p-6 rounded-lg shadow-2xl max-w-sm w-full animate-in fade-in zoom-in-95 duration-200">
@@ -125,7 +125,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
           <div className="p-6">
             <div className="flex flex-col md:flex-row items-end gap-x-5">
               
-              {/* IMAGE */}
+              {/* IMAGE (Fixed Height: h-32 on mobile, h-52 on desktop) */}
               <div className="
                 relative h-32 w-32 lg:h-52 lg:w-52 rounded-md 
                 overflow-hidden shadow-2xl flex-shrink-0 bg-neutral-800 
@@ -139,7 +139,11 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
               </div>
 
               {/* TEXT CONTENT */}
-              <div className="flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full">
+              {/* 🟢 FIXED: Added 'min-w-0' to fix the wrap issue and 'lg:h-52' to lock height */}
+              <div className="
+                  flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full flex-1 min-w-0 
+                  justify-end lg:h-52
+              ">
                 <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
                   {playlist.type === 'personal' ? 'Playlist' : 'Curated List'}
                 </p>
@@ -177,13 +181,13 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                   // VIEW MODE
                   <div className="group flex flex-col gap-y-1">
                     <div className="flex items-center gap-x-4">
+                      {/* Title: Truncates at 2 lines to fit within the fixed height */}
                       <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 ${titleSizeClass}`}>
                         {title}
                       </h1>
                       
                       {isOwner && (
                         <div className="flex items-center gap-x-2 opacity-0 group-hover:opacity-100 transition mb-2">
-                            {/* Edit Button */}
                             <button 
                               onClick={() => setIsEditing(true)}
                               className="p-2 rounded-full bg-neutral-800/50 hover:bg-neutral-700 text-neutral-400 hover:text-white cursor-pointer"
@@ -191,8 +195,6 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                             >
                               <FiEdit2 size={24} />
                             </button>
-                            
-                            {/* 🟢 Delete Button */}
                             <button 
                               onClick={() => setShowDeleteModal(true)}
                               className="p-2 rounded-full bg-neutral-800/50 hover:bg-neutral-700 text-neutral-400 hover:text-red-500 cursor-pointer"
@@ -214,16 +216,16 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
 
                 {!isEditing && (
                   <div className="flex items-center gap-x-2 mt-2">
-                     <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
-                        <span className="text-[10px] text-black font-bold">U</span>
-                     </div>
-                     <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer">
-                        {isOwner ? 'You' : 'Unknown User'}
-                     </p>
-                     <span className="text-neutral-400 text-sm">•</span>
-                     <p className="text-neutral-400 text-sm font-medium">
-                        {songsCount} {songsCount === 1 ? 'song' : 'songs'}
-                     </p>
+                      <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
+                         <span className="text-[10px] text-black font-bold">U</span>
+                      </div>
+                      <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer">
+                         {isOwner ? 'You' : 'Unknown User'}
+                      </p>
+                      <span className="text-neutral-400 text-sm">•</span>
+                      <p className="text-neutral-400 text-sm font-medium">
+                         {songsCount} {songsCount === 1 ? 'song' : 'songs'}
+                      </p>
                   </div>
                 )}
               </div>

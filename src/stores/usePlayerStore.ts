@@ -1,5 +1,3 @@
-// src/stores/usePlayerStore.ts
-
 'use client';
 
 import { create } from 'zustand';
@@ -7,8 +5,6 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabaseClient'; 
 import { saveContextSettings, loadContextSettings } from '@/lib/playerContextSettings';
-
-// 🟢 NEW: Import Playlist Store to trigger updates
 import usePlaylistStore from '@/stores/usePlaylistStore'; 
 
 /* =========================
@@ -27,6 +23,9 @@ export interface PlayerContext {
 }
 
 interface PlayerStore {
+  /* Sync Helper */
+  ids: string[];
+
   /* Playback State */
   activeId?: string;
   activeIdSignature: number; 
@@ -52,6 +51,18 @@ interface PlayerStore {
   setId: (id: string, context?: PlayerContext) => void;
   setIds: (ids: string[], context?: PlayerContext, userId?: string) => void;
   playFromContext: (id: string, context: PlayerContext) => void; 
+  
+  /* Restore Action */
+  restoreState: (
+    ids: string[], 
+    priority: QueueItem[], 
+    shuffledOrder: string[],
+    activeId: string, 
+    context: PlayerContext | undefined,
+    isShuffled: boolean,
+    isPlayingPriority: boolean,
+    lastActiveId: string | undefined
+  ) => void;
 
   /* Synchronize Queues */
   syncLikedSongs: (songId: string, action: 'add' | 'remove') => void;
@@ -88,16 +99,13 @@ interface PlayerStore {
    HELPER: Update Last Accessed
 ========================= */
 const updateLastAccessed = async (context?: PlayerContext) => {
-    // Only update if it is a personal playlist
     if (context?.type === 'playlist' && context.id) {
         const now = new Date().toISOString();
-        
         const { error } = await supabase
             .from('playlists')
             .update({ last_accessed_at: now })
             .eq('id', context.id);
 
-        // 🟢 TRIGGER: If update succeeded, tell the rest of the app to refresh
         if (!error) {
             usePlaylistStore.getState().refreshPlaylists();
         }
@@ -112,6 +120,7 @@ const usePlayerStore = create<PlayerStore>()(
   persist(
     (set, get) => ({
       /* ---------- INITIAL STATE ---------- */
+      ids: [],
       activeId: undefined,
       activeIdSignature: 0,
       isPlayingPriority: false,
@@ -150,6 +159,7 @@ const usePlayerStore = create<PlayerStore>()(
         const keepActive = state.activeId && ids.includes(state.activeId) ? state.activeId : undefined;
 
         set({
+          ids: ids,
           sourceContextIds: ids,
           bucketA: ids, 
           shuffledOrder: [],
@@ -189,10 +199,26 @@ const usePlayerStore = create<PlayerStore>()(
         }
       },
 
+      /* Restore Function */
+      restoreState: (ids, priority, shuffledOrder, activeId, context, isShuffled, isPlayingPriority, lastActiveId) => {
+         set({
+            ids: ids,
+            sourceContextIds: ids,
+            bucketB: priority,
+            isShuffled: isShuffled,
+            shuffledOrder: shuffledOrder,
+            bucketA: isShuffled && shuffledOrder.length > 0 ? shuffledOrder : ids,
+            activeId: activeId,
+            activeContext: context,
+            isPlayingPriority: isPlayingPriority,
+            lastActiveContextId: lastActiveId,    
+            isPlaying: false, 
+            activeIdSignature: 0 
+         });
+      },
+
       playFromContext: (id, context) => {
         const state = get();
-        
-        // 🟢 Update timestamp & Trigger Refresh
         updateLastAccessed(context);
 
         const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
@@ -267,7 +293,6 @@ const usePlayerStore = create<PlayerStore>()(
       /* Sync Custom Playlists */
       syncPlaylistQueue: (songId, playlistId, action) => {
         const state = get();
-        
         if (state.activeContext?.id !== playlistId) return;
 
         const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
@@ -287,7 +312,6 @@ const usePlayerStore = create<PlayerStore>()(
         // B. ADD
         if (action === 'add') {
             if (currentList.includes(songId)) return;
-
             const newSource = [...sourceContextIds, songId];
 
             const activeIndex = activeId ? currentList.indexOf(activeId) : -1;
@@ -394,32 +418,68 @@ const usePlayerStore = create<PlayerStore>()(
         const next = !state.isShuffled;
 
         if (!next) {
+          // TURNING OFF
           set({
             isShuffled: false,
             shuffledOrder: [],
             bucketA: state.sourceContextIds,
           });
         } else {
+          // TURNING ON
           const source = [...state.sourceContextIds];
           if (!source.length) return;
 
-          const activeId = state.activeId;
-          const rest = activeId ? source.filter((id) => id !== activeId) : [...source];
+          // 🟢 FIX START: Shuffle Logic with Bookmark Preservation
+          if (state.isPlayingPriority) {
+              // PRIORITY MODE:
+              // We are playing a Priority Song (Bucket B).
+              // We need to shuffle the background playlist (Bucket A), BUT
+              // we must ensure the song where we left off (lastActiveContextId)
+              // stays at the TOP so the transition back is smooth.
 
-          for (let i = rest.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [rest[i], rest[j]] = [rest[j], rest[i]];
+              const bookmarkId = state.lastActiveContextId;
+              
+              // 1. Separate the bookmark from the rest
+              const rest = bookmarkId ? source.filter(id => id !== bookmarkId) : [...source];
+              
+              // 2. Shuffle the rest
+              for (let i = rest.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [rest[i], rest[j]] = [rest[j], rest[i]];
+              }
+
+              // 3. Put bookmark at the front of the new order
+              const newOrder = bookmarkId ? [bookmarkId, ...rest] : rest;
+
+              set({
+                isShuffled: true,
+                shuffledOrder: newOrder,
+                bucketA: newOrder,
+              });
+
+          } else {
+              // NORMAL MODE:
+              // We are playing from Bucket A.
+              // Keep the current song (activeId) at the top, shuffle the rest.
+              const activeId = state.activeId;
+              const rest = activeId ? source.filter((id) => id !== activeId) : [...source];
+
+              for (let i = rest.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [rest[i], rest[j]] = [rest[j], rest[i]];
+              }
+
+              const newOrder = activeId ? [activeId, ...rest] : rest;
+
+              set({
+                isShuffled: true,
+                shuffledOrder: newOrder,
+                bucketA: newOrder, 
+              });
           }
-
-          const newOrder = activeId ? [activeId, ...rest] : rest;
-
-          set({
-            isShuffled: true,
-            shuffledOrder: newOrder,
-            bucketA: newOrder, 
-          });
+          // 🟢 FIX END
         }
-
+        
         const context = state.activeContext;
         if (context?.id) {
           supabase.auth.getUser().then(({ data }) => {
@@ -454,16 +514,9 @@ const usePlayerStore = create<PlayerStore>()(
       /* ---------- NAVIGATION Logic ---------- */
 
       playNext: () => {
-        const {
-          bucketA,
-          bucketB,
-          activeId,
-          activeIdSignature,
-          lastActiveContextId,
-          isPlayingPriority,
-          repeatMode
-        } = get();
+        const { bucketA, bucketB, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, repeatMode } = get();
 
+        // 1. Check Priority Queue (Bucket B)
         if (bucketB.length > 0) {
             const [next, ...rest] = bucketB;
             set({
@@ -478,11 +531,13 @@ const usePlayerStore = create<PlayerStore>()(
 
         if (!bucketA.length) return;
 
+        // 2. Determine Anchor (Priority -> Context jump, or Context -> Context step)
         const refId = isPlayingPriority ? lastActiveContextId : activeId;
         const currentIdx = refId ? bucketA.indexOf(refId) : -1;
         
         let nextIdx = currentIdx + 1;
 
+        // 3. Handle End of List
         if (nextIdx >= bucketA.length) {
             if (repeatMode === 'off') {
                 set({ isPlaying: false, isPlayingPriority: false });
@@ -504,13 +559,7 @@ const usePlayerStore = create<PlayerStore>()(
       },
 
       playPrevious: () => {
-        const {
-          bucketA,
-          activeId,
-          activeIdSignature,
-          lastActiveContextId,
-          isPlayingPriority
-        } = get();
+        const { bucketA, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority } = get();
 
         if (isPlayingPriority && lastActiveContextId) {
             set({
@@ -547,6 +596,7 @@ const usePlayerStore = create<PlayerStore>()(
 
       reset: () =>
         set({
+          ids: [],
           sourceContextIds: [],
           bucketA: [],
           shuffledOrder: [],

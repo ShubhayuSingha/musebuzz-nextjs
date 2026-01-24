@@ -9,7 +9,7 @@ import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai';
 import { FiMenu } from 'react-icons/fi';
 import { BsMusicNoteBeamed } from 'react-icons/bs'; 
 
-// 🟢 Re-import Framer Motion
+// Re-import Framer Motion
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useUser, useSupabaseClient } from "@supabase/auth-helpers-react";
@@ -18,6 +18,9 @@ import { toast } from 'react-hot-toast';
 
 import LikeDataLoader from "@/components/LikeDataLoader";
 import usePlaylistStore from '@/stores/usePlaylistStore';
+
+// 🟢 NEW: Import the Sync Hook
+import usePlaybackSync from "@/hooks/usePlaybackSync"; 
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -36,6 +39,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const router = useRouter();
   const authModal = useAuthModalStore();
   const user = useUser();
+
+  // 🟢 MOUNT SYNC HOOK: This starts the "State Restore" & "Auto-Save" process
+  usePlaybackSync();
 
   const { refreshPlaylists, version } = usePlaylistStore();
 
@@ -212,11 +218,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
       {/* SCROLLABLE LIST */}
       <div className="flex-1 overflow-y-auto px-4 custom-scrollbar overflow-x-hidden">
-         {/* 🟢 AnimatePresence handles items entering/leaving */}
+         {/* AnimatePresence handles items entering/leaving */}
          <AnimatePresence initial={false} mode='popLayout'>
            {playlists.map((playlist) => (
               <motion.div
-                 layout // 🟢 Safe now: Only triggers when DB data changes, not continuously
+                 layout // Safe now: Only triggers when DB data changes, not continuously
                  key={playlist.id}
                  initial={{ opacity: 0, x: -10 }}
                  animate={{ opacity: 1, x: 0 }}
@@ -231,13 +237,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                      href={`/playlist/${playlist.id}`}
                      className="flex items-center gap-x-4 py-2 hover:text-white text-zinc-400 transition truncate group"
                   >
-                     {isCollapsed ? (
-                         <div className="min-w-[26px] flex justify-center">
-                             <BsMusicNoteBeamed size={20} />
-                         </div>
-                     ) : (
-                         <p className={`truncate text-sm ${textClasses}`}>{playlist.title}</p>
-                     )}
+                      {isCollapsed ? (
+                          <div className="min-w-[26px] flex justify-center">
+                              <BsMusicNoteBeamed size={20} />
+                          </div>
+                      ) : (
+                          <p className={`truncate text-sm ${textClasses}`}>{playlist.title}</p>
+                      )}
                   </Link>
               </motion.div>
            ))}
