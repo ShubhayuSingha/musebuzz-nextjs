@@ -21,6 +21,7 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
     cookies: () => cookieStore as any
   });
 
+  // 🟢 FIX: Comments removed from inside the string to prevent ParseError
   const { data: playlist, error } = await supabase
     .from('playlists')
     .select(`
@@ -33,6 +34,7 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
           albums(
             id, 
             title, 
+            image_path,
             artists(name)
           )
         )
@@ -47,13 +49,25 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
 
   const songs = playlist.playlist_songs
     ?.sort((a: any, b: any) => a.song_order - b.song_order)
-    .map((item: any) => ({
-      ...item.songs,
-      author: item.songs.albums?.artists?.name || "Unknown Artist",
-      album_title: item.songs.albums?.title || "Unknown Album",
-      album_id: item.songs.albums?.id,
-      added_at: item.created_at 
-    }))
+    .map((item: any) => {
+        // Generate Image URL
+        const imagePath = item.songs.albums?.image_path;
+        let imageUrl = '/images/album-placeholder.png'; // Fallback
+        
+        if (imagePath) {
+           const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
+           imageUrl = imgData.publicUrl;
+        }
+
+        return {
+          ...item.songs,
+          author: item.songs.albums?.artists?.name || "Unknown Artist",
+          album_title: item.songs.albums?.title || "Unknown Album",
+          album_id: item.songs.albums?.id,
+          added_at: item.created_at,
+          imageUrl: imageUrl 
+        };
+    })
     .filter((song: any) => song.id); 
 
   const imagePath = playlist.image_path || 'playlist-placeholder.jpg';
@@ -64,7 +78,6 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
     .getPublicUrl(imagePath);
 
   return (
-    // 🟢 FIX: Changed bg-neutral-900 to bg-black to match Liked Songs
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">
       
       <PlaylistHeader 

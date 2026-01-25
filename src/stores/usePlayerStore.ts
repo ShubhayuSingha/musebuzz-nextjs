@@ -96,11 +96,15 @@ interface PlayerStore {
 }
 
 /* =========================
-   HELPER: Update Last Accessed
+   🟢 HELPER: Update Last Accessed (FIXED)
 ========================= */
 const updateLastAccessed = async (context?: PlayerContext) => {
-    if (context?.type === 'playlist' && context.id) {
-        const now = new Date().toISOString();
+    if (!context?.id) return;
+    
+    const now = new Date().toISOString();
+
+    // 1. Handle Playlist Update
+    if (context.type === 'playlist') {
         const { error } = await supabase
             .from('playlists')
             .update({ last_accessed_at: now })
@@ -108,6 +112,25 @@ const updateLastAccessed = async (context?: PlayerContext) => {
 
         if (!error) {
             usePlaylistStore.getState().refreshPlaylists();
+        }
+    }
+
+    // 2. 🟢 Handle Album Update (NEW)
+    if (context.type === 'album') {
+        // We need the user ID to find the correct saved_album entry
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (user) {
+            const { error } = await supabase
+                .from('saved_albums')
+                .update({ last_accessed_at: now })
+                .eq('album_id', context.id)
+                .eq('user_id', user.id);
+
+            if (!error) {
+                // Signal Sidebar to refresh
+                usePlaylistStore.getState().refreshPlaylists();
+            }
         }
     }
 };
@@ -219,7 +242,7 @@ const usePlayerStore = create<PlayerStore>()(
 
       playFromContext: (id, context) => {
         const state = get();
-        updateLastAccessed(context);
+        updateLastAccessed(context); // This will now handle Albums too!
 
         const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
 
@@ -429,26 +452,15 @@ const usePlayerStore = create<PlayerStore>()(
           const source = [...state.sourceContextIds];
           if (!source.length) return;
 
-          // 🟢 FIX START: Shuffle Logic with Bookmark Preservation
           if (state.isPlayingPriority) {
-              // PRIORITY MODE:
-              // We are playing a Priority Song (Bucket B).
-              // We need to shuffle the background playlist (Bucket A), BUT
-              // we must ensure the song where we left off (lastActiveContextId)
-              // stays at the TOP so the transition back is smooth.
-
               const bookmarkId = state.lastActiveContextId;
-              
-              // 1. Separate the bookmark from the rest
               const rest = bookmarkId ? source.filter(id => id !== bookmarkId) : [...source];
               
-              // 2. Shuffle the rest
               for (let i = rest.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [rest[i], rest[j]] = [rest[j], rest[i]];
               }
 
-              // 3. Put bookmark at the front of the new order
               const newOrder = bookmarkId ? [bookmarkId, ...rest] : rest;
 
               set({
@@ -458,9 +470,6 @@ const usePlayerStore = create<PlayerStore>()(
               });
 
           } else {
-              // NORMAL MODE:
-              // We are playing from Bucket A.
-              // Keep the current song (activeId) at the top, shuffle the rest.
               const activeId = state.activeId;
               const rest = activeId ? source.filter((id) => id !== activeId) : [...source];
 
@@ -477,7 +486,6 @@ const usePlayerStore = create<PlayerStore>()(
                 bucketA: newOrder, 
               });
           }
-          // 🟢 FIX END
         }
         
         const context = state.activeContext;

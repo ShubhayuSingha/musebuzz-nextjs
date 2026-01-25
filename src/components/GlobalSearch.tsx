@@ -12,8 +12,8 @@ import { supabase } from "@/lib/supabaseClient";
 
 import LikeButton from "@/components/LikeButton";
 import AddToQueueButton from "@/components/AddToQueueButton";
-// 🟢 IMPORT: Context Menu Wrapper
 import SongContextMenu from "@/components/SongContextMenu";
+import MediaContextMenu from "@/components/MediaContextMenu";
 
 const PLACEHOLDER_IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
@@ -30,12 +30,25 @@ const GlobalSearch = () => {
   const results = searchAll(query);
   const hasResults = results.songs.length > 0 || results.albums.length > 0 || results.artists.length > 0;
 
+  // 🟢 CRITICAL FIX: The logic below prevents the search from closing 
+  // when you interact with the Context Menu.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Element;
+
+      // 1. Is the click inside the Search Box?
+      const isInsideSearch = containerRef.current && containerRef.current.contains(target);
+
+      // 2. Is the click inside a Context Menu? 
+      // Radix UI renders menus in a Portal (outside the div). We must detect them specifically.
+      const isInsideContextMenu = target.closest('[data-radix-context-menu-content]');
+
+      // Only close if we clicked OUTSIDE the Search AND OUTSIDE the Context Menu
+      if (!isInsideSearch && !isInsideContextMenu) {
         setIsOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -117,7 +130,6 @@ const GlobalSearch = () => {
                <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Songs</h3>
                <div className="flex flex-col gap-y-1">
                  {results.songs.map((song) => (
-                   // 🟢 WRAPPER: Right-click context menu enabled here
                    <SongContextMenu key={song.id} songId={song.id}>
                        <div 
                          onClick={() => handleSongPlay(song.id)}
@@ -137,8 +149,8 @@ const GlobalSearch = () => {
                              </div>
                            </div>
                            <div className="flex flex-col overflow-hidden">
-                              <p className="text-sm font-medium text-white truncate">{song.title}</p>
-                              <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
+                             <p className="text-sm font-medium text-white truncate">{song.title}</p>
+                             <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
                            </div>
                          </div>
 
@@ -158,25 +170,34 @@ const GlobalSearch = () => {
              <div className="p-2">
                 <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Albums</h3>
                 {results.albums.map(album => (
-                   <div 
-                     key={album.id}
-                     onClick={() => router.push(`/album/${album.id}`)}
-                     className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer"
+                   <MediaContextMenu 
+                      key={album.id}
+                      data={{
+                        id: album.id,
+                        type: 'album',
+                        title: album.title,
+                        artist_id: album.artists?.id 
+                      }}
                    >
-                      <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                         <Image 
-                           fill 
-                           src={getImageUrl(album.image_path)}
-                           alt={album.title} 
-                           className="object-cover"
-                           unoptimized 
-                         />
-                      </div>
-                      <div className="flex flex-col overflow-hidden">
-                         <p className="text-sm font-medium text-white truncate">{album.title}</p>
-                         <p className="text-xs text-neutral-400 truncate">Album • {album.artists?.name}</p>
-                      </div>
-                   </div>
+                       <div 
+                         onClick={() => router.push(`/album/${album.id}`)}
+                         className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer"
+                       >
+                          <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
+                             <Image 
+                               fill 
+                               src={getImageUrl(album.image_path)}
+                               alt={album.title} 
+                               className="object-cover"
+                               unoptimized 
+                             />
+                          </div>
+                          <div className="flex flex-col overflow-hidden">
+                             <p className="text-sm font-medium text-white truncate">{album.title}</p>
+                             <p className="text-xs text-neutral-400 truncate">Album • {album.artists?.name}</p>
+                          </div>
+                       </div>
+                   </MediaContextMenu>
                 ))}
              </div>
           )}

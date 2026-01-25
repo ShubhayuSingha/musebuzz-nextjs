@@ -21,20 +21,25 @@ export default async function Liked() {
     .eq("user_id", session?.user?.id)
     .order("created_at", { ascending: false });
 
-  /**
-   * IMPORTANT:
-   * We enrich each song with:
-   * - author (already done)
-   * - album_title (NEW)
-   * - liked_created_at (NEW) → used for date added
-   */
   const songs = data
-    ? data.map((item: any) => ({
-        ...item.songs,
-        author: item.songs.albums?.artists?.name || "Unknown Artist",
-        album_title: item.songs.albums?.title || "Unknown Album",
-        liked_created_at: item.created_at, 
-      }))
+    ? data.map((item: any) => {
+        // 🟢 Generate Image URL
+        const imagePath = item.songs.albums?.image_path;
+        let imageUrl = '/images/album-placeholder.png'; // Fallback
+        
+        if (imagePath) {
+           const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
+           imageUrl = imgData.publicUrl;
+        }
+
+        return {
+          ...item.songs,
+          author: item.songs.albums?.artists?.name || "Unknown Artist",
+          album_title: item.songs.albums?.title || "Unknown Album",
+          liked_created_at: item.created_at,
+          imageUrl: imageUrl, // 🟢 Pass Image URL
+        };
+      })
     : [];
 
   return (
@@ -63,7 +68,6 @@ export default async function Liked() {
             </div>
 
             {/* TEXT CONTENT */}
-            {/* Matches PlaylistHeader: min-w-0, justify-end, lg:h-52 */}
             <div className="
                 flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full flex-1 min-w-0 
                 justify-end lg:h-52
@@ -74,12 +78,11 @@ export default async function Liked() {
               
               <div className="flex items-center gap-x-4">
                  <h1 className="text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 text-4xl sm:text-5xl lg:text-6xl">
-                    Liked Songs
+                   Liked Songs
                  </h1>
               </div>
 
               <div className="flex items-center gap-x-2 mt-2">
-                  {/* User Avatar Placeholder */}
                   <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
                       <span className="text-[10px] text-black font-bold">U</span>
                   </div>

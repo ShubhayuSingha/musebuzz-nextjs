@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image'; // 🟢 Import Image
 import usePlayerStore from '@/stores/usePlayerStore';
 import { useUser } from '@supabase/auth-helpers-react';
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs';
@@ -107,10 +108,10 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
   return (
     <div className="flex flex-col gap-y-2 w-full">
       
-      {/* HEADER: Exact Match to LikedContent */}
+      {/* HEADER */}
       <div className="
         grid 
-        grid-cols-[40px_4fr_3fr_2fr_80px_50px] 
+        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
         items-center 
         px-3 
         py-2 
@@ -126,6 +127,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
         z-10
       ">
         <div className="flex justify-center">#</div>
+        <div>{/* Image Col */}</div>
         <div>Title</div>
         <div>Album</div>
         <div>Date Added</div>
@@ -148,9 +150,9 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
             return (
               <SongContextMenu 
-                 key={song.id} 
-                 songId={song.id} 
-                 playlistId={playlistId}
+                  key={song.id} 
+                  songId={song.id} 
+                  playlistId={playlistId}
               >
                   <motion.li
                     layout
@@ -164,7 +166,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                     className={`
                       group
                       grid
-                      grid-cols-[40px_4fr_3fr_2fr_80px_50px]
+                      grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
                       items-center
                       px-3
                       py-2
@@ -191,6 +193,16 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                       )}
                     </div>
 
+                    {/* 🟢 IMAGE COLUMN */}
+                    <div className="relative h-10 w-10 overflow-hidden rounded-md">
+                        <Image
+                            fill
+                            src={song.imageUrl}
+                            alt={song.title}
+                            className="object-cover"
+                        />
+                    </div>
+
                     {/* TITLE */}
                     <div className="min-w-0 pr-4">
                       <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
@@ -200,8 +212,8 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                     {/* ALBUM */}
                     <p 
                       onClick={(e) => {
-                         e.stopPropagation();
-                         if (song.album_id) router.push(`/album/${song.album_id}`);
+                          e.stopPropagation();
+                          if (song.album_id) router.push(`/album/${song.album_id}`);
                       }}
                       className="text-sm text-neutral-400 truncate pr-4 hover:text-white hover:underline cursor-pointer transition"
                     >
@@ -210,7 +222,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
                     {/* DATE ADDED */}
                     <p className="text-sm text-neutral-400">
-                       {formatAddedDate(song.added_at)}
+                        {formatAddedDate(song.added_at)}
                     </p>
 
                     {/* ACTIONS */}
@@ -221,7 +233,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
                     {/* DURATION */}
                     <p className="text-sm text-neutral-400 text-right">
-                       {formatTime(song.duration_seconds)}
+                        {formatTime(song.duration_seconds)}
                     </p>
                   </motion.li>
               </SongContextMenu>

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import Image from 'next/image'; // 🟢 Import Image
 import { useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; 
@@ -10,7 +11,6 @@ import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
 
-// 🟢 IMPORT: Context Menu Wrapper
 import SongContextMenu from '@/components/SongContextMenu';
 
 /* =======================
@@ -111,7 +111,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
       {/* HEADER */}
       <div className="
         grid 
-        grid-cols-[40px_4fr_3fr_2fr_80px_50px] 
+        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
         items-center 
         px-3 
         py-2 
@@ -127,6 +127,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
         z-10
       ">
         <div className="flex justify-center">#</div>
+        <div>{/* Image Col */}</div>
         <div>Title</div>
         <div>Album</div>
         <div>Date Added</div>
@@ -148,7 +149,6 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
             const isPlaying = player.isPlaying;
 
             return (
-              // 🟢 WRAPPER: Added Context Menu here
               <SongContextMenu key={song.id} songId={song.id}>
                   <motion.li
                     layout 
@@ -162,7 +162,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                     className={`
                       group
                       grid
-                      grid-cols-[40px_4fr_3fr_2fr_80px_50px]
+                      grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
                       items-center
                       px-3
                       py-2
@@ -195,6 +195,16 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                           />
                         </>
                       )}
+                    </div>
+
+                    {/* 🟢 IMAGE COLUMN */}
+                    <div className="relative h-10 w-10 overflow-hidden rounded-md">
+                        <Image
+                            fill
+                            src={song.imageUrl}
+                            alt={song.title}
+                            className="object-cover"
+                        />
                     </div>
 
                     {/* TITLE */}

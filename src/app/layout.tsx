@@ -1,77 +1,50 @@
 // src/app/layout.tsx
-'use client'; 
 
 import { Figtree } from "next/font/google"; 
 import "./globals.css";
 import 'rc-slider/assets/index.css';
-import { useState, useEffect } from "react";
 
-// Components
-import Sidebar from "@/components/Sidebar";
-import Player from "@/components/Player";
-import Header from "@/components/Header";
-import Queue from "@/components/Queue"; 
+import { cookies } from "next/headers";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 
-// Providers
-import ModalProvider from '@/providers/ModalProvider';
 import SupabaseProvider from "@/providers/SupabaseProvider";
-import ToasterProvider from "@/providers/ToasterProvider";
+// 🟢 Update Import
+import ClientLayout from "@/components/ClientLayout"; 
 
 const font = Figtree({ 
   subsets: ["latin"] 
 });
 
-export default function RootLayout({
+export const metadata = {
+  title: 'MuseBuzz',
+  description: 'Listen to music!',
+};
+
+export default async function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+}) {
+  const cookieStore = await cookies();
+  
+  const supabase = createServerComponentClient({ cookies: () => cookieStore as any });
+  const {
+      data: { session },
+  } = await supabase.auth.getSession();
 
-  useEffect(() => {
-    const checkSize = () => {
-      if (window.innerWidth < 768) {
-        setIsCollapsed(true);
-      } else {
-        setIsCollapsed(false);
-      }
-    };
-    checkSize();
-    window.addEventListener('resize', checkSize);
-    return () => window.removeEventListener('resize', checkSize);
-  }, []);
-
-  const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
-  };
+  const collapsedCookie = cookieStore.get('sidebar_collapsed');
+  const defaultCollapsed = collapsedCookie?.value === 'true';
 
   return (
     <html lang="en">
-      <body
-        className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}
-        suppressHydrationWarning
-      >
-        <SupabaseProvider>
-          <ToasterProvider />
-          <ModalProvider />
-          
-          {/* MAIN FLEX CONTAINER */}
-          <div className="flex flex-1 overflow-hidden">
-            <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
-            
-            {/* 👇 FIXED: Added 'min-w-0' 
-                This forces the main content to shrink when Queue opens, 
-                even if the Home page grid wants to stay wide. */}
-            <main className="flex-1 overflow-y-auto pb-20 min-w-0">
-              <Header />
+      <body className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}>
+        <SupabaseProvider session={session}>
+           
+           {/* 🟢 Update Component Usage */}
+           <ClientLayout defaultCollapsed={defaultCollapsed}>
               {children}
-            </main>
-            
-            <Queue />
+           </ClientLayout>
 
-          </div>
-          
-          <Player />
         </SupabaseProvider>
       </body>
     </html>

@@ -1,5 +1,19 @@
 [
   {
+    "versionName": "v1.0.9",
+    "date": "25th January 2025", 
+    "time": "9:38 AM IST",
+    "title": "⚡Your Library Page and Sleeker Sidebar⚡",
+    "description": "The 'Your Library' page is designed to show your recently added / played playlists and albums.",
+    "changes": [
+      "Your Library page shows you recently added / last accessed albums and playlists in reverse chronological order.",
+      "The sidebar shows the first 10 entries from 'Your Library' page.",
+      "Side bar contains the icons of the albums and playlists and they get re-arranged as you access them.",
+      "You can filter the content of 'Your Library' to show just the albums or playlists or all.",
+      "Playlists and Liked Songs page shows the album cover image beside the song title as well."
+    ]
+  },
+  {
     "versionName": "v1.0.8",
     "date": "24th January 2025", 
     "time": "10:50 PM IST",

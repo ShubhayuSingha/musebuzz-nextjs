@@ -4,9 +4,10 @@
 
 import React from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
-import { useUser } from '@supabase/auth-helpers-react';
+// 🟢 1. IMPORT SUPABASE CLIENT
+import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
 import { formatTime } from '@/lib/helpers';
-import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; // 🟢 Added BsClock
+import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; 
 import LikeButton from '@/components/LikeButton';
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
@@ -33,8 +34,11 @@ const rowVariants: Variants = {
 const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }) => {
   const player = usePlayerStore();
   const user = useUser();
+  // 🟢 2. INITIALIZE CLIENT
+  const supabase = useSupabaseClient();
 
-  const onPlay = (id: string) => {
+  const onPlay = async (id: string) => {
+    // --- EXISTING PLAY LOGIC ---
     const context = { type: 'album' as const, title: albumName, id: albumId };
 
     const isCurrentContextActive = 
@@ -55,6 +59,19 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }
       );
       player.setId(id, context);
     }
+
+    // 🟢 3. UPDATE LAST ACCESSED (Fire and Forget)
+    if (user) {
+       const { error } = await supabase
+        .from('saved_albums')
+        .update({ last_accessed_at: new Date().toISOString() })
+        .eq('user_id', user.id)
+        .eq('album_id', albumId);
+
+       if (error) {
+         console.error("Failed to update album access time:", error);
+       }
+    }
   };
 
   if (songs.length === 0) {
@@ -64,7 +81,7 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }
   return (
     <div className="flex flex-col gap-y-2 w-full">
       
-      {/* 🟢 NEW: Sticky Header Row (Matches Liked/Playlist style) */}
+      {/* Sticky Header Row */}
       <div className="
         grid 
         grid-cols-[40px_1fr_80px_60px] 
@@ -78,7 +95,7 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }
         font-medium
         sticky
         top-0
-        bg-neutral-900/95 // Matches the Album Page background
+        bg-neutral-900/95 
         backdrop-blur-sm
         z-10
       ">
