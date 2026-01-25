@@ -71,32 +71,34 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
   const handleFollow = async () => {
       if (!user) return toast.error("Log in to follow artists");
+      // Optimistic update
+      setIsFollowing(true); 
       await library.followArtist(data.id);
-      setIsFollowing(true);
       refreshPlaylists(); 
       router.refresh();
   }
 
   const handleUnfollow = async () => {
       if (!user) return;
-      await library.unfollowArtist(data.id);
+      // Optimistic update
       setIsFollowing(false);
+      await library.unfollowArtist(data.id);
       refreshPlaylists();
       router.refresh();
   }
 
   const handleAddToLibrary = async () => {
     if (!user) return toast.error("Log in to save albums");
-    await library.addAlbum(data.id); 
     setIsSaved(true); 
+    await library.addAlbum(data.id); 
     refreshPlaylists(); 
     router.refresh(); 
   };
 
   const handleRemoveFromLibrary = async () => {
      if (!user) return;
-     await library.removeAlbum(data.id); 
      setIsSaved(false); 
+     await library.removeAlbum(data.id); 
      refreshPlaylists(); 
      router.refresh(); 
   };
@@ -139,8 +141,6 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   return (
-    // 🟢 FIX: modal={false} prevents the menu from creating a screen-blocking overlay.
-    // This allows clicks inside the Search Bar to be registered correctly as "inside".
     <ContextMenu.Root modal={false}>
       <ContextMenu.Trigger asChild>
         {children}
@@ -148,6 +148,13 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
       <ContextMenu.Portal>
         <ContextMenu.Content 
+            // 🟢 FIX: Stop propagation of ALL pointer events.
+            // This prevents the "click outside" listener on your Search Bar 
+            // from firing when you are just clicking inside this menu.
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+
             className="
                 min-w-[220px] 
                 bg-neutral-800 
@@ -164,7 +171,8 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             {data.type === 'artist' && (
                 isFollowing ? (
                     <ContextMenu.Item 
-                        onClick={handleUnfollow}
+                        // 🟢 FIX: Use onSelect (Radix standard) instead of onClick
+                        onSelect={handleUnfollow}
                         className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                     >
                         <AiOutlineUserDelete size={18} />
@@ -172,7 +180,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                     </ContextMenu.Item>
                 ) : (
                     <ContextMenu.Item 
-                        onClick={handleFollow}
+                        onSelect={handleFollow}
                         className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                     >
                         <AiOutlineUserAdd size={18} />
@@ -184,7 +192,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             {/* PLAYLIST */}
             {data.type === 'playlist' && (
                 <ContextMenu.Item 
-                    onClick={handleDeletePlaylist}
+                    onSelect={handleDeletePlaylist}
                     className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                 >
                     <AiOutlineDelete size={18} />
@@ -196,7 +204,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             {data.type === 'album' && (
                 isSaved ? (
                     <ContextMenu.Item 
-                        onClick={handleRemoveFromLibrary}
+                        onSelect={handleRemoveFromLibrary}
                         className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                     >
                         <AiOutlineDelete size={18} />
@@ -204,7 +212,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                     </ContextMenu.Item>
                 ) : (
                     <ContextMenu.Item 
-                        onClick={handleAddToLibrary}
+                        onSelect={handleAddToLibrary}
                         className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                     >
                         <AiOutlinePlus size={18} />
@@ -217,7 +225,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             {data.type === 'song' && (
                  <>
                     <ContextMenu.Item 
-                        onClick={handleAddToQueue}
+                        onSelect={handleAddToQueue}
                         className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                     >
                         <MdQueueMusic size={18} />
@@ -226,7 +234,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
                     {finalPlaylistId && (
                          <ContextMenu.Item 
-                            onClick={handleRemoveFromPlaylist}
+                            onSelect={handleRemoveFromPlaylist}
                             className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                         >
                             <AiOutlineDelete size={18} />
@@ -239,7 +247,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             {/* COMMON: Go to Artist */}
             {(data.artist_id || data.type === 'artist') && (
                  <ContextMenu.Item 
-                    onClick={handleGoToArtist}
+                    onSelect={handleGoToArtist}
                     className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                 >
                     <BsPersonFill size={18} />
