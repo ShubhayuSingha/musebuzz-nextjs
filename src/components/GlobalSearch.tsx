@@ -30,25 +30,30 @@ const GlobalSearch = () => {
   const results = searchAll(query);
   const hasResults = results.songs.length > 0 || results.albums.length > 0 || results.artists.length > 0;
 
-  // 🟢 CRITICAL FIX: The logic below prevents the search from closing 
-  // when you interact with the Context Menu.
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      // 🟢 1. Ignore Standard Right Click (Context Menu trigger)
+      if (event.button === 2) return;
+
+      // 🟢 2. Ignore Ctrl+Click (Mac Right Click emulation)
+      if (event.ctrlKey) return;
+
       const target = event.target as Element;
 
-      // 1. Is the click inside the Search Box?
+      // 🟢 3. Check if inside Search Container
       const isInsideSearch = containerRef.current && containerRef.current.contains(target);
 
-      // 2. Is the click inside a Context Menu? 
-      // Radix UI renders menus in a Portal (outside the div). We must detect them specifically.
-      const isInsideContextMenu = target.closest('[data-radix-context-menu-content]');
+      // 🟢 4. Check if inside ANY Radix Portal (Context Menu, Dropdown, etc.)
+      // This is the most robust check. It looks for the specific attribute Radix adds to its content.
+      const isInsideRadixContent = target.closest('[data-radix-context-menu-content]');
 
-      // Only close if we clicked OUTSIDE the Search AND OUTSIDE the Context Menu
-      if (!isInsideSearch && !isInsideContextMenu) {
+      // Only close if we are OUTSIDE the search AND OUTSIDE any context menu
+      if (!isInsideSearch && !isInsideRadixContent) {
         setIsOpen(false);
       }
     };
 
+    // Use 'mousedown' to catch the click before 'mouseup' triggers other actions
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -64,16 +69,16 @@ const GlobalSearch = () => {
     inputRef.current?.focus();
   };
 
-  const getImageUrl = (path: string | null) => {
+  const getImageUrl = (path: string | null, bucket: string = 'images') => {
     if (!path) return PLACEHOLDER_IMAGE;
     if (path.startsWith('http')) return path;
-    const { data } = supabase.storage.from('images').getPublicUrl(path);
+    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
 
   return (
     <div ref={containerRef} className="relative w-full max-w-[400px] z-50">
-      {/* --- SEARCH BAR --- */}
+      {/* SEARCH BAR */}
       <div 
         onClick={() => inputRef.current?.focus()}
         className="relative flex items-center bg-neutral-800 rounded-full px-4 py-3 group focus-within:ring-2 focus-within:ring-white transition cursor-text"
@@ -101,7 +106,7 @@ const GlobalSearch = () => {
         )}
       </div>
 
-      {/* --- FLOATING WINDOW --- */}
+      {/* FLOATING WINDOW */}
       {isOpen && query.length > 0 && hasResults && (
         <div className="absolute top-[110%] left-0 w-full bg-neutral-900 border border-neutral-800 rounded-xl shadow-2xl overflow-hidden animate-fade-in p-2 flex flex-col gap-y-4 max-h-[80vh] overflow-y-auto">
           
@@ -109,18 +114,29 @@ const GlobalSearch = () => {
           {results.artists.length > 0 && (
             <div className="p-2">
                <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Top Artist</h3>
-               <div className="flex items-center gap-x-3 hover:bg-neutral-800 p-2 rounded-md cursor-pointer transition">
-                  <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
-                     <Image 
-                       fill 
-                       src={PLACEHOLDER_IMAGE}
-                       alt={results.artists[0].name} 
-                       className="object-cover"
-                       unoptimized 
-                     />
-                  </div>
-                  <p className="font-bold text-white">{results.artists[0].name}</p>
-               </div>
+               <MediaContextMenu 
+                  data={{ 
+                      id: results.artists[0].id, 
+                      type: 'artist', 
+                      title: results.artists[0].name 
+                  }}
+               >
+                   <div 
+                     onClick={() => router.push(`/artist/${results.artists[0].id}`)}
+                     className="flex items-center gap-x-3 hover:bg-neutral-800 p-2 rounded-md cursor-pointer transition w-full"
+                   >
+                      <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
+                         <Image 
+                           fill 
+                           src={getImageUrl(results.artists[0].image_path, 'artist_images')} 
+                           alt={results.artists[0].name} 
+                           className="object-cover"
+                           unoptimized 
+                         />
+                      </div>
+                      <p className="font-bold text-white">{results.artists[0].name}</p>
+                   </div>
+               </MediaContextMenu>
             </div>
           )}
 
@@ -181,12 +197,12 @@ const GlobalSearch = () => {
                    >
                        <div 
                          onClick={() => router.push(`/album/${album.id}`)}
-                         className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer"
+                         className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer w-full"
                        >
                           <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
                              <Image 
                                fill 
-                               src={getImageUrl(album.image_path)}
+                               src={getImageUrl(album.image_path)} 
                                alt={album.title} 
                                className="object-cover"
                                unoptimized 

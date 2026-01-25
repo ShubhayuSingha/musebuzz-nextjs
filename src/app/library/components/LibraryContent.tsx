@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { AiFillHeart } from "react-icons/ai";
 import { RiAlbumLine, RiPlayListFill } from "react-icons/ri"; 
+import { BsPersonFill } from "react-icons/bs"; // 🟢 Added Icon for Artists
 import MediaContextMenu from "@/components/MediaContextMenu"; 
-import { motion, AnimatePresence } from "framer-motion"; // 🟢 IMPORT MOTION
+import { motion, AnimatePresence } from "framer-motion"; 
 
 export interface LibraryItem {
     id: string;
-    type: 'playlist' | 'album';
+    // 🟢 UPDATED: Added 'artist' type
+    type: 'playlist' | 'album' | 'artist';
     title: string;
     author: string;
     created_at: string;
@@ -40,15 +42,18 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
                 rounded-md overflow-hidden gap-x-4 bg-neutral-400/5 
                 cursor-pointer 
                 hover:bg-neutral-400/10 
-                hover:-translate-y-2  /* 🟢 ADDED: Lifts the card up */
+                hover:-translate-y-2
                 transition-all duration-300 ease-in-out
                 w-full h-full
                 p-3
             "
         >
-            <div className="relative aspect-square w-full rounded-md overflow-hidden bg-neutral-800 shadow-md mb-4">
+            <div className={`
+                relative aspect-square w-full overflow-hidden bg-neutral-800 shadow-md mb-4
+                ${data.type === 'artist' ? 'rounded-full' : 'rounded-md'} 
+            `}>
                 <Image 
-                    className="object-cover" /* 🟢 REMOVED: group-hover:scale-110 */
+                    className="object-cover"
                     src={data.imageUrl || '/images/liked.png'} 
                     fill 
                     alt={data.title} 
@@ -57,17 +62,17 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
             </div>
 
             <div className="flex flex-col items-start w-full gap-y-1">
-                <p className="font-semibold truncate w-full text-white text-[15px]" title={data.title}>
+                {/* Center text for artists, align left for albums/playlists */}
+                <p className={`font-semibold truncate w-full text-white text-[15px] ${data.type === 'artist' ? 'text-center' : 'text-left'}`} title={data.title}>
                     {data.title}
                 </p>
                 
-                <div className="flex items-center gap-x-2 w-full text-neutral-400 text-sm">
+                <div className={`flex items-center gap-x-2 w-full text-neutral-400 text-sm ${data.type === 'artist' ? 'justify-center' : 'justify-start'}`}>
                     <div className="flex-shrink-0">
-                        {data.type === 'album' ? (
-                            <RiAlbumLine size={14} /> 
-                        ) : (
-                            <RiPlayListFill size={14} />
-                        )}
+                        {data.type === 'album' && <RiAlbumLine size={14} />}
+                        {data.type === 'playlist' && <RiPlayListFill size={14} />}
+                        {/* 🟢 Added Artist Icon */}
+                        {data.type === 'artist' && <BsPersonFill size={14} />}
                     </div>
 
                     <p className="truncate font-medium text-xs text-neutral-400" title={data.author}>
@@ -82,7 +87,8 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
 // --- MAIN COMPONENT ---
 const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) => {
     const router = useRouter();
-    const [filter, setFilter] = useState<'all' | 'playlist' | 'album'>('all');
+    // 🟢 UPDATED: Added 'artist' to filter state
+    const [filter, setFilter] = useState<'all' | 'playlist' | 'album' | 'artist'>('all');
     
     const [gridCols, setGridCols] = useState(4);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -90,12 +96,14 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
     const handleItemClick = (item: LibraryItem) => {
         if (item.type === 'playlist') {
             router.push(`/playlist/${item.id}`);
+        } else if (item.type === 'artist') {
+            // 🟢 Handle Artist Navigation
+            router.push(`/artist/${item.id}`);
         } else {
             router.push(`/album/${item.id}`); 
         }
     };
 
-    // 🟢 RESIZE LOGIC (Kept exactly as you requested)
     useLayoutEffect(() => {
         const calculateColumns = () => {
             if (containerRef.current) {
@@ -150,7 +158,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
         <div className="flex flex-col gap-y-6 mt-4">
             
             {/* CHIPS */}
-            <div className="flex items-center gap-x-3">
+            <div className="flex items-center gap-x-3 overflow-x-auto no-scrollbar">
                 <div onClick={() => setFilter('all')} className={getChipClass('all')}>
                     All
                 </div>
@@ -160,16 +168,20 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                 <div onClick={() => setFilter('album')} className={getChipClass('album')}>
                     Albums
                 </div>
+                {/* 🟢 Added Artist Chip */}
+                <div onClick={() => setFilter('artist')} className={getChipClass('artist')}>
+                    Artists
+                </div>
             </div>
 
-            {/* 🟢 GRID WITH MOTION */}
+            {/* GRID WITH MOTION */}
             <motion.div 
                 ref={containerRef}
                 className="grid gap-4 mt-2"
                 style={{
                     gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`
                 }}
-                layout // Smoothly animates layout changes
+                layout 
             >
                 <AnimatePresence mode="popLayout">
                     {/* Liked Songs Card */}
@@ -186,7 +198,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                                 bg-gradient-to-br from-purple-700 to-blue-900
                                 cursor-pointer 
                                 hover:bg-neutral-400/10 
-                                hover:-translate-y-2 /* 🟢 Lift Effect */
+                                hover:-translate-y-2 
                                 transition-all duration-300 ease-in-out
                                 w-full h-full p-3
                             "

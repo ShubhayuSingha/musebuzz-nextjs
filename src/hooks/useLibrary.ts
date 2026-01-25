@@ -8,7 +8,10 @@ const useLibrary = () => {
     const supabase = useSupabaseClient();
     const user = useUser();
 
-    // Helper to add an album
+    /* =========================
+       ALBUMS
+    ========================= */
+
     const addAlbum = async (albumId: string) => {
         if (!user) {
             toast.error("Please log in");
@@ -23,7 +26,6 @@ const useLibrary = () => {
             });
 
         if (error) {
-            // Check for duplicate key error (already saved)
             if (error.code === '23505') {
                 toast("Album already in library");
             } else {
@@ -34,7 +36,6 @@ const useLibrary = () => {
         }
     };
 
-    // Helper to remove an album
     const removeAlbum = async (albumId: string) => {
         if (!user) return;
 
@@ -51,7 +52,6 @@ const useLibrary = () => {
         }
     };
 
-    // Helper to check if ONE album is saved (useful for Context Menu toggles)
     const checkIsSaved = useCallback(async (albumId: string) => {
         if (!user) return false;
         const { data } = await supabase
@@ -63,7 +63,81 @@ const useLibrary = () => {
         return !!data;
     }, [user, supabase]);
 
-    return { addAlbum, removeAlbum, checkIsSaved };
+    /* =========================
+       ARTISTS
+    ========================= */
+
+    const followArtist = async (artistId: string) => {
+        if (!user) {
+            toast.error("Please log in");
+            return;
+        }
+
+        const { error } = await supabase
+            .from('saved_artists')
+            .insert({
+                user_id: user.id,
+                artist_id: artistId
+            });
+
+        if (error) {
+            if (error.code === '23505') {
+                toast("Already following artist");
+            } else {
+                toast.error(error.message);
+            }
+        } else {
+            toast.success('Followed Artist');
+        }
+    };
+
+    const unfollowArtist = async (artistId: string) => {
+        if (!user) return;
+
+        const { error } = await supabase
+            .from('saved_artists')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('artist_id', artistId);
+
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Unfollowed Artist');
+        }
+    };
+
+    const checkIsArtistSaved = useCallback(async (artistId: string) => {
+        if (!user) return false;
+        const { data } = await supabase
+            .from('saved_artists')
+            .select('artist_id')
+            .eq('user_id', user.id)
+            .eq('artist_id', artistId)
+            .maybeSingle();
+        return !!data;
+    }, [user, supabase]);
+
+    // 🟢 NEW FUNCTION: Updates 'last_accessed_at' to bring artist to top of sidebar
+    const updateArtistAccess = async (artistId: string) => {
+        if (!user) return;
+        
+        await supabase
+            .from('saved_artists')
+            .update({ last_accessed_at: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .eq('artist_id', artistId);
+    };
+
+    return { 
+        addAlbum, 
+        removeAlbum, 
+        checkIsSaved, 
+        followArtist, 
+        unfollowArtist, 
+        checkIsArtistSaved,
+        updateArtistAccess // 🟢 Exporting new function
+    };
 };
 
 export default useLibrary;

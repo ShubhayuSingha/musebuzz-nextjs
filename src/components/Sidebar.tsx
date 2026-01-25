@@ -27,7 +27,7 @@ interface SidebarProps {
 
 interface SidebarItem {
   id: string;
-  type: 'playlist' | 'album';
+  type: 'playlist' | 'album' | 'artist'; // 🟢 Added 'artist' type
   title: string;
   subtitle: string;
   imageUrl: string | null;
@@ -72,7 +72,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       `)
       .eq('user_id', user.id);
 
-    // 3. Normalize Playlists
+    // 🟢 3. Fetch Saved Artists
+    const { data: savedArtists } = await supabase
+      .from('saved_artists')
+      .select(`
+         created_at,
+         last_accessed_at,
+         artists (id, name, image_path)
+      `)
+      .eq('user_id', user.id);
+
+    // 4. Normalize Playlists
     const formattedPlaylists: SidebarItem[] = (playlists || []).map((pl: any) => {
         const imgPath = pl.image_path || 'playlist-placeholder.jpg';
         const { data: imgData } = supabase.storage.from('playlist_images').getPublicUrl(imgPath);
@@ -89,7 +99,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         };
     });
 
-    // 4. Normalize Albums
+    // 5. Normalize Albums
     const formattedAlbums = (savedAlbums || []).map((item: any) => {
         const album = item.albums;
         if (!album) return null;
@@ -113,10 +123,34 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
     }).filter((item) => item !== null) as SidebarItem[];
 
-    // 5. Combine & Sort
-    const combined = [...formattedPlaylists, ...formattedAlbums]
+    // 🟢 6. Normalize Artists
+    const formattedArtists = (savedArtists || []).map((item: any) => {
+        const artist = item.artists;
+        if (!artist) return null;
+
+        let imageUrl = '/images/artist-placeholder.png';
+        if (artist.image_path) {
+            // 🟢 IMPORTANT: Use 'artist_images' bucket
+            const { data } = supabase.storage.from('artist_images').getPublicUrl(artist.image_path);
+            imageUrl = data.publicUrl;
+        }
+
+        return {
+            id: artist.id,
+            type: 'artist' as const, // Type allows ContextMenu to show Unfollow
+            title: artist.name,
+            subtitle: 'Artist',
+            imageUrl: imageUrl,
+            path: `/artist/${artist.id}`,
+            sortDate: item.last_accessed_at || item.created_at,
+        } as SidebarItem;
+
+    }).filter((item) => item !== null) as SidebarItem[];
+
+    // 7. Combine & Sort
+    const combined = [...formattedPlaylists, ...formattedAlbums, ...formattedArtists]
         .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
-        .slice(0, 10);
+        .slice(0, 10); // Still limiting to 10 most recent
 
     setLibraryItems(combined);
   };
@@ -305,9 +339,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                             <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
                                 <Image 
                                     fill
+                                    // 🟢 Circular image for artists, square for others
                                     src={item.imageUrl || '/images/playlist-placeholder.jpg'}
                                     alt={item.title}
-                                    className="object-cover"
+                                    className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
                                 />
                             </div>
                          </div>

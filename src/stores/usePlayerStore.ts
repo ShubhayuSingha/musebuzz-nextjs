@@ -16,8 +16,9 @@ export interface QueueItem {
   uid: string;     
 }
 
+// 🟢 UPDATE: Added 'artist' to the type union
 export interface PlayerContext {
-  type: 'album' | 'playlist' | 'liked';
+  type: 'album' | 'playlist' | 'liked' | 'artist';
   title: string;
   id?: string;
 }
@@ -96,7 +97,7 @@ interface PlayerStore {
 }
 
 /* =========================
-   🟢 HELPER: Update Last Accessed (FIXED)
+   HELPER: Update Last Accessed
 ========================= */
 const updateLastAccessed = async (context?: PlayerContext) => {
     if (!context?.id) return;
@@ -115,11 +116,9 @@ const updateLastAccessed = async (context?: PlayerContext) => {
         }
     }
 
-    // 2. 🟢 Handle Album Update (NEW)
+    // 2. Handle Album Update
     if (context.type === 'album') {
-        // We need the user ID to find the correct saved_album entry
         const { data: { user } } = await supabase.auth.getUser();
-        
         if (user) {
             const { error } = await supabase
                 .from('saved_albums')
@@ -128,7 +127,6 @@ const updateLastAccessed = async (context?: PlayerContext) => {
                 .eq('user_id', user.id);
 
             if (!error) {
-                // Signal Sidebar to refresh
                 usePlaylistStore.getState().refreshPlaylists();
             }
         }
@@ -242,7 +240,7 @@ const usePlayerStore = create<PlayerStore>()(
 
       playFromContext: (id, context) => {
         const state = get();
-        updateLastAccessed(context); // This will now handle Albums too!
+        updateLastAccessed(context);
 
         const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
 

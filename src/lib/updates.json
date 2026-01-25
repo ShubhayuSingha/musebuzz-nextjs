@@ -1,6 +1,23 @@
 [
   {
-    "versionName": "v1.0.9",
+    "versionName": "v1.10",
+    "date": "25th January 2025", 
+    "time": "7:13 PM IST",
+    "title": "⚡Artist Page⚡",
+    "description": "The Artist Page has been built!",
+    "changes": [
+      "You can open artist pages from the search bar or the player by clicking on the artist name.",
+      "You can follow artists and they will appear on your library page. They also get sorted reverse chronologically based on when you accessed them.",
+      "In the artist page, you can see their profile picture, and the songs they have in album wise order for now. You can play songs from there and it is a separate play context.",
+      "If you click on the image on the player on the extreme left, you will go to that song's album, if you click on the artist name then you will go to the artist page.",
+      "Added a marquee scroll effect in case the width is not enough for the song name to appear on the player.",
+      "Added a new filter option for artists on the 'Your Library' page.",
+      "New context menus for adding artists has been added.",
+      "Added 'Save to Library' button on the album header, beside the title."
+    ]
+  },
+  {
+    "versionName": "v1.9",
     "date": "25th January 2025", 
     "time": "9:38 AM IST",
     "title": "⚡Your Library Page and Sleeker Sidebar⚡",
@@ -14,7 +31,7 @@
     ]
   },
   {
-    "versionName": "v1.0.8",
+    "versionName": "v1.8",
     "date": "24th January 2025", 
     "time": "10:50 PM IST",
     "title": "⚡Persistent Player⚡",
@@ -25,7 +42,7 @@
     ]
   },
   {
-    "versionName": "v1.0.7",
+    "versionName": "v1.7",
     "date": "22th January 2025", 
     "time": "11:10 PM IST",
     "title": "⚡Custom Playlists⚡",
@@ -39,7 +56,7 @@
     ]
   },
   {
-    "versionName": "v1.0.6",
+    "versionName": "v1.6",
     "date": "21th January 2025", 
     "time": "12:10 AM IST",
     "title": "⚡Stabilised Features and Simplified Approach⚡",
@@ -53,7 +70,7 @@
     ]
   },
 {
-    "versionName": "v1.0.5",
+    "versionName": "v1.5",
     "date": "18th January 2025", 
     "time": "01:10 AM IST",
     "title": "⚡ Modern Queue ⚡",
@@ -68,7 +85,7 @@
   },
 
   {
-    "versionName": "v1.0.4",
+    "versionName": "v1.4",
     "date": "2026-01-16",
     "time": "22:20",
     "title": "⚡ Search Function! ⚡",
@@ -80,7 +97,7 @@
     ]
   },
   {
-    "versionName": "v1.0.4",
+    "versionName": "v1.3",
     "date": "2026-01-16",
     "time": "",
     "title": "⚡ Quality of Life Improvements ⚡",
@@ -97,7 +114,7 @@
   },
 
   {
-    "versionName": "v1.0.3",
+    "versionName": "v1.2",
     "date": "2026-01-16",
     "time": "14:55",
     "title": "⚡ New Modal Fetch Method ⚡",
@@ -110,7 +127,7 @@
     ]
   },
   {
-    "versionName": "v1.0.2",
+    "versionName": "v1.1",
     "date": "2026-01-16",
     "time": "14:45",
     "title": "Context Aware Playback! ⚡",
@@ -123,7 +140,7 @@
     ]
   },
   {
-    "versionName": "v1.0.1",
+    "versionName": "v1.0",
     "date": "2026-01-15",
     "time": "10:30",
     "title": "Initial Release",

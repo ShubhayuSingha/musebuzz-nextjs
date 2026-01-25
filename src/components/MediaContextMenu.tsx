@@ -3,14 +3,14 @@
 import * as ContextMenu from "@radix-ui/react-context-menu"; 
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { AiOutlinePlus, AiOutlineDelete } from "react-icons/ai"; 
+import { AiOutlinePlus, AiOutlineDelete, AiOutlineUserAdd, AiOutlineUserDelete } from "react-icons/ai"; 
 import { BsPersonFill } from "react-icons/bs";
 import { MdQueueMusic } from "react-icons/md";
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import useLibrary from "@/hooks/useLibrary"; 
 import usePlaylistStore from "@/stores/usePlaylistStore"; 
-import useAuthModalStore from "@/stores/useAuthModalStore"; // 🟢 Import Modal Store
+import useAuthModalStore from "@/stores/useAuthModalStore";
 
 import { useUser, useSupabaseClient } from "@supabase/auth-helpers-react";
 import { useEffect, useState } from "react";
@@ -19,7 +19,7 @@ interface MediaContextMenuProps {
   children: React.ReactNode;
   data: {
     id: string;
-    type: 'song' | 'album' | 'playlist';
+    type: 'song' | 'album' | 'playlist' | 'artist';
     title?: string;
     artist_id?: string;
     playlistId?: string; 
@@ -41,40 +41,52 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   const supabase = useSupabaseClient();
   
   const { refreshPlaylists } = usePlaylistStore(); 
-  const { openDelete } = useAuthModalStore(); // 🟢 Get openDelete action
+  const { openDelete } = useAuthModalStore();
 
   const [isSaved, setIsSaved] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false);
 
-  // Consolidate IDs
   const finalSongId = songId || (data.type === 'song' ? data.id : undefined);
   const finalPlaylistId = playlistId || data.playlistId;
 
+  // --- CHECK STATUS ---
   useEffect(() => {
-    if (!user?.id || data.type !== 'album') return;
+    if (!user?.id) return;
 
     const checkStatus = async () => {
-      const { data: savedData, error } = await supabase
-        .from('saved_albums')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('album_id', data.id)
-        .single();
-
-      if (!error && savedData) {
-        setIsSaved(true);
-      } else {
-        setIsSaved(false);
+      if (data.type === 'album') {
+          const saved = await library.checkIsSaved(data.id);
+          setIsSaved(saved);
+      }
+      if (data.type === 'artist') {
+          const following = await library.checkIsArtistSaved(data.id);
+          setIsFollowing(following);
       }
     };
 
     checkStatus();
-  }, [data.id, user, supabase, data.type]);
+  }, [data.id, data.type, user, library]);
 
   // --- ACTIONS ---
 
+  const handleFollow = async () => {
+      if (!user) return toast.error("Log in to follow artists");
+      await library.followArtist(data.id);
+      setIsFollowing(true);
+      refreshPlaylists(); 
+      router.refresh();
+  }
+
+  const handleUnfollow = async () => {
+      if (!user) return;
+      await library.unfollowArtist(data.id);
+      setIsFollowing(false);
+      refreshPlaylists();
+      router.refresh();
+  }
+
   const handleAddToLibrary = async () => {
     if (!user) return toast.error("Log in to save albums");
-    
     await library.addAlbum(data.id); 
     setIsSaved(true); 
     refreshPlaylists(); 
@@ -83,7 +95,6 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
   const handleRemoveFromLibrary = async () => {
      if (!user) return;
-     
      await library.removeAlbum(data.id); 
      setIsSaved(false); 
      refreshPlaylists(); 
@@ -92,7 +103,6 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
   const handleDeletePlaylist = () => {
       if (!user) return;
-      // 🟢 TRIGGER CUSTOM MODAL INSTEAD OF WINDOW.CONFIRM
       openDelete(data.id); 
   };
 
@@ -114,6 +124,10 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   const handleGoToArtist = () => {
+    if (data.type === 'artist') {
+        router.push(`/artist/${data.id}`);
+        return;
+    }
     if (data.artist_id) {
         router.push(`/artist/${data.artist_id}`);
     }
@@ -125,16 +139,15 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   return (
-    <ContextMenu.Root>
+    // 🟢 FIX: modal={false} prevents the menu from creating a screen-blocking overlay.
+    // This allows clicks inside the Search Bar to be registered correctly as "inside".
+    <ContextMenu.Root modal={false}>
       <ContextMenu.Trigger asChild>
-        <div className="w-full h-auto">
-            {children}
-        </div>
+        {children}
       </ContextMenu.Trigger>
 
       <ContextMenu.Portal>
         <ContextMenu.Content 
-            onMouseDown={(e) => e.stopPropagation()} 
             className="
                 min-w-[220px] 
                 bg-neutral-800 
@@ -147,7 +160,28 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                 z-[100]
             "
         >
-            {/* --- PLAYLIST ACTIONS --- */}
+            {/* ARTIST */}
+            {data.type === 'artist' && (
+                isFollowing ? (
+                    <ContextMenu.Item 
+                        onClick={handleUnfollow}
+                        className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
+                    >
+                        <AiOutlineUserDelete size={18} />
+                        Unfollow Artist
+                    </ContextMenu.Item>
+                ) : (
+                    <ContextMenu.Item 
+                        onClick={handleFollow}
+                        className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
+                    >
+                        <AiOutlineUserAdd size={18} />
+                        Follow Artist
+                    </ContextMenu.Item>
+                )
+            )}
+
+            {/* PLAYLIST */}
             {data.type === 'playlist' && (
                 <ContextMenu.Item 
                     onClick={handleDeletePlaylist}
@@ -158,7 +192,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                 </ContextMenu.Item>
             )}
 
-            {/* --- ALBUM ACTIONS --- */}
+            {/* ALBUM */}
             {data.type === 'album' && (
                 isSaved ? (
                     <ContextMenu.Item 
@@ -179,7 +213,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                 )
             )}
 
-            {/* --- SONG ACTIONS --- */}
+            {/* SONG */}
             {data.type === 'song' && (
                  <>
                     <ContextMenu.Item 
@@ -202,14 +236,14 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
                  </>
             )}
 
-            {/* --- COMMON ACTIONS --- */}
-            {data.artist_id && (
+            {/* COMMON: Go to Artist */}
+            {(data.artist_id || data.type === 'artist') && (
                  <ContextMenu.Item 
                     onClick={handleGoToArtist}
                     className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3"
                 >
                     <BsPersonFill size={18} />
-                    Go to Artist
+                    {data.type === 'artist' ? 'Go to Artist Page' : 'Go to Artist'}
                 </ContextMenu.Item>
             )}
 
