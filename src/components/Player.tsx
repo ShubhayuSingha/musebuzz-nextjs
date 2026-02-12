@@ -3,9 +3,18 @@
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import useSongById from "@/hooks/useSongById";
+import useTracker from "@/hooks/useTracker";
+import useAutoplay from "@/hooks/useAutoplay"; // 🟢 1. Import the Autoplay Hook
 import PlayerContent from "./PlayerContent";
 
 const Player = () => {
+  // 🟢 2. Activate the Autoplay Brain
+  // This will quietly watch your queue and fetch new songs when you have 2 left.
+  useAutoplay();
+
+  // Initialize the tracker for history/stats
+  useTracker();
+
   const { activeId } = usePlayerStore();
   const { song, songPath } = useSongById(activeId);
 
@@ -15,9 +24,6 @@ const Player = () => {
   }
 
   return (
-    // THE MAGIC FIX: 
-    // key={songPath} forces the component to destroy and recreate 
-    // whenever the song URL changes. This resets the slider to 0:00 immediately.
     <PlayerContent 
       key={songPath} 
       song={song} 

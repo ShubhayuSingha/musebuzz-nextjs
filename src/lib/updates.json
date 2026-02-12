@@ -1,5 +1,18 @@
 [
   {
+    "versionName": "v1.11",
+    "date": "12th Feb 2025", 
+    "time": "12:00 PM IST",
+    "title": "⚡Similar Songs in the Queue⚡",
+    "description": "Based on your last songs of your playlist / album, new auto-play songs will be generated.",
+    "changes": [
+      "There are now three buckets in the queue - priority, context, and autoplay.",
+      "You cannot move songs from one bucket to another but you can re-arrange in itself.",
+      "The autoplay songs are generated based on the last 5 songs of your playlist / album.",
+      "The last song has the most influence on the queue. The other 4 songs have average influence on the queue."
+    ]
+  },
+  {
     "versionName": "v1.10",
     "date": "25th January 2025", 
     "time": "7:13 PM IST",

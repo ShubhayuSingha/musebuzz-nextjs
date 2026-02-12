@@ -1,5 +1,4 @@
 // src/components/PlayerContent.tsx
-
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from "react";
@@ -46,6 +45,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     bucketB,       
     shuffledOrder, 
     isPlayingPriority,
+    isPlayingAutoplay, // 🟢 Get this from store
     lastActiveContextId 
   } = usePlayerStore(); 
 
@@ -57,6 +57,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null); 
   const saveProgressRef = useRef<((manualSeek?: number) => void) | null>(null);
+  
+  // Fix for Zombie Player: Track if the song ended naturally
+  const isSongEndedRef = useRef(false);
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => {
@@ -160,7 +163,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   useEffect(() => {
     const sound = soundRef.current;
     if (sound) {
-      if (isPlaying && !sound.playing()) {
+      // Fix: Don't force play if the song ended naturally
+      if (isPlaying && !sound.playing() && !isSongEndedRef.current) {
         sound.play();
         if (!saveIntervalRef.current) {
             saveIntervalRef.current = setInterval(() => {
@@ -207,6 +211,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     
     setCurrentTime(0); 
     setDuration(0);
+    
+    // Reset the flag when loading a new song
+    isSongEndedRef.current = false;
+
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
 
     debounceRef.current = setTimeout(() => {
@@ -220,8 +228,13 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             onplay: () => setIsPlaying(true),
             onpause: () => setIsPlaying(false),
             onend: () => {
+              // Set flag to true so useEffect doesn't restart it
+              isSongEndedRef.current = true;
+
               if (repeatModeRef.current === 'one') {
                   newSound.play();
+                  // Reset flag if repeating same song
+                  isSongEndedRef.current = false;
               } else {
                   onPlayNext(); 
               }
@@ -319,10 +332,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
       <div className="fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid grid-cols-3 z-50">
         
-        {/* LEFT SECTION - 🟢 FIXED LAYOUT */}
+        {/* LEFT SECTION */}
         <div className="flex w-full justify-start items-center gap-x-4">
           
-          {/* Album Art */}
           <div 
             onClick={onClickAlbum}
             className="relative h-14 w-14 rounded-md overflow-hidden shadow-md cursor-pointer hover:opacity-80 transition flex-shrink-0"
@@ -334,11 +346,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               )}
           </div>
           
-          {/* 🟢 Text Info + Heart Container */}
-          {/* This container will grow to max 250px, but shrink if needed */}
           <div className="hidden md:flex items-center gap-x-3 max-w-[250px]">
-            
-             {/* Text Block */}
              <div className="flex flex-col overflow-hidden">
                 {/* Title */}
                 <div className="w-full overflow-hidden whitespace-nowrap relative">
@@ -373,7 +381,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </p>
              </div>
 
-             {/* Heart Icon (Flex item, won't shrink, stays next to text) */}
              <div className="flex-shrink-0">
                  <LikeButton songId={song.id} />
              </div>
@@ -384,11 +391,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         {/* CENTER SECTION */}
         <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
           <div className="flex items-center gap-x-6">
+            
+            {/* 🟢 Shuffle Button: Disabled if AI mode is active */}
             <BsShuffle 
               size={20} 
-              onClick={toggleShuffle}
-              className={`cursor-pointer transition ${isShuffled ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
+              onClick={isPlayingAutoplay ? undefined : toggleShuffle} 
+              className={`
+                 transition
+                 ${isPlayingAutoplay 
+                    ? 'text-neutral-700 cursor-not-allowed' // Disabled Style
+                    : isShuffled 
+                        ? 'text-green-500 cursor-pointer' 
+                        : 'text-neutral-400 hover:text-white cursor-pointer'
+                 }
+              `}
             />
+
             <AiFillStepBackward
               size={30}
               onClick={handlePrevious} 
