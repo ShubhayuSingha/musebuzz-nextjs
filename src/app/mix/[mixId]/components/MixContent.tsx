@@ -20,6 +20,31 @@ const formatTime = (seconds: number) => {
   return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 };
 
+const formatAddedDate = (dateStr: string) => {
+  if (!dateStr) return 'Unknown';
+  const date = new Date(dateStr);
+  const now = new Date();
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffSeconds < 60) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  if (diffDays < 14) return `${diffDays} days ago`;
+  if (diffWeeks < 8) return `${diffWeeks} weeks ago`;
+
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
 const rowVariants: Variants = {
   hidden: { opacity: 0, y: 24 },
   show: (i: number) => ({
@@ -33,9 +58,10 @@ interface MixContentProps {
   songs: any[];
   playlistId: string;
   playlistTitle: string;
+  playlistCreatedAt: string; // 🟢 ADD THIS
 }
 
-const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitle }) => {
+const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitle, playlistCreatedAt }) => {
   const router = useRouter();
   const player = usePlayerStore();
   const user = useUser();
@@ -192,7 +218,7 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
 
                     {/* DATE ADDED */}
                     <p className="text-sm text-neutral-400">
-                        Mixed for You
+                        {formatAddedDate(song.added_at || playlistCreatedAt)}
                     </p>
 
                     {/* ACTIONS */}

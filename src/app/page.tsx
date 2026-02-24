@@ -124,7 +124,8 @@ export default function Home() {
                 .from('generated_playlists')
                 .select('*')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false }); 
+                .order('created_at', { ascending: false })
+                .limit(5);
             if (generated) setMadeForYou(generated);
 
             // C. YOUR PLAYLISTS
@@ -487,7 +488,7 @@ export default function Home() {
           <div className="mt-12">
             <h2 className="text-2xl font-semibold mb-4">Made For You</h2>
             <p className="text-sm text-neutral-400 -mt-3 mb-4">
-              Generated mixes based on your library
+              Generated mixes based on your preferences
             </p>
             {renderScroller(madeForYou, madeForYouRef, 'madeForYou', (item) => (
                 <MixPlaylistItem data={item} />

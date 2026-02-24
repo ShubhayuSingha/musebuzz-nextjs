@@ -1,5 +1,17 @@
 [
   {
+    "versionName": "v1.12",
+    "date": "25th Feb 2025", 
+    "time": "4:25 AM IST",
+    "title": "⚡AI Playlists Re-defined⚡",
+    "description": "AI Generated Playlists use a custom machine learning model which takes in factors from your listening history, followed artists, added albums, skipped and completed songs",
+    "changes": [
+      "Used PyTorch for the machine learning model. Gemini API is used to creatively name those generated playlists ensuring the names are unique and does not repeat the same names back-to-back.",
+      "The details fetched are listening history, saved albums and artists, songs the user skipped or completed, also their duration, and the date of the added entry in the database to penalise old listening habits and bring forward new ones.",
+      "Fixed an issue with Generated Playlists page, where the 'Date Added' for each song was showing 'Mix For You'. Now the dates of each song is the same as the time the playlist is made."
+    ]
+  },
+  {
     "versionName": "v1.11",
     "date": "24th Feb 2025", 
     "time": "7:00 PM IST",

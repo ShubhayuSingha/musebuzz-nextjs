@@ -89,6 +89,7 @@ export default async function MixPage(props: MixPageProps) {
            songs={songs} 
            playlistId={mix.id} 
            playlistTitle={mix.title}
+           playlistCreatedAt={mix.created_at}
         />
       </div>
     </div>
