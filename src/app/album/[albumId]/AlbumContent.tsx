@@ -1,12 +1,8 @@
-// src/app/album/[albumId]/AlbumContent.tsx
-
 'use client';
 
 import React from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
-// 🟢 1. IMPORT SUPABASE CLIENT
 import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
-import { formatTime } from '@/lib/helpers';
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; 
 import LikeButton from '@/components/LikeButton';
 import AddToQueueButton from '@/components/AddToQueueButton';
@@ -15,10 +11,19 @@ import { motion, Variants } from 'framer-motion';
 
 import SongContextMenu from '@/components/SongContextMenu';
 
+// 🟢 FIX: Added local helper function
+const formatTime = (seconds: number) => {
+  if (!seconds) return '0:00';
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+};
+
 interface AlbumContentProps {
   songs: any[];
   albumName: string;
   albumId: string;
+  artistId?: string; 
 }
 
 const listVariants: Variants = {
@@ -31,14 +36,12 @@ const rowVariants: Variants = {
   show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 220, damping: 22, mass: 0.7 } },
 };
 
-const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }) => {
+const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, artistId }) => {
   const player = usePlayerStore();
   const user = useUser();
-  // 🟢 2. INITIALIZE CLIENT
   const supabase = useSupabaseClient();
 
   const onPlay = async (id: string) => {
-    // --- EXISTING PLAY LOGIC ---
     const context = { type: 'album' as const, title: albumName, id: albumId };
 
     const isCurrentContextActive = 
@@ -60,7 +63,6 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }
       player.setId(id, context);
     }
 
-    // 🟢 3. UPDATE LAST ACCESSED (Fire and Forget)
     if (user) {
        const { error } = await supabase
         .from('saved_albums')
@@ -123,7 +125,12 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId }
           const isPlaying = player.isPlaying;
 
           return (
-            <SongContextMenu key={song.id} songId={song.id}>
+            <SongContextMenu 
+                key={song.id} 
+                songId={song.id}
+                artistId={artistId} 
+                isReadOnly={true}   
+            >
                 <motion.li
                   variants={rowVariants}
                   whileTap={{ scale: 0.996 }}

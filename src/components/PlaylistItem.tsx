@@ -3,7 +3,8 @@
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
-import { FaHeart } from 'react-icons/fa'; // Import Heart Icon
+import { FaHeart } from 'react-icons/fa';
+import MediaContextMenu from "./MediaContextMenu"; 
 
 interface PlaylistItemProps {
   playlist: {
@@ -19,9 +20,7 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   const router = useRouter();
   const supabaseClient = useSupabaseClient();
 
-  // 🟢 CHECK: Is this the special "Liked Songs" card?
   const isLikedSongs = playlist.id === 'liked';
-
   const imagePath = playlist.image_path || 'playlist-placeholder.jpg';
 
   const { data: imageData } = supabaseClient
@@ -32,7 +31,6 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   const imageUrl = imageData.publicUrl;
 
   const handleClick = () => {
-    // 🟢 ROUTING: Go to /liked if it's the special card
     if (isLikedSongs) {
       router.push('/liked');
     } else {
@@ -40,18 +38,17 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
     }
   };
 
-  return (
+  const CardContent = (
     <div
       onClick={handleClick}
       className="
-        group/item
+        group
         relative
         flex
         flex-col
         rounded-xl
         p-3
         cursor-pointer
-        select-none
         isolate
         will-change-transform
         transition-transform
@@ -67,7 +64,7 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
           inset-0
           rounded-xl
           opacity-0
-          group-hover/item:opacity-100 
+          group-hover:opacity-100 
           transition-opacity
           duration-300
           shadow-[inset_0_-14px_22px_-18px_rgba(0,0,0,0.55)]
@@ -86,18 +83,15 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
         onDragStart={(e) => e.preventDefault()}
       >
         {isLikedSongs ? (
-           // 🟢 RENDER: Gradient Heart Cover for Liked Songs
            <div className="
               w-full h-full 
               bg-gradient-to-br from-violet-600 to-blue-600 
               flex items-center justify-center
-              group-hover/item:scale-105
               transition-transform duration-300 ease-out
            ">
               <FaHeart className="text-white text-4xl drop-shadow-lg" />
            </div>
         ) : (
-           // RENDER: Normal Playlist Image
            <Image
              draggable={false}
              src={imageUrl}
@@ -108,7 +102,6 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
                transition-transform
                duration-300
                ease-out
-               group-hover/item:scale-105
              "
              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
            />
@@ -125,6 +118,22 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
         </p>
       </div>
     </div>
+  );
+
+  if (isLikedSongs) {
+     return CardContent;
+  }
+
+  return (
+    <MediaContextMenu 
+      data={{ 
+        id: playlist.id, 
+        title: playlist.title, 
+        type: 'playlist' 
+      }}
+    >
+      {CardContent}
+    </MediaContextMenu>
   );
 };
 

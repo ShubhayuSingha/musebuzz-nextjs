@@ -77,9 +77,11 @@ interface PlayerStore {
   /* Queue Management (Bucket B - Priority) */
   setBucketB: (newQueue: QueueItem[]) => void;
   addToQueue: (id: string) => void;
+  addManyToQueue: (ids: string[]) => void; // 🟢 ADDED BULK QUEUE FUNCTION
   playQueueItem: (index: number) => void; 
   removeFromPriority: (uid: string) => void;
   reorderQueue: (from: number, to: number) => void;
+  clearPriorityQueue: () => void; // 🟢 ADD THIS
 
   /* Context Management (Bucket A) */
   setContextList: (newOrder: string[]) => void;
@@ -286,6 +288,12 @@ const usePlayerStore = create<PlayerStore>()(
         const newItem: QueueItem = { id, uid: uuidv4() };
         set((state) => ({ bucketB: [...state.bucketB, newItem] }));
       },
+      // 🟢 IMPLEMENTED BULK QUEUE
+      addManyToQueue: (ids) => {
+        const newItems: QueueItem[] = ids.map(id => ({ id, uid: uuidv4() }));
+        set((state) => ({ bucketB: [...state.bucketB, ...newItems] }));
+      },
+      clearPriorityQueue: () => set({ bucketB: [] }),
       playQueueItem: (index) => {
         const { bucketB, activeIdSignature } = get();
         const item = bucketB[index];

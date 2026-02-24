@@ -21,7 +21,6 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
     cookies: () => cookieStore as any
   });
 
-  // 🟢 FIX: Comments removed from inside the string to prevent ParseError
   const { data: playlist, error } = await supabase
     .from('playlists')
     .select(`
@@ -35,7 +34,7 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
             id, 
             title, 
             image_path,
-            artists(name)
+            artists(id, name)
           )
         )
       )
@@ -50,9 +49,8 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
   const songs = playlist.playlist_songs
     ?.sort((a: any, b: any) => a.song_order - b.song_order)
     .map((item: any) => {
-        // Generate Image URL
         const imagePath = item.songs.albums?.image_path;
-        let imageUrl = '/images/album-placeholder.png'; // Fallback
+        let imageUrl = '/images/album-placeholder.png'; 
         
         if (imagePath) {
            const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
@@ -79,7 +77,6 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
 
   return (
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">
-      
       <PlaylistHeader 
         playlist={playlist} 
         imageUrl={imageData.publicUrl} 

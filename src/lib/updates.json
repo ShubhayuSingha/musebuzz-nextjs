@@ -1,6 +1,21 @@
 [
   {
     "versionName": "v1.11",
+    "date": "24th Feb 2025", 
+    "time": "7:00 PM IST",
+    "title": "⚡Customised Homepage, AI Playlists, and Context Menus⚡",
+    "description": "AI Generated Playlists, Context aware right-click, and add entire context to priority queue.",
+    "changes": [
+      "Logged in user can see generated playlists that are made for them based on their listening history.",
+      "The homepage is also curated, with 'Jump Back In' section, 'More Like ...' section, and 'Made For You' Customised Generated Playlists section.",
+      "You can now right-click most contexts and get the proper context menu, relevant to that context.",
+      "Added a new 'Add to Queue' option for playlists, generated playlists, albums and artists which will be added to the priority queue.",
+      "Changed the look of the context menu which is now consistent everywhere.",
+      "Added a 'Clear' button on the priority queue which you can click and reset the entire priority queue. Context queue works normally."
+    ]
+  },
+  {
+    "versionName": "v1.11",
     "date": "12th Feb 2025", 
     "time": "12:00 PM IST",
     "title": "⚡Similar Songs in the Queue⚡",

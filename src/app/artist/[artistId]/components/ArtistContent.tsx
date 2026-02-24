@@ -9,8 +9,8 @@ import { motion, AnimatePresence, Variants } from "framer-motion";
 import usePlayerStore from "@/stores/usePlayerStore";
 import usePlaylistStore from "@/stores/usePlaylistStore"; 
 import { useUser } from "@supabase/auth-helpers-react";
-import MediaContextMenu from "@/components/MediaContextMenu"; // Keep for Albums
-import SongContextMenu from "@/components/SongContextMenu";   // 🟢 Import for Songs
+import MediaContextMenu from "@/components/MediaContextMenu"; 
+import SongContextMenu from "@/components/SongContextMenu"; 
 import LikeButton from "@/components/LikeButton";
 import AddToQueueButton from "@/components/AddToQueueButton"; 
 import PlayingAnimation from "@/components/PlayingAnimation";
@@ -206,7 +206,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
         <div className="flex flex-col gap-y-2 w-full">
              <h2 className="text-2xl font-bold text-white mb-2">Songs</h2>
              
-             {/* 🟢 STICKY HEADER - Updated BG to bg-neutral-900/95 */}
+             {/* STICKY HEADER */}
              <div className="
                 grid 
                 grid-cols-[40px_50px_4fr_3fr_80px_50px]
@@ -245,8 +245,12 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
                         const isPlayingState = isActive && player.isPlaying;
                         
                         return (
-                        // 🟢 CHANGED: Using SongContextMenu instead of MediaContextMenu
-                        <SongContextMenu key={song.id} songId={song.id}>
+                        <SongContextMenu 
+                            key={song.id} 
+                            songId={song.id}
+                            albumId={song.album_id} // 🟢 Go to Album
+                            isReadOnly={true}       // 🟢 Read Only
+                        >
                             <motion.div 
                                 layout
                                 custom={index}

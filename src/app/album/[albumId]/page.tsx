@@ -1,7 +1,9 @@
+// src/app/album/[albumId]/page.tsx
+
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
 import AlbumContent from "./AlbumContent";
-import AlbumHeader from "./AlbumHeader"; // 🟢 Import
+import AlbumHeader from "./AlbumHeader";
 
 export const revalidate = 0;
 
@@ -44,10 +46,8 @@ export default async function Album(props: AlbumProps) {
   const releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
 
   return (
-    // 🟢 Added bg-black for consistency
     <div className="h-full w-full overflow-hidden overflow-y-auto bg-black">
       
-      {/* 🟢 NEW HEADER COMPONENT */}
       <AlbumHeader 
         album={album}
         imageUrl={imageData.publicUrl}
@@ -60,6 +60,8 @@ export default async function Album(props: AlbumProps) {
           songs={album.songs} 
           albumName={album.title}
           albumId={album.id} 
+          // 🟢 Pass Artist ID to enable "Go to Artist"
+          artistId={album.artists?.id}
         />
       </div>
     </div>

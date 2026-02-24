@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import Image from 'next/image'; // 🟢 Import Image
+import Image from 'next/image'; 
 import { useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs'; 
@@ -25,6 +25,7 @@ const formatTime = (seconds: number) => {
 };
 
 const formatAddedDate = (dateStr: string) => {
+  if (!dateStr) return 'Unknown';
   const date = new Date(dateStr);
   const now = new Date();
 
@@ -35,12 +36,11 @@ const formatAddedDate = (dateStr: string) => {
   const diffDays = Math.floor(diffHours / 24);
   const diffWeeks = Math.floor(diffDays / 7);
 
-  if (diffSeconds < 10) return 'just now';
-  if (diffSeconds < 60) return `${diffSeconds} second${diffSeconds !== 1 ? 's' : ''} ago`;
-  if (diffMinutes < 60) return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''} ago`;
-  if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
-  if (diffDays < 14) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
-  if (diffWeeks < 8) return `${diffWeeks} week${diffWeeks !== 1 ? 's' : ''} ago`;
+  if (diffSeconds < 60) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  if (diffDays < 14) return `${diffDays} days ago`;
+  if (diffWeeks < 8) return `${diffWeeks} weeks ago`;
 
   return date.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -106,12 +106,20 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
     }
   };
 
+  if (songs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center mt-10 text-neutral-400">
+        <p>No liked songs yet.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-y-2 w-full">
       {/* HEADER */}
       <div className="
         grid 
-        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
+        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px]
         items-center 
         px-3 
         py-2 
@@ -149,7 +157,15 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
             const isPlaying = player.isPlaying;
 
             return (
-              <SongContextMenu key={song.id} songId={song.id}>
+              <SongContextMenu 
+                  key={song.id} 
+                  songId={song.id}
+                  // 🟢 Enable Navigation props
+                  artistId={song.albums?.artists?.id} 
+                  albumId={song.albums?.id}
+                  // 🟢 Disable "Remove from Playlist" (Use Like button instead)
+                  isReadOnly={true}
+              >
                   <motion.li
                     layout 
                     custom={index}
@@ -162,7 +178,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                     className={`
                       group
                       grid
-                      grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] // 🟢 UPDATED GRID
+                      grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px]
                       items-center
                       px-3
                       py-2
@@ -197,7 +213,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                       )}
                     </div>
 
-                    {/* 🟢 IMAGE COLUMN */}
+                    {/* IMAGE COLUMN */}
                     <div className="relative h-10 w-10 overflow-hidden rounded-md">
                         <Image
                             fill
@@ -221,7 +237,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                     <p 
                       onClick={(e) => {
                         e.stopPropagation();
-                        router.push(`/album/${song.album_id}`);
+                        if (song.albums?.id) router.push(`/album/${song.albums.id}`);
                       }}
                       className="text-sm text-neutral-400 truncate pr-4 hover:text-white hover:underline cursor-pointer transition"
                     >

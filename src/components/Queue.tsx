@@ -167,7 +167,7 @@ const DraggableQueueItem = ({ item, song, idx, source, onPlay, onRemove, onAddTo
   const x = useMotionValue(0);
   
   const deleteOpacity = useTransform(x, [-100, -50], [1, 0]); 
-  const addOpacity = useTransform(x, [50, 100], [0, 1]);      
+  const addOpacity = useTransform(x, [50, 100], [0, 1]);       
 
   if (!song) {
     return (
@@ -276,7 +276,6 @@ export default function Queue() {
           }
       }
 
-      // 🟢 FIX: Use stable UIDs for smooth drag
       return listToDisplay.map((id) => ({ id, uid: `auto-${id}` }));
   }, [player.autoplay, player.isPlayingAutoplay, player.activeId]);
 
@@ -344,7 +343,6 @@ export default function Queue() {
   }, [player]);
 
   const handleRemoveFromAutoplay = useCallback((uid: string) => {
-      // Extract ID from uid: "auto-ID"
       const idToRemove = uid.replace('auto-', '');
       
       if (player.isPlayingAutoplay && player.activeId) {
@@ -388,7 +386,7 @@ export default function Queue() {
   }, [resize, stopResizing]);
 
   /* =========================
-       RENDER
+        RENDER
   ========================= */
 
   return (
@@ -415,7 +413,7 @@ export default function Queue() {
           {/* Header */}
           <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
             <h2 className="text-xl font-bold text-white">Queue</h2>
-            <button onClick={onClose} className="text-neutral-400 hover:text-white">
+            <button onClick={onClose} className="text-neutral-400 hover:text-white transition">
               <IoClose size={24} />
             </button>
           </div>
@@ -445,12 +443,22 @@ export default function Queue() {
             {/* 2. PRIORITY QUEUE (Bucket B) */}
             {priorityList.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider mb-2 px-2 flex items-center gap-2">
-                  Next In Queue
-                  <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
-                    {priorityList.length}
-                  </span>
-                </h3>
+                {/* 🟢 UPDATED: Flex container with Title on left, Clear button on right */}
+                <div className="flex items-center justify-between mb-2 px-2">
+                  <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                    Next In Queue
+                    <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                      {priorityList.length}
+                    </span>
+                  </h3>
+                  
+                  <button 
+                    onClick={() => player.clearPriorityQueue()}
+                    className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 hover:text-white transition-colors border border-neutral-700 hover:border-neutral-500 rounded px-2 py-0.5"
+                  >
+                    Clear
+                  </button>
+                </div>
 
                 <Reorder.Group
                   axis="y"
@@ -478,7 +486,6 @@ export default function Queue() {
             )}
 
             {/* 3. CONTEXT QUEUE (Bucket A) */}
-            {/* 🟢 Hides if Autoplay is Active */}
             {(contextItems.length > 0 || !player.isPlayingAutoplay) && (
               <div className="mb-2">
                 <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">

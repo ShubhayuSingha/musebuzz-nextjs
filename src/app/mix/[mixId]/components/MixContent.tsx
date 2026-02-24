@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image'; 
+import Image from 'next/image';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { useUser } from '@supabase/auth-helpers-react';
 import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs';
@@ -10,8 +10,7 @@ import LikeButton from '@/components/LikeButton';
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
-
-import SongContextMenu from '@/components/SongContextMenu'; 
+import SongContextMenu from '@/components/SongContextMenu'; // 🟢 Import
 
 // Helpers
 const formatTime = (seconds: number) => {
@@ -19,31 +18,6 @@ const formatTime = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
   return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
-};
-
-const formatAddedDate = (dateStr: string) => {
-  if (!dateStr) return 'Unknown';
-  const date = new Date(dateStr);
-  const now = new Date();
-
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  const diffWeeks = Math.floor(diffDays / 7);
-
-  if (diffSeconds < 60) return 'just now';
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  if (diffHours < 24) return `${diffHours} hr ago`;
-  if (diffDays < 14) return `${diffDays} days ago`;
-  if (diffWeeks < 8) return `${diffWeeks} weeks ago`;
-
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 };
 
 const rowVariants: Variants = {
@@ -55,13 +29,13 @@ const rowVariants: Variants = {
   }),
 };
 
-interface PlaylistContentProps {
+interface MixContentProps {
   songs: any[];
   playlistId: string;
   playlistTitle: string;
 }
 
-const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, playlistTitle }) => {
+const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitle }) => {
   const router = useRouter();
   const player = usePlayerStore();
   const user = useUser();
@@ -92,8 +66,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
   if (songs.length === 0) {
     return (
         <div className="flex flex-col items-center justify-center mt-10 text-neutral-400">
-            <p>This playlist is empty.</p>
-            <p className="text-sm mt-2">Right-click songs in search to add them!</p>
+            <p>This mix is empty.</p>
         </div>
     );
   }
@@ -101,10 +74,10 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
   return (
     <div className="flex flex-col gap-y-2 w-full">
       
-      {/* HEADER */}
+      {/* HEADER ROW */}
       <div className="
         grid 
-        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px]
+        grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] 
         items-center 
         px-3 
         py-2 
@@ -142,14 +115,15 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
             const isPlaying = player.isPlaying;
 
             return (
-              <SongContextMenu 
+               // 🟢 WRAPPED with Context Menu (Read Only)
+               <SongContextMenu 
                   key={song.id} 
                   songId={song.id} 
                   playlistId={playlistId}
-                  isReadOnly={false} // 🟢 Allow Removing
-                  artistId={song.albums?.artists?.id} // 🟢 Navigation
-                  albumId={song.albums?.id} // 🟢 Navigation
-              >
+                  isReadOnly={true} // 🟢 Hides 'Remove' option
+                  artistId={song.albums?.artists?.id} // Navigation
+                  albumId={song.album_id} // Navigation
+               >
                   <motion.li
                     layout
                     custom={index}
@@ -218,7 +192,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
                     {/* DATE ADDED */}
                     <p className="text-sm text-neutral-400">
-                        {formatAddedDate(song.added_at)}
+                        Mixed for You
                     </p>
 
                     {/* ACTIONS */}
@@ -232,7 +206,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                         {formatTime(song.duration_seconds)}
                     </p>
                   </motion.li>
-              </SongContextMenu>
+               </SongContextMenu>
             );
           })}
         </AnimatePresence>
@@ -241,4 +215,4 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
   );
 };
 
-export default PlaylistContent;
+export default MixContent;

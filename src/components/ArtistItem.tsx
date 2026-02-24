@@ -5,32 +5,33 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import MediaContextMenu from './MediaContextMenu'; 
 
-interface AlbumItemProps {
-  album: any;
+interface ArtistItemProps {
+  artist: any;
 }
 
-const FALLBACK_IMAGE = '/images/album-placeholder.png';
+const FALLBACK_IMAGE = '/images/artist-placeholder.png';
 
-const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
+const ArtistItem: React.FC<ArtistItemProps> = ({ artist }) => {
   const router = useRouter();
 
-  const imageUrl = album.image_path
+  // 🟢 Use 'artist_images' bucket
+  const imageUrl = artist.image_path
     ? supabase.storage
-        .from('images')
-        .getPublicUrl(album.image_path).data.publicUrl
+        .from('artist_images')
+        .getPublicUrl(artist.image_path).data.publicUrl
     : FALLBACK_IMAGE;
 
   const handleClick = () => {
-    router.push(`/album/${album.id}`);
+    router.push(`/artist/${artist.id}`);
   };
 
   return (
     <MediaContextMenu 
         data={{
-            id: album.id,
-            type: 'album', // 🟢 This triggers the new logic in Step 1
-            title: album.title,
-            artist_id: album.artists?.id // 🟢 Ensures "Go to Artist" works
+            id: artist.id,
+            type: 'artist',
+            title: artist.name,
+            artist_id: artist.id
         }}
     >
         <div
@@ -43,10 +44,8 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
             rounded-xl
             p-3
             cursor-pointer
-
             isolate
             will-change-transform
-
             transition-transform
             duration-300
             hover:-translate-y-2
@@ -67,14 +66,15 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
             "
           />
 
-          {/* IMAGE */}
+          {/* IMAGE - 🟢 Circular for Artists */}
           <div
             className="
               relative
               aspect-square
               w-full
-              rounded-lg
-              overflow-hidden          
+              rounded-full 
+              overflow-hidden
+              shadow-lg          
             "
             onDragStart={(e) => e.preventDefault()}
           >
@@ -82,7 +82,7 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
               draggable={false}
               src={imageUrl}
               fill
-              alt={album.title}
+              alt={artist.name}
               className="
                 object-cover
                 transition-transform
@@ -94,12 +94,12 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
           </div>
 
           {/* TEXT */}
-          <div className="flex flex-col w-full pt-4 gap-y-1">
-            <p className="font-semibold truncate" title={album.title}>
-              {album.title}
+          <div className="flex flex-col w-full pt-4 gap-y-1 items-center text-center">
+            <p className="font-semibold truncate w-full" title={artist.name}>
+              {artist.name}
             </p>
             <p className="text-neutral-400 text-sm truncate">
-              By {album.artists?.name || 'Unknown Artist'}
+              Artist
             </p>
           </div>
         </div>
@@ -107,4 +107,4 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
   );
 };
 
-export default AlbumItem;
+export default ArtistItem;

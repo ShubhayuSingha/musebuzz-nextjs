@@ -4,26 +4,34 @@ import React, { useEffect, useRef, useMemo } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
-import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed or use a random string helper
+import { v4 as uuidv4 } from 'uuid'; 
 
-import { MdOutlinePlaylistAdd, MdDeleteOutline } from 'react-icons/md';
+// Icons
+import { MdOutlinePlaylistAdd, MdDeleteOutline, MdQueueMusic } from 'react-icons/md';
+import { BsDisc, BsPerson } from 'react-icons/bs';
 
 import useAddToPlaylistModal from '@/stores/useAddToPlaylistModal';
 import usePlayerStore from '@/stores/usePlayerStore';
-import { useContextMenuStore } from '@/stores/useContextMenuStore'; // 🟢 Import the new store
+import { useContextMenuStore } from '@/stores/useContextMenuStore';
 
 interface SongContextMenuProps {
   children: React.ReactNode;
   songId: string;
-  playlistId?: string; 
+  playlistId?: string;
+  isReadOnly?: boolean; 
+  albumId?: string;
+  artistId?: string;
 }
 
-const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, playlistId }) => {
-  // 🟢 Generate a unique ID for THIS specific menu instance
-  // This ensures that even if the same song is listed twice, only one menu opens.
+const SongContextMenu: React.FC<SongContextMenuProps> = ({ 
+    children, 
+    songId, 
+    playlistId,
+    isReadOnly = false, 
+    albumId,
+    artistId
+}) => {
   const menuId = useMemo(() => uuidv4(), []);
-
-  // 🟢 Use Global Store instead of local state
   const { openId, setOpenId } = useContextMenuStore();
   const visible = openId === menuId;
 
@@ -36,11 +44,9 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
   const player = usePlayerStore();
 
   useEffect(() => {
-    // Only attach listeners if THIS menu is visible
     if (!visible) return;
 
     const handleClick = (e: MouseEvent) => {
-        // If clicking outside, close THIS menu
         if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
             setOpenId(null);
         }
@@ -50,7 +56,6 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
         if (visible) setOpenId(null);
     };
 
-    // Listen for clicks and right-clicks globally to close this menu
     window.addEventListener('click', handleClick);
     window.addEventListener('contextmenu', handleClick); 
     window.addEventListener('scroll', handleScroll, true); 
@@ -64,15 +69,34 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault(); 
-    e.stopPropagation(); // Stop bubbling so parent menus don't trigger
+    e.stopPropagation(); 
 
     let x = e.pageX;
     let y = e.pageY;
     
-    if (x + 200 > window.innerWidth) x = x - 200;
+    // Prevent menu from clipping off the right screen edge
+    if (x + 220 > window.innerWidth) x = x - 220;
     
     setPoints({ x, y });
-    setOpenId(menuId); // 🟢 Set THIS menu as the globally active one
+    setOpenId(menuId); 
+  };
+
+  // --- ACTIONS ---
+
+  const handleAddToQueue = () => {
+    player.addToQueue(songId);
+    toast.success('Added to Queue');
+    setOpenId(null);
+  };
+
+  const handleGoToArtist = () => {
+    if (artistId) router.push(`/artist/${artistId}`);
+    setOpenId(null);
+  };
+
+  const handleGoToAlbum = () => {
+    if (albumId) router.push(`/album/${albumId}`);
+    setOpenId(null);
   };
 
   const handleAddToPlaylist = () => {
@@ -81,7 +105,7 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
   };
 
   const handleRemoveFromPlaylist = async () => {
-    if (!playlistId) return;
+    if (!playlistId || isReadOnly) return; 
 
     player.syncPlaylistQueue(songId, playlistId, 'remove');
 
@@ -100,6 +124,9 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
     setOpenId(null);
   };
 
+  // 🟢 Reusable Class for Menu Items (Replaces the styled-jsx block)
+  const menuItemClass = "w-full flex items-center gap-x-3 px-3 py-2.5 text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm cursor-pointer transition";
+
   return (
     <div onContextMenu={handleContextMenu} className="w-full h-full">
       {children}
@@ -112,44 +139,47 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({ children, songId, pla
                 bg-neutral-800 
                 border border-neutral-700 
                 rounded-md shadow-xl 
-                p-1 min-w-[180px]
+                p-1 min-w-[200px]
                 animate-in fade-in zoom-in-95 duration-100
             "
             style={{ top: points.y, left: points.x }}
          >
-            {/* OPTION 1: Add to Playlist */}
-            <div 
-                onClick={handleAddToPlaylist}
-                className="
-                    w-full 
-                    flex items-center gap-x-3 
-                    px-3 py-2.5 
-                    text-sm text-neutral-200 
-                    hover:bg-neutral-700 hover:text-white 
-                    rounded-sm cursor-pointer
-                    transition
-                "
-            >
-               <MdOutlinePlaylistAdd size={20} />
-               Add to Playlist
+            {/* 1. Add to Queue */}
+            <div onClick={handleAddToQueue} className={menuItemClass}>
+               <MdQueueMusic size={20} />
+               Add to Queue
             </div>
 
-            {/* OPTION 2: Remove */}
-            {playlistId && (
+            {/* 2. Navigation Group */}
+            {(artistId || albumId) && <div className="h-[1px] bg-neutral-700 my-1" />}
+            
+            {artistId && (
+                <div onClick={handleGoToArtist} className={menuItemClass}>
+                   <BsPerson size={20} />
+                   Go to Artist
+                </div>
+            )}
+            
+            {albumId && (
+                <div onClick={handleGoToAlbum} className={menuItemClass}>
+                   <BsDisc size={20} />
+                   Go to Album
+                </div>
+            )}
+
+            <div className="h-[1px] bg-neutral-700 my-1" />
+
+            {/* 3. Playlist Actions */}
+            <div onClick={handleAddToPlaylist} className={menuItemClass}>
+               <MdOutlinePlaylistAdd size={20} />
+               Add to Playlist...
+            </div>
+
+            {/* 4. Remove (Only if NOT Read-Only) */}
+            {playlistId && !isReadOnly && (
                <>
                  <div className="h-[1px] bg-neutral-700 my-1" />
-                 <div 
-                    onClick={handleRemoveFromPlaylist}
-                    className="
-                        w-full 
-                        flex items-center gap-x-3 
-                        px-3 py-2.5 
-                        text-sm text-neutral-200 
-                        hover:bg-neutral-700 hover:text-red-500 
-                        rounded-sm cursor-pointer
-                        transition
-                    "
-                 >
+                 <div onClick={handleRemoveFromPlaylist} className={`${menuItemClass} hover:text-red-500`}>
                     <MdDeleteOutline size={20} />
                     Remove from this Playlist
                  </div>

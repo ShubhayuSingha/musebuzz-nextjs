@@ -27,7 +27,7 @@ interface SidebarProps {
 
 interface SidebarItem {
   id: string;
-  type: 'playlist' | 'album' | 'artist'; // 🟢 Added 'artist' type
+  type: 'playlist' | 'album' | 'artist'; 
   title: string;
   subtitle: string;
   imageUrl: string | null;
@@ -72,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       `)
       .eq('user_id', user.id);
 
-    // 🟢 3. Fetch Saved Artists
+    // 3. Fetch Saved Artists
     const { data: savedArtists } = await supabase
       .from('saved_artists')
       .select(`
@@ -123,21 +123,20 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
     }).filter((item) => item !== null) as SidebarItem[];
 
-    // 🟢 6. Normalize Artists
+    // 6. Normalize Artists
     const formattedArtists = (savedArtists || []).map((item: any) => {
         const artist = item.artists;
         if (!artist) return null;
 
         let imageUrl = '/images/artist-placeholder.png';
         if (artist.image_path) {
-            // 🟢 IMPORTANT: Use 'artist_images' bucket
             const { data } = supabase.storage.from('artist_images').getPublicUrl(artist.image_path);
             imageUrl = data.publicUrl;
         }
 
         return {
             id: artist.id,
-            type: 'artist' as const, // Type allows ContextMenu to show Unfollow
+            type: 'artist' as const, 
             title: artist.name,
             subtitle: 'Artist',
             imageUrl: imageUrl,
@@ -150,7 +149,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
     // 7. Combine & Sort
     const combined = [...formattedPlaylists, ...formattedAlbums, ...formattedArtists]
         .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
-        .slice(0, 10); // Still limiting to 10 most recent
+        .slice(0, 10); 
 
     setLibraryItems(combined);
   };
@@ -264,17 +263,26 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         <ul className="flex flex-col w-full">
           {/* Liked Songs */}
           <li className="mb-2 w-full">
-            <Link 
-                href="/liked" 
-                onClick={handleLikedClick} 
-                className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
-                title="Liked Songs"
+            {/* 🟢 WRAPPED with MediaContextMenu */}
+            <MediaContextMenu 
+                data={{ 
+                    id: 'liked', 
+                    type: 'liked', 
+                    title: 'Liked Songs' 
+                }}
             >
-              <div className={iconBoxClass}>
-                 <AiFillHeart size={28} />
-              </div>
-              <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Liked Songs</span>
-            </Link>
+                <Link 
+                    href="/liked" 
+                    onClick={handleLikedClick} 
+                    className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
+                    title="Liked Songs"
+                >
+                <div className={iconBoxClass}>
+                    <AiFillHeart size={28} />
+                </div>
+                <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Liked Songs</span>
+                </Link>
+            </MediaContextMenu>
           </li>
 
           {/* Your Library Link */}
@@ -299,9 +307,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                 title="Create Playlist" 
             >
               <div className={iconBoxClass}>
-                 <div className="bg-zinc-400 group-hover:bg-white text-black p-1 rounded-[4px] transition">
-                    <AiOutlinePlus size={20} /> 
-                 </div>
+                  <div className="bg-zinc-400 group-hover:bg-white text-black p-1 rounded-[4px] transition">
+                     <AiOutlinePlus size={20} /> 
+                  </div>
               </div>
               <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Create Playlist</span>
             </div>
@@ -314,7 +322,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
          <div className={`border-t border-white/10 mt-2 mb-2 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-4' : 'mx-6'}`} />
       )}
 
-      {/* SCROLLABLE LIST - 🟢 ADDED pb-24 padding */}
+      {/* SCROLLABLE LIST */}
       <div className="flex-1 overflow-y-auto custom-scrollbar overflow-x-hidden w-full pb-24">
          <AnimatePresence initial={false} mode='popLayout'>
            {libraryItems.map((item) => (
@@ -329,34 +337,33 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                  >
-                     <Link 
-                       href={item.path}
-                       className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
-                       title={`${item.title}\n${item.subtitle}`}
-                     >
-                         {/* Fixed Width Icon Container (Matches Collapsed Width) */}
-                         <div className={iconBoxClass}>
-                            <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
-                                <Image 
-                                    fill
-                                    // 🟢 Circular image for artists, square for others
-                                    src={item.imageUrl || '/images/playlist-placeholder.jpg'}
-                                    alt={item.title}
-                                    className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
-                                />
-                            </div>
-                         </div>
+                      <Link 
+                        href={item.path}
+                        className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
+                        title={`${item.title}\n${item.subtitle}`}
+                      >
+                          {/* Fixed Width Icon Container */}
+                          <div className={iconBoxClass}>
+                             <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
+                                 <Image 
+                                     fill
+                                     src={item.imageUrl || '/images/playlist-placeholder.jpg'}
+                                     alt={item.title}
+                                     className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
+                                 />
+                             </div>
+                          </div>
 
-                         {/* Text Content (Collapses smoothly) */}
-                         <div className={textContainerClass}>
+                          {/* Text Content */}
+                          <div className={textContainerClass}>
                              <p className="truncate text-white font-medium text-sm pr-4">
                                  {item.title}
                              </p>
                              <p className="truncate text-zinc-400 text-xs pr-4">
                                  {item.subtitle}
                              </p>
-                         </div>
-                     </Link>
+                          </div>
+                      </Link>
                  </motion.div>
              </MediaContextMenu>
            ))}

@@ -17,13 +17,24 @@ export default async function Liked() {
 
   const { data } = await supabase
     .from("liked_songs")
-    .select("*, songs(*, albums(*, artists(*)))")
+    .select(`
+      *, 
+      songs(
+        *, 
+        albums(
+          id, 
+          title, 
+          image_path, 
+          artists(id, name)
+        )
+      )
+    `)
     .eq("user_id", session?.user?.id)
     .order("created_at", { ascending: false });
 
   const songs = data
     ? data.map((item: any) => {
-        // 🟢 Generate Image URL
+        // Generate Image URL
         const imagePath = item.songs.albums?.image_path;
         let imageUrl = '/images/album-placeholder.png'; // Fallback
         
@@ -37,7 +48,7 @@ export default async function Liked() {
           author: item.songs.albums?.artists?.name || "Unknown Artist",
           album_title: item.songs.albums?.title || "Unknown Album",
           liked_created_at: item.created_at,
-          imageUrl: imageUrl, // 🟢 Pass Image URL
+          imageUrl: imageUrl, 
         };
       })
     : [];
