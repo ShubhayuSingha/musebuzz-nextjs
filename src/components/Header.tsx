@@ -5,25 +5,39 @@ import Button from "./Button";
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
-import GlobalSearch from "@/components/GlobalSearch"; // 1. Import the component
+import GlobalSearch from "@/components/GlobalSearch"; 
+import usePlayerStore from "@/stores/usePlayerStore"; // 🟢 1. Import your player store
 
 const Header = () => {
   const { onOpen } = useAuthModalStore();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
   const router = useRouter();
+  
+  // 🟢 2. Extract ONLY the reset function (this prevents the Header from re-rendering every time the volume changes)
+  const resetPlayer = usePlayerStore((state) => state.reset); 
 
   const handleLogout = async () => {
-    const { error } = await supabaseClient.auth.signOut();
-    router.refresh();
+    // 1. Reset the Zustand store in RAM
+    resetPlayer(); 
+    
+    // 2. Nuke the Zustand persistent storage from the browser's hard drive
+    localStorage.removeItem('musebuzz-player-storage');
+
+    // 3. Tell Supabase to destroy the auth session cookie
+    await supabaseClient.auth.signOut();
+    
+    // 4. THE MAGIC BULLET: Force a hard browser reload instead of a soft Next.js refresh.
+    // This completely obliterates all React memory, stale states, and ghost UI.
+    window.location.href = '/';
   };
 
   return (
     <div 
       className="
-        sticky     /* 1. STICKY POSITIONING */
-        top-0      /* 2. STICK TO TOP */
-        z-50       /* 3. FLOAT ABOVE CONTENT */
+        sticky     
+        top-0      
+        z-50       
         h-fit 
         bg-black 
         py-3 
@@ -34,11 +48,6 @@ const Header = () => {
     >
       <div className="w-full flex items-center justify-between gap-x-4">
         
-        {/* 2. Search Bar Section 
-           - Replaced the empty div
-           - Added 'flex-1' so it takes up available space up to its max-width
-           - Removed 'hidden' so it is visible on mobile too
-        */}
         <div className="flex-1 flex items-center max-w-[500px]">
            <GlobalSearch />
         </div>

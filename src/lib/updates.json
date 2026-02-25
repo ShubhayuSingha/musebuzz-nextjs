@@ -1,5 +1,18 @@
 [
   {
+    "versionName": "v1.13",
+    "date": "25th Feb 2025", 
+    "time": "7:15 PM IST",
+    "title": "⚡Changed Login System⚡",
+    "description": "Removed Email verification for login",
+    "changes": [
+      "Now, you dont have to verify emails for login.",
+      "If you use google login, then you still have to use a real google account.",
+      "Fixed an issue where states where bleeding across accounts if you logged out and logged in the same browser in the same device without clearing cache.",
+      "Fixed auth modal issue where modal didn't close after login."
+    ]
+  },
+  {
     "versionName": "v1.12",
     "date": "25th Feb 2025", 
     "time": "4:25 AM IST",

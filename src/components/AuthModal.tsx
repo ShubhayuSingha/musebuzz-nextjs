@@ -1,6 +1,7 @@
-// src/components/AuthModal.tsx
 'use client';
 
+import { useEffect } from 'react'; // 🟢 1. Import useEffect
+import { useRouter } from 'next/navigation'; // 🟢 2. Import useRouter
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
@@ -9,7 +10,21 @@ import useAuthModalStore from '@/stores/useAuthModalStore';
 
 const AuthModal = () => {
   const supabaseClient = useSupabaseClient();
+  const router = useRouter(); // 🟢 3. Initialize router
   const { isOpen, onClose, view } = useAuthModalStore();
+
+  // 🟢 4. ADD THIS: The Auth Event Listener
+  useEffect(() => {
+    const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        onClose();        // Close the modal automatically
+        router.refresh(); // Instantly update the page to show the logged-in UI
+      }
+    });
+
+    // Cleanup the listener when the component unmounts
+    return () => subscription.unsubscribe();
+  }, [supabaseClient, onClose, router]);
 
   const onChange = (open: boolean) => {
     if (!open) {
@@ -27,8 +42,8 @@ const AuthModal = () => {
       <Auth
         view={view}
         theme="dark" 
-        magicLink
-        showLinks={false}
+        magicLink={false}
+        showLinks={true}
         providers={['google']}
         supabaseClient={supabaseClient}
         appearance={{
