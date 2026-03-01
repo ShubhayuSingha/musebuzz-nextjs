@@ -1,13 +1,15 @@
 // src/app/loading.tsx
-'use client';
-
-import { ScaleLoader } from "react-spinners";
-
 const Loading = () => {
   return (
-    // Changed 'h-full' to 'h-[70vh]' to force the box to have height
     <div className="bg-transparent rounded-lg h-[70vh] w-full flex items-center justify-center">
-      <ScaleLoader color="#940ae3c8" height={40} margin={3} radius={3} width={4} />
+      <div className="flex flex-col items-center gap-4">
+        {/* The exact same Tailwind spinner from the homepage */}
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+        {/* Context-appropriate pulsing text */}
+        <p className="text-neutral-400 text-sm font-medium animate-pulse">
+          Tuning in...
+        </p>
+      </div>
     </div>
   );
 };

@@ -15,7 +15,6 @@ interface ClientLayoutProps {
   defaultCollapsed: boolean; 
 }
 
-// 🟢 Renamed Component
 const ClientLayout: React.FC<ClientLayoutProps> = ({ 
     children, 
     defaultCollapsed 
@@ -37,12 +36,22 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
         <div className="flex flex-1 overflow-hidden h-full">
             <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} />
             
-            <main className="flex-1 overflow-y-auto pb-20 min-w-0">
+            {/* 🟢 THE FIX: A vertical column wrapper for the entire right side */}
+            <div className="flex flex-col flex-1 min-w-0">
+                
+                {/* 1. Header sits proudly at the top, immune to shrinking */}
                 <Header />
-                {children}
-            </main>
-            
-            <Queue />
+                
+                {/* 2. Main content and Queue sit side-by-side UNDER the Header */}
+                <div className="flex flex-1 overflow-hidden">
+                    <main className="flex-1 overflow-y-auto pb-20 min-w-0">
+                        {children}
+                    </main>
+                    
+                    <Queue />
+                </div>
+                
+            </div>
         </div>
         
         <Player />

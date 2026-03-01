@@ -1,3 +1,4 @@
+// src/app/page.tsx
 'use client';
 
 import { useEffect, useRef, useState, MouseEvent } from 'react';
@@ -6,7 +7,7 @@ import { useUser } from '@supabase/auth-helpers-react';
 import AlbumItem from '@/components/AlbumItem';
 import PlaylistItem from '@/components/PlaylistItem';
 import MixPlaylistItem from '@/components/MixPlaylistItem'; 
-import ArtistItem from '@/components/ArtistItem'; // 🟢 Import
+import ArtistItem from '@/components/ArtistItem'; 
 import Greeting from '@/components/Greeting';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
 import { motion } from 'framer-motion';
@@ -23,6 +24,9 @@ const DRAG_THRESHOLD = 5;
 export default function Home() {
   const { version } = usePlaylistStore();
   const user = useUser();
+
+  // 🟢 NEW: Global Loading State
+  const [isLoading, setIsLoading] = useState(true);
 
   // Data States
   const [jumpBackIn, setJumpBackIn] = useState<any[]>([]);
@@ -75,6 +79,9 @@ export default function Home() {
 
   useEffect(() => {
     const fetchDashboard = async () => {
+      // 🟢 1. Instantly trigger the loader      
+      
+      try {
         // 1. PUBLIC DATA (Fetch this for EVERYONE)
         const { data: newAlbums } = await supabase
             .from('albums')
@@ -85,7 +92,7 @@ export default function Home() {
 
         // 2. USER-ONLY DATA (Only fetch if logged in)
         if (user) {
-            // A. JUMP BACK IN (Albums + Playlists + Artists)
+            // A. JUMP BACK IN
             const { data: recentAlbums } = await supabase
                 .from('saved_albums')
                 .select('last_accessed_at, albums(*, artists(*))')
@@ -100,7 +107,6 @@ export default function Home() {
                 .order('last_accessed_at', { ascending: false })
                 .limit(6);
 
-            // 🟢 FETCH RECENT ARTISTS
             const { data: recentArtists } = await supabase
                 .from('saved_artists')
                 .select('last_accessed_at, artists(*)')
@@ -108,14 +114,12 @@ export default function Home() {
                 .order('last_accessed_at', { ascending: false })
                 .limit(6);
 
-            // 🟢 COMBINE ALL 3 TYPES
             const combined = [
                 ...(recentAlbums?.map((a: any) => ({ ...a.albums, type: 'album', sortTime: a.last_accessed_at })) || []),
                 ...(recentPlaylists?.map((p: any) => ({ ...p, type: 'playlist', sortTime: p.last_accessed_at })) || []),
                 ...(recentArtists?.map((ar: any) => ({ ...ar.artists, type: 'artist', sortTime: ar.last_accessed_at })) || [])
             ].sort((a, b) => new Date(b.sortTime).getTime() - new Date(a.sortTime).getTime());
 
-            // Add Liked Songs card at the start
             const likedCard = { id: 'liked', title: 'Liked Songs', image_path: null, type: 'playlist', user_id: user.id };
             setJumpBackIn([likedCard, ...combined]);
 
@@ -190,6 +194,12 @@ export default function Home() {
                 }
             }
         }
+      } catch (error) {
+        console.error("Failed to load dashboard data:", error);
+      } finally {
+        // 🟢 2. Turn off the loader ONLY after everything has been fetched and set
+        setIsLoading(false);
+      }
     };
 
     fetchDashboard();
@@ -354,7 +364,6 @@ export default function Home() {
     customRenderer?: (item: any) => React.ReactNode 
   ) => {
     const DefaultRenderer = (item: any) => {
-       // 🟢 ADDED: Handle Artists
        if (item.type === 'artist') return <ArtistItem artist={item} />;
        if (key === 'yourPlaylists') return <PlaylistItem playlist={item} />;
        return <AlbumItem album={item} />;
@@ -428,22 +437,59 @@ export default function Home() {
     </div>
   )};
 
-  /* =======================
-        INIT
+/* =======================
+        INIT & RESIZE OBSERVER
      ======================= */
 
   useEffect(() => {
-    updateScrollButtons(jumpBackInRef, 'jumpBackIn');
-    updateScrollButtons(madeForYouRef, 'madeForYou'); 
-    updateScrollButtons(suggestedRef, 'suggestedAlbums');
-    updateScrollButtons(yourPlaylistsRef, 'yourPlaylists');
-    updateScrollButtons(newestRef, 'newestAlbums');
+    const checkAllScrolls = () => {
+      updateScrollButtons(jumpBackInRef, 'jumpBackIn');
+      updateScrollButtons(madeForYouRef, 'madeForYou'); 
+      updateScrollButtons(suggestedRef, 'suggestedAlbums');
+      updateScrollButtons(yourPlaylistsRef, 'yourPlaylists');
+      updateScrollButtons(newestRef, 'newestAlbums');
+    };
+
+    // 1. Initial check when data loads
+    checkAllScrolls();
+
+    // 2. Watch for physical container resizing (e.g. Sidebar or Queue toggling)
+    const observer = new ResizeObserver(() => {
+      checkAllScrolls();
+    });
+
+    if (jumpBackInRef.current) observer.observe(jumpBackInRef.current);
+    if (madeForYouRef.current) observer.observe(madeForYouRef.current);
+    if (suggestedRef.current) observer.observe(suggestedRef.current);
+    if (yourPlaylistsRef.current) observer.observe(yourPlaylistsRef.current);
+    if (newestRef.current) observer.observe(newestRef.current);
+
+    // 3. Fallback for entire window resizing
+    window.addEventListener('resize', checkAllScrolls);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', checkAllScrolls);
+    };
   }, [jumpBackIn, madeForYou, suggestedAlbums, yourPlaylists, newestAlbums]);
 
   /* =======================
         RENDER
      ======================= */
 
+  // 🟢 3. The Loading Screen Interceptor
+  if (isLoading) {
+    return (
+      <div className="h-[calc(100vh-100px)] w-full flex items-center justify-center bg-black">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+          <p className="text-neutral-400 text-sm font-medium animate-pulse">Loading MuseBuzz...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🟢 4. The main return only executes when isLoading is false
   return (
     <div className="p-8 select-none">
       <Greeting />
@@ -471,7 +517,7 @@ export default function Home() {
                     );
                  }
                  
-                 // 🟢 Artist
+                 // Artist
                  if (item.type === 'artist') return <ArtistItem artist={item} />;
 
                  // Album
