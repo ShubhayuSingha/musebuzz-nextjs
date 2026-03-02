@@ -1,4 +1,3 @@
-// src/components/PlayerContent.tsx
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from "react";
@@ -7,6 +6,7 @@ import { Howl } from "howler";
 import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1 } from "react-icons/bs";
 import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2"; 
 import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
+import { TbMicrophone2 } from "react-icons/tb"; // 🟢 LYRICS ICON
 import Slider from 'rc-slider';
 import Image from "next/image";
 
@@ -45,11 +45,13 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     bucketB,       
     shuffledOrder, 
     isPlayingPriority,
-    isPlayingAutoplay, // 🟢 Get this from store
-    lastActiveContextId 
+    isPlayingAutoplay, 
+    lastActiveContextId,
+    seekRequest,         
+    setSeekRequest
   } = usePlayerStore(); 
 
-  const { toggle, isOpen } = useQueueStore();
+  const { toggle, activeView, isOpen } = useQueueStore(); 
   const onPlayNext = playNext; 
 
   const soundRef = useRef<Howl | null>(null);
@@ -58,7 +60,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null); 
   const saveProgressRef = useRef<((manualSeek?: number) => void) | null>(null);
   
-  // Fix for Zombie Player: Track if the song ended naturally
   const isSongEndedRef = useRef(false);
 
   const repeatModeRef = useRef(repeatMode);
@@ -78,6 +79,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     const { data: imageData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
     return imageData.publicUrl;
   }, [song, supabase]); 
+
+  // 🟢 NEW: Check if the current song has lyrics in the database
+  const hasLyrics = !!song?.lyrics_snippet;
 
   const Icon = isPlaying ? BsPauseFill : BsPlayFill;
   const VolumeIcon = volume === 0 ? HiSpeakerXMark : HiSpeakerWave;
@@ -145,6 +149,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         if (typeof currentSeek === 'number' && currentSeek > 2) {
             soundRef.current.seek(0);
             setCurrentTime(0); 
+            (window as any).__musebuzzCurrentTime = 0; // 🟢 Sync Memory
         } else {
             playPrevious();
         }
@@ -163,7 +168,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   useEffect(() => {
     const sound = soundRef.current;
     if (sound) {
-      // Fix: Don't force play if the song ended naturally
       if (isPlaying && !sound.playing() && !isSongEndedRef.current) {
         sound.play();
         if (!saveIntervalRef.current) {
@@ -210,9 +214,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
     
     setCurrentTime(0); 
+    (window as any).__musebuzzCurrentTime = 0; // 🟢 Sync Memory
     setDuration(0);
-    
-    // Reset the flag when loading a new song
     isSongEndedRef.current = false;
 
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
@@ -228,12 +231,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             onplay: () => setIsPlaying(true),
             onpause: () => setIsPlaying(false),
             onend: () => {
-              // Set flag to true so useEffect doesn't restart it
               isSongEndedRef.current = true;
-
               if (repeatModeRef.current === 'one') {
                   newSound.play();
-                  // Reset flag if repeating same song
                   isSongEndedRef.current = false;
               } else {
                   onPlayNext(); 
@@ -247,6 +247,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                     if (!isNaN(seekSeconds)) {
                         newSound.seek(seekSeconds);
                         setCurrentTime(seekSeconds);
+                        (window as any).__musebuzzCurrentTime = seekSeconds; // 🟢 Sync Memory
                     }
                     sessionStorage.removeItem('restore_seek');
                 }
@@ -265,11 +266,15 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [songPath, activeIdSignature, setIsPlaying, onPlayNext]); 
 
+  // 🟢 CustomEvent Broadcaster for Lyrics Sync
   useEffect(() => {
     const animate = () => {
       const sound = soundRef.current;
       if (sound && sound.playing() && !isDragging) {
-        setCurrentTime(sound.seek());
+        const seekVal = sound.seek() as number;
+        setCurrentTime(seekVal);
+        (window as any).__musebuzzCurrentTime = seekVal; // 🟢 Sync Memory
+        window.dispatchEvent(new CustomEvent('lyrics-time-update', { detail: seekVal }));
       }
       animationFrameRef.current = requestAnimationFrame(animate);
     };
@@ -282,11 +287,25 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     };
   }, [isPlaying, isDragging, activeId, activeIdSignature]);
 
+  // 🟢 Click-To-Seek listener from Lyrics
+  useEffect(() => {
+    if (seekRequest !== null && soundRef.current) {
+        soundRef.current.seek(seekRequest);
+        setCurrentTime(seekRequest);
+        (window as any).__musebuzzCurrentTime = seekRequest; // 🟢 Sync Memory
+        if (!isPlaying) setIsPlaying(true);
+        if (!soundRef.current.playing()) soundRef.current.play();
+        setSeekRequest(null); 
+    }
+  }, [seekRequest, setIsPlaying, setSeekRequest, isPlaying]);
+
   const handlePlay = () => setIsPlaying(!isPlaying);
 
   const handleSliderChange = (value: number | number[]) => {
     setIsDragging(true); 
     setCurrentTime(value as number); 
+    (window as any).__musebuzzCurrentTime = value as number; // 🟢 Sync Memory
+    window.dispatchEvent(new CustomEvent('lyrics-time-update', { detail: value as number }));
   };
 
   const handleSliderAfterChange = (value: number | number[]) => {
@@ -334,7 +353,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         
         {/* LEFT SECTION */}
         <div className="flex w-full justify-start items-center gap-x-4">
-          
           <div 
             onClick={onClickAlbum}
             className="relative h-14 w-14 rounded-md overflow-hidden shadow-md cursor-pointer hover:opacity-80 transition flex-shrink-0"
@@ -348,7 +366,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           
           <div className="hidden md:flex items-center gap-x-3 max-w-[250px]">
              <div className="flex flex-col overflow-hidden">
-                {/* Title */}
                 <div className="w-full overflow-hidden whitespace-nowrap relative">
                     {shouldMarquee ? (
                         <div className="w-full overflow-hidden">
@@ -370,8 +387,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                         </p>
                     )}
                 </div>
-
-                {/* Artist */}
                 <p 
                     onClick={onClickArtist}
                     className="text-neutral-400 text-sm truncate cursor-pointer hover:text-white hover:underline transition"
@@ -380,49 +395,25 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                   {song.albums?.artists?.name || "Unknown Artist"}
                 </p>
              </div>
-
              <div className="flex-shrink-0">
                  <LikeButton songId={song.id} />
              </div>
-             
           </div>
         </div>
 
         {/* CENTER SECTION */}
         <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px]">
           <div className="flex items-center gap-x-6">
-            
-            {/* 🟢 Shuffle Button: Disabled if AI mode is active */}
             <BsShuffle 
               size={20} 
               onClick={isPlayingAutoplay ? undefined : toggleShuffle} 
-              className={`
-                 transition
-                 ${isPlayingAutoplay 
-                    ? 'text-neutral-700 cursor-not-allowed' // Disabled Style
-                    : isShuffled 
-                        ? 'text-green-500 cursor-pointer' 
-                        : 'text-neutral-400 hover:text-white cursor-pointer'
-                 }
-              `}
+              className={`transition ${isPlayingAutoplay ? 'text-neutral-700 cursor-not-allowed' : isShuffled ? 'text-green-500 cursor-pointer' : 'text-neutral-400 hover:text-white cursor-pointer'}`}
             />
-
-            <AiFillStepBackward
-              size={30}
-              onClick={handlePrevious} 
-              className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90"
-            />
-            <div 
-              onClick={handlePlay}
-              className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition shadow-lg"
-            >
+            <AiFillStepBackward size={30} onClick={handlePrevious} className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90" />
+            <div onClick={handlePlay} className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition shadow-lg">
               <Icon size={26} className="text-black" />
             </div>
-            <AiFillStepForward
-              size={30}
-              onClick={onPlayNext}
-              className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90"
-            />
+            <AiFillStepForward size={30} onClick={onPlayNext} className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90" />
             <div onClick={toggleRepeat} className="cursor-pointer">
                 {repeatMode === 'one' ? (
                    <BsRepeat1 size={20} className="text-green-500 transition" />
@@ -433,80 +424,62 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           </div>
 
           <div className="flex items-center gap-x-3 w-full group px-2">
-            <p className="text-neutral-400 text-[12px] w-10 text-right tabular-nums">
-              {formatTime(currentTime)}
-            </p>
-            
+            <p className="text-neutral-400 text-[12px] w-10 text-right tabular-nums">{formatTime(currentTime)}</p>
             <Slider 
-              min={0}
-              max={duration || 100} 
-              value={currentTime}
-              onChange={handleSliderChange}           
-              onChangeComplete={handleSliderAfterChange}
-              step={0.1}
+              min={0} max={duration || 100} value={currentTime}
+              onChange={handleSliderChange} onChangeComplete={handleSliderAfterChange} step={0.1}
               styles={{
                 track: { backgroundColor: '#a855f7' }, 
-                handle: { 
-                  backgroundColor: '#fff', 
-                  border: 'none', 
-                  boxShadow: 'none', 
-                },
+                handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' },
                 rail: { backgroundColor: 'rgb(63 63 70)' }
               }}
-              className="
-                !cursor-pointer
-                [&_.rc-slider-handle]:!cursor-pointer
-                [&_.rc-slider-handle]:opacity-0
-                group-hover:[&_.rc-slider-handle]:opacity-100
-                [&_.rc-slider-handle]:transition-opacity
-              "
+              className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity"
             />
-
-            <p className="text-neutral-400 text-[12px] w-10 text-left tabular-nums">
-              {formatTime(duration)}
-            </p>
+            <p className="text-neutral-400 text-[12px] w-10 text-left tabular-nums">{formatTime(duration)}</p>
           </div>
         </div>
         
         {/* RIGHT SECTION */}
         <div className="flex w-full justify-end items-center pr-2 gap-x-4">
+          
+          {/* 🟢 LYRICS BUTTON (Greyed out if no lyrics exist) */}
           <div 
-              onClick={toggle}
-              className={`cursor-pointer transition ${isOpen ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
+              onClick={() => {
+                 if (hasLyrics) toggle('lyrics');
+              }}
+              className={`transition ${
+                 !hasLyrics 
+                   ? 'text-neutral-800 cursor-not-allowed' 
+                   : activeView === 'lyrics' && isOpen 
+                     ? 'text-green-500 cursor-pointer' 
+                     : 'text-neutral-400 hover:text-white cursor-pointer'
+              }`}
+              title={hasLyrics ? "Lyrics" : "No lyrics available"}
+          >
+              <TbMicrophone2 size={22} />
+          </div>
+
+          {/* QUEUE BUTTON */}
+          <div 
+              onClick={() => toggle('queue')}
+              className={`cursor-pointer transition ${activeView === 'queue' && isOpen ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`}
               title="Queue"
           >
               <HiQueueList size={22} />
           </div>
 
           <div className="flex items-center gap-x-2 w-[120px]">
-              <VolumeIcon 
-                  onClick={toggleMute} 
-                  className="cursor-pointer hover:text-white transition text-neutral-400" 
-                  size={24} 
-              />
+              <VolumeIcon onClick={toggleMute} className="cursor-pointer hover:text-white transition text-neutral-400" size={24} />
               <div className="relative w-full flex items-center group">
                 <Slider 
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    value={volume}
+                    min={0} max={1} step={0.01} value={volume}
                     onChange={(value) => setVolume(value as number)}
                     styles={{
                         track: { backgroundColor: '#a855f7' }, 
-                        handle: { 
-                            backgroundColor: '#fff', 
-                            border: 'none', 
-                            boxShadow: 'none',
-                        },
+                        handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' },
                         rail: { backgroundColor: 'rgb(63 63 70)' }
                     }}
-                    className="
-                      !cursor-pointer
-                      [&_.rc-slider-handle]:!cursor-pointer
-                      [&_.rc-slider-handle]:opacity-0
-                      group-hover:[&_.rc-slider-handle]:opacity-100
-                      [&_.rc-slider-handle]:transition-opacity
-                    "
+                    className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity"
                 />
               </div>
           </div>

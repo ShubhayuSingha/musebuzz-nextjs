@@ -1,5 +1,3 @@
-// src/components/Queue.tsx
-
 'use client';
 
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
@@ -13,6 +11,9 @@ import useQueueStore from '@/stores/useQueueStore';
 import { supabase } from '@/lib/supabaseClient';
 import LikeButton from '@/components/LikeButton';
 import { motion, AnimatePresence, Reorder, useDragControls, useMotionValue, useTransform, PanInfo, DragControls } from 'framer-motion';
+
+// 🟢 Import the LyricsPlayer
+import LyricsPlayer from '@/components/LyricsPlayer'; 
 
 /* =========================
    CONFIG
@@ -230,7 +231,7 @@ const DraggableQueueItem = ({ item, song, idx, source, onPlay, onRemove, onAddTo
 ========================= */
 
 export default function Queue() {
-  const { isOpen, onClose, width, setWidth } = useQueueStore();
+  const { isOpen, onClose, width, setWidth, activeView, toggle } = useQueueStore();
   const player = usePlayerStore();
 
   const [songsCache, setSongsCache] = useState<Record<string, SongData>>({});
@@ -251,7 +252,6 @@ export default function Queue() {
   }, [fullContextList, player.isPlayingPriority, player.lastActiveContextId, player.activeId]);
 
   const contextItems = useMemo<ContextItem[]>(() => {
-    // If playing AI, we hide context
     if (player.isPlayingAutoplay) return [];
     if (currentIndex === -1 && fullContextList.length > 0) return [];
     
@@ -359,17 +359,20 @@ export default function Queue() {
 
   /* -------- resize logic -------- */
   const resizing = useRef(false);
+  
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     resizing.current = true;
     document.body.style.userSelect = 'none';
     document.body.style.cursor = 'col-resize';
   }, []);
+  
   const stopResizing = useCallback(() => {
     resizing.current = false;
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
   }, []);
+  
   const resize = useCallback((e: MouseEvent) => {
     if (!resizing.current) return;
     const w = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - e.clientX));
@@ -410,149 +413,151 @@ export default function Queue() {
             `}
           />
 
-          {/* Header */}
-          <div className="p-4 border-b border-neutral-800 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Queue</h2>
-            <button onClick={onClose} className="text-neutral-400 hover:text-white transition">
-              <IoClose size={24} />
-            </button>
-          </div>
+          
 
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-neutral-800">
+          {/* 🟢 THE FIX: Conditional scrolling wrapper prevents double scrollbars */}
+          {/* When in lyrics mode, this container becomes overflow-hidden so the Lyrics component can handle its own scrolling */}
+          <div className={`flex-1 relative ${activeView === 'queue' ? 'overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-800' : 'overflow-hidden'}`}>
             
-            {/* 1. NOW PLAYING */}
-            <div className="mb-6 mt-2">
-              <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
-                Now Playing
-              </h3>
-              {player.activeId && songsCache[player.activeId] ? (
-                <QueueItemContent
-                  song={songsCache[player.activeId]}
-                  idx={1}
-                  source="active"
-                  isPlaying={player.isPlaying}
-                  isActive
-                  onPlay={() => player.setIsPlaying(!player.isPlaying)}
-                />
-              ) : (
-                <p className="text-neutral-400 text-sm px-2">Nothing playing</p>
-              )}
-            </div>
-
-            {/* 2. PRIORITY QUEUE (Bucket B) */}
-            {priorityList.length > 0 && (
-              <div className="mb-6">
-                {/* 🟢 UPDATED: Flex container with Title on left, Clear button on right */}
-                <div className="flex items-center justify-between mb-2 px-2">
-                  <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
-                    Next In Queue
-                    <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
-                      {priorityList.length}
-                    </span>
+            {activeView === 'queue' ? (
+              <div className="p-2">
+                
+                {/* 1. NOW PLAYING */}
+                <div className="mb-6 mt-2">
+                  <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
+                    Now Playing
                   </h3>
-                  
-                  <button 
-                    onClick={() => player.clearPriorityQueue()}
-                    className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 hover:text-white transition-colors border border-neutral-700 hover:border-neutral-500 rounded px-2 py-0.5"
-                  >
-                    Clear
-                  </button>
+                  {player.activeId && songsCache[player.activeId] ? (
+                    <QueueItemContent
+                      song={songsCache[player.activeId]}
+                      idx={1}
+                      source="active"
+                      isPlaying={player.isPlaying}
+                      isActive
+                      onPlay={() => player.setIsPlaying(!player.isPlaying)}
+                    />
+                  ) : (
+                    <p className="text-neutral-400 text-sm px-2">Nothing playing</p>
+                  )}
                 </div>
 
-                <Reorder.Group
-                  axis="y"
-                  values={priorityList}
-                  onReorder={handlePriorityReorder}
-                  className="flex flex-col gap-1"
-                >
-                  {priorityList.map((item, i) => (
-                    <DraggableQueueItem
-                      key={item.uid}
-                      item={item}
-                      song={songsCache[item.id]}
-                      idx={i + 1}
-                      source="priority"
-                      onPlay={() => {
-                        const realIdx = priorityList.findIndex((b) => b.uid === item.uid);
-                        if (realIdx !== -1) player.playQueueItem(realIdx);
-                      }}
-                      onRemove={() => player.removeFromPriority(item.uid)}
-                      onAddToPriority={undefined} 
-                    />
-                  ))}
-                </Reorder.Group>
-              </div>
-            )}
-
-            {/* 3. CONTEXT QUEUE (Bucket A) */}
-            {(contextItems.length > 0 || !player.isPlayingAutoplay) && (
-              <div className="mb-2">
-                <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
-                  Next from:{' '}
-                  <span className="text-neutral-300">
-                    {player.activeContext?.title || 'Context'}
-                  </span>
-                </h3>
-
-                {contextItems.length === 0 ? (
-                  <p className="text-neutral-500 text-sm px-2 italic mb-4">
-                    End of list
-                  </p>
-                ) : (
-                  <Reorder.Group
-                    axis="y"
-                    values={contextItems}
-                    onReorder={handleContextReorder}
-                    className="flex flex-col gap-1"
-                  >
-                    {contextItems.map((item, i) => (
-                      <DraggableQueueItem
-                        key={item.uid}
-                        item={item}
-                        song={songsCache[item.id]}
-                        idx={i + 1}
-                        source="context"
-                        onPlay={() => player.setId(item.id)}
-                        onRemove={() => player.removeFromContext(item.id)}
-                        onAddToPriority={() => player.addToQueue(item.id)} 
-                      />
-                    ))}
-                  </Reorder.Group>
-                )}
-              </div>
-            )}
-
-            {/* 4. AUTOPLAY / AI QUEUE (Bucket C) */}
-            {autoplayItems.length > 0 && (
-                <div className="mt-8 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-center gap-2 mb-3 px-2 border-t border-neutral-800 pt-6">
-                        <BsStars className="text-emerald-500" size={14} />
-                        <h3 className="text-xs font-bold text-emerald-500 uppercase tracking-wider">
-                            Recommended for you
-                        </h3>
+                {/* 2. PRIORITY QUEUE (Bucket B) */}
+                {priorityList.length > 0 && (
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2 px-2">
+                      <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                        Next In Queue
+                        <span className="text-[10px] bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded">
+                          {priorityList.length}
+                        </span>
+                      </h3>
+                      
+                      <button 
+                        onClick={() => player.clearPriorityQueue()}
+                        className="text-[10px] uppercase font-bold tracking-wider text-neutral-400 hover:text-white transition-colors border border-neutral-700 hover:border-neutral-500 rounded px-2 py-0.5"
+                      >
+                        Clear
+                      </button>
                     </div>
 
                     <Reorder.Group
-                        axis="y"
-                        values={autoplayItems}
-                        onReorder={handleAutoplayReorder}
-                        className="flex flex-col gap-1"
+                      axis="y"
+                      values={priorityList}
+                      onReorder={handlePriorityReorder}
+                      className="flex flex-col gap-1"
                     >
-                        {autoplayItems.map((item, i) => (
-                            <DraggableQueueItem
-                                key={item.uid}
-                                item={item}
-                                song={songsCache[item.id]}
-                                idx={i + 1}
-                                source="autoplay"
-                                onPlay={() => player.playAutoplayItem(item.id)}
-                                onRemove={() => handleRemoveFromAutoplay(item.uid)}
-                                onAddToPriority={() => player.addToQueue(item.id)}
-                            />
-                        ))}
+                      {priorityList.map((item, i) => (
+                        <DraggableQueueItem
+                          key={item.uid}
+                          item={item}
+                          song={songsCache[item.id]}
+                          idx={i + 1}
+                          source="priority"
+                          onPlay={() => {
+                            const realIdx = priorityList.findIndex((b) => b.uid === item.uid);
+                            if (realIdx !== -1) player.playQueueItem(realIdx);
+                          }}
+                          onRemove={() => player.removeFromPriority(item.uid)}
+                          onAddToPriority={undefined} 
+                        />
+                      ))}
                     </Reorder.Group>
-                </div>
+                  </div>
+                )}
+
+                {/* 3. CONTEXT QUEUE (Bucket A) */}
+                {(contextItems.length > 0 || !player.isPlayingAutoplay) && (
+                  <div className="mb-2">
+                    <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
+                      Next from:{' '}
+                      <span className="text-neutral-300">
+                        {player.activeContext?.title || 'Context'}
+                      </span>
+                    </h3>
+
+                    {contextItems.length === 0 ? (
+                      <p className="text-neutral-500 text-sm px-2 italic mb-4">
+                        End of list
+                      </p>
+                    ) : (
+                      <Reorder.Group
+                        axis="y"
+                        values={contextItems}
+                        onReorder={handleContextReorder}
+                        className="flex flex-col gap-1"
+                      >
+                        {contextItems.map((item, i) => (
+                          <DraggableQueueItem
+                            key={item.uid}
+                            item={item}
+                            song={songsCache[item.id]}
+                            idx={i + 1}
+                            source="context"
+                            onPlay={() => player.setId(item.id)}
+                            onRemove={() => player.removeFromContext(item.id)}
+                            onAddToPriority={() => player.addToQueue(item.id)} 
+                          />
+                        ))}
+                      </Reorder.Group>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. AUTOPLAY / AI QUEUE (Bucket C) */}
+                {autoplayItems.length > 0 && (
+                    <div className="mt-8 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex items-center gap-2 mb-3 px-2 border-t border-neutral-800 pt-6">
+                            <BsStars className="text-emerald-500" size={14} />
+                            <h3 className="text-xs font-bold text-emerald-500 uppercase tracking-wider">
+                                Recommended for you
+                            </h3>
+                        </div>
+
+                        <Reorder.Group
+                            axis="y"
+                            values={autoplayItems}
+                            onReorder={handleAutoplayReorder}
+                            className="flex flex-col gap-1"
+                        >
+                            {autoplayItems.map((item, i) => (
+                                <DraggableQueueItem
+                                    key={item.uid}
+                                    item={item}
+                                    song={songsCache[item.id]}
+                                    idx={i + 1}
+                                    source="autoplay"
+                                    onPlay={() => player.playAutoplayItem(item.id)}
+                                    onRemove={() => handleRemoveFromAutoplay(item.uid)}
+                                    onAddToPriority={() => player.addToQueue(item.id)}
+                                />
+                            ))}
+                        </Reorder.Group>
+                    </div>
+                )}
+              </div>
+            ) : (
+              // RENDER LYRICS VIEW
+              <LyricsPlayer />
             )}
 
           </div>

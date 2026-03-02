@@ -1,4 +1,3 @@
-// src/stores/usePlayerStore.ts
 'use client';
 
 import { create } from 'zustand';
@@ -35,6 +34,11 @@ interface PlayerStore {
   isPlayingAutoplay: boolean; 
   volume: number;
   prevVolume: number;
+  progress_ms: number;
+
+  /* 🟢 NEW: LYRICS SEEK STATE */
+  seekRequest: number | null;
+  setSeekRequest: (time: number | null) => void;
 
   /* Buckets */
   sourceContextIds: string[]; 
@@ -98,6 +102,7 @@ interface PlayerStore {
   setIsPlaying: (value: boolean) => void;
   setVolume: (value: number) => void;
   setPrevVolume: (value: number) => void;
+  setProgressMs: (value: number) => void;
   toggleShuffle: () => void;
   toggleRepeat: () => void;
 
@@ -137,6 +142,11 @@ const usePlayerStore = create<PlayerStore>()(
       isPlaying: false,
       volume: 0.3,
       prevVolume: 0.3,
+      progress_ms: 0,
+
+      // 🟢 LYRICS SEEK STATE
+      seekRequest: null,
+      setSeekRequest: (time) => set({ seekRequest: time }),
 
       sourceContextIds: [],
       bucketA: [], 
@@ -622,6 +632,7 @@ const usePlayerStore = create<PlayerStore>()(
       setIsPlaying: (value) => set({ isPlaying: value }),
       setVolume: (value) => set({ volume: value }),
       setPrevVolume: (value) => set({ prevVolume: value }),
+      setProgressMs: (value) => set({ progress_ms: value }),
       reset: () =>
         set({
           ids: [],
@@ -637,6 +648,7 @@ const usePlayerStore = create<PlayerStore>()(
           isPlayingPriority: false,
           isPlayingAutoplay: false,
           isShuffled: false,
+          progress_ms: 0,
         }),
     }),
     {

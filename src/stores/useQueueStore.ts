@@ -1,15 +1,14 @@
-// src/stores/useQueueStore.ts
-
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
 interface QueueStore {
   isOpen: boolean;
-  width: number; // 👈 This was missing
-  onOpen: () => void;
+  width: number;
+  activeView: 'queue' | 'lyrics'; 
+  onOpen: (view?: 'queue' | 'lyrics') => void;
   onClose: () => void;
-  toggle: () => void;
-  setWidth: (width: number) => void; // 👈 This was missing
+  toggle: (view?: 'queue' | 'lyrics') => void;
+  setWidth: (width: number) => void;
 }
 
 const useQueueStore = create<QueueStore>()(
@@ -17,15 +16,33 @@ const useQueueStore = create<QueueStore>()(
     (set) => ({
       isOpen: false,
       width: 400, // Default width
-      onOpen: () => set({ isOpen: true }),
-      onClose: () => set({ isOpen: false }),
-      toggle: () => set((state) => ({ isOpen: !state.isOpen })),
+      activeView: 'queue',
+      
+      onOpen: (view = 'queue') => set({ 
+        isOpen: true, 
+        activeView: view 
+      }),
+      
+      onClose: () => set({ 
+        isOpen: false 
+      }),
+      
+      toggle: (view = 'queue') => set((state) => {
+        // If clicking the exact same button while it's already open, close it
+        if (state.isOpen && state.activeView === view) {
+            return { isOpen: false };
+        }
+        // Otherwise, open the panel and set it to the requested view
+        return { isOpen: true, activeView: view };
+      }),
+      
       setWidth: (width) => set({ width }),
     }),
     {
-      name: 'musebuzz-queue-prefs', // Saves to localStorage
+      name: 'musebuzz-queue-prefs',
       storage: createJSONStorage(() => localStorage),
-      // Only save the width (we usually don't want to keep the queue open on refresh)
+      // We only persist the width so it remembers their drag preference.
+      // We don't persist activeView so it defaults cleanly on refresh.
       partialize: (state) => ({ width: state.width } as any), 
     }
   )
