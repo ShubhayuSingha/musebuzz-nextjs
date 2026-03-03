@@ -2,18 +2,23 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
+import useQueueStore from '@/stores/useQueueStore';
 import { supabase } from '@/lib/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface LyricLine {
   type?: "lyrics" | "music";
-  text: string;
+  text?: string;                
+  text_native?: string;         
+  text_romanized?: string;      
+  text_translation?: string;    
   start: number | null;
   end: number | null;
 }
 
 export default function LyricsPlayer() {
   const { activeId, setSeekRequest } = usePlayerStore();
+  const { isOpen, activeView } = useQueueStore();
   
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,13 +28,29 @@ export default function LyricsPlayer() {
 
   const [isAutoSyncing, setIsAutoSyncing] = useState(true);
 
+  const [scriptMode, setScriptMode] = useState<'native' | 'romanized'>('romanized');
+  const [showTranslation, setShowTranslation] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMode = localStorage.getItem('musebuzz-script-mode');
+      if (savedMode === 'native' || savedMode === 'romanized') setScriptMode(savedMode);
+      
+      const savedTrans = localStorage.getItem('musebuzz-show-translation');
+      if (savedTrans !== null) setShowTranslation(savedTrans === 'true');
+    }
+  }, []);
+
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   
-  // Tracks if the computer is scrolling so we can ignore the onScroll event
+  // 🟢 NEW: Centralized Lock Controller
   const isProgrammaticScrollRef = useRef(false);
+  const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 1. DATABASE FETCHING & INSTANT JUMP ON MOUNT
+  const hasNative = useMemo(() => lyrics.some(l => l.text_native), [lyrics]);
+  const hasTranslation = useMemo(() => lyrics.some(l => l.text_translation), [lyrics]);
+
   useEffect(() => {
     if (!activeId) { setLyrics([]); return; }
     
@@ -42,7 +63,6 @@ export default function LyricsPlayer() {
           const parsedLyrics = JSON.parse(data.lyrics_snippet);
           setLyrics(parsedLyrics); 
 
-          // Find the exact line the song is currently on
           const initialTime = (window as any).__musebuzzCurrentTime || 0;
           const initialIndex = parsedLyrics.findIndex((line: LyricLine) => {
               if (line.start === null) return false;
@@ -54,18 +74,21 @@ export default function LyricsPlayer() {
               activeLineIndexRef.current = initialIndex;
               setActiveLineIndex(initialIndex);
 
-              // 🟢 FORCE INSTANT JUMP
-              // Wait 100ms for React to map the new text to the screen, then teleport exactly to the line
               setTimeout(() => {
                   const el = lineRefs.current[initialIndex];
                   const container = containerRef.current;
                   if (el && container) {
                       isProgrammaticScrollRef.current = true;
+                      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+                      
                       container.scrollTo({
                           top: el.offsetTop + (el.clientHeight / 2) - (container.clientHeight * 0.3),
-                          behavior: 'auto' // 'auto' means instant jump!
+                          behavior: 'auto' 
                       });
-                      setTimeout(() => { isProgrammaticScrollRef.current = false; }, 200);
+                      
+                      unlockTimeoutRef.current = setTimeout(() => { 
+                          isProgrammaticScrollRef.current = false; 
+                      }, 200);
                   }
               }, 100); 
           }
@@ -78,7 +101,6 @@ export default function LyricsPlayer() {
     fetchLyrics();
   }, [activeId]);
 
-  // 2. HIGH-PERFORMANCE TIME LISTENER
   useEffect(() => {
     const handleTimeUpdate = (e: any) => {
         const time = e.detail;
@@ -98,9 +120,10 @@ export default function LyricsPlayer() {
     return () => window.removeEventListener('lyrics-time-update', handleTimeUpdate);
   }, [lyrics]);
 
-  // 3. THE MATHEMATICAL AUTO-SCROLL (During normal playback)
+  // THE MATHEMATICAL AUTO-SCROLL
   useEffect(() => {
     if (!isAutoSyncing || activeLineIndex === -1) return; 
+    if (!isOpen || activeView !== 'lyrics') return;
 
     const activeEl = lineRefs.current[activeLineIndex];
     const container = containerRef.current;
@@ -111,28 +134,57 @@ export default function LyricsPlayer() {
         const elTop = activeEl.offsetTop;
         const elHalfHeight = activeEl.clientHeight / 2;
         
-        // Lock the detector, scroll smoothly, then unlock
+        // 🟢 PREVENT OVERLAPPING TIMEOUTS
         isProgrammaticScrollRef.current = true;
+        if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
         
         container.scrollTo({
           top: elTop + elHalfHeight - offsetTarget,
           behavior: 'smooth'
         });
 
-        setTimeout(() => {
+        // Safe 800ms unlock window to cover long scrub jumps
+        unlockTimeoutRef.current = setTimeout(() => {
             isProgrammaticScrollRef.current = false;
-        }, 600);
+        }, 800);
 
       }, 50);
       return () => clearTimeout(scrollTimeout);
     }
-  }, [activeLineIndex, isAutoSyncing]);
+  }, [activeLineIndex, isAutoSyncing, scriptMode, showTranslation, isOpen, activeView]);
 
-  // 4. INSTANT MANUAL SCROLL DETECTION
+  const handleScriptToggle = (mode: 'native' | 'romanized') => {
+      isProgrammaticScrollRef.current = true;
+      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+      
+      setScriptMode(mode);
+      localStorage.setItem('musebuzz-script-mode', mode);
+      
+      unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
+  };
+
+  const handleTranslationToggle = () => {
+      isProgrammaticScrollRef.current = true;
+      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+      
+      const nextState = !showTranslation;
+      setShowTranslation(nextState);
+      localStorage.setItem('musebuzz-show-translation', String(nextState));
+      
+      unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
+  };
+
   const handleUserInteraction = () => {
+      if (!isOpen || activeView !== 'lyrics') return;
       if (!isProgrammaticScrollRef.current && isAutoSyncing) {
           setIsAutoSyncing(false);
       }
+  };
+
+  const getDisplayText = (line: LyricLine) => {
+    if (scriptMode === 'native' && line.text_native) return line.text_native.trim();
+    if (scriptMode === 'romanized' && line.text_romanized) return line.text_romanized.trim();
+    return (line.text || line.text_romanized || line.text_native || "").trim();
   };
 
   if (isLoading) {
@@ -146,6 +198,38 @@ export default function LyricsPlayer() {
   return (
     <div className="w-full h-full flex flex-col bg-transparent overflow-hidden relative">
       
+      {(hasNative || hasTranslation) && (
+        <div className="absolute top-4 right-6 z-[60] flex items-center gap-3">
+          
+          {hasNative && (
+            <div className="flex bg-neutral-900/80 backdrop-blur-md rounded-full p-1 border border-neutral-800 shadow-xl">
+              <button 
+                onClick={() => handleScriptToggle('native')} 
+                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'native' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+              >
+                Native
+              </button>
+              <button 
+                onClick={() => handleScriptToggle('romanized')} 
+                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'romanized' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+              >
+                English
+              </button>
+            </div>
+          )}
+
+          {hasTranslation && (
+            <button 
+              onClick={handleTranslationToggle} 
+              className={`px-4 py-2 text-xs font-bold rounded-full border backdrop-blur-md transition shadow-xl ${showTranslation ? 'bg-purple-600 border-purple-600 text-white' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:text-white'}`}
+            >
+              {showTranslation ? 'Hide Translation' : 'A / अ Translate'}
+            </button>
+          )}
+
+        </div>
+      )}
+
       <div 
         ref={containerRef}
         onScroll={handleUserInteraction}
@@ -155,15 +239,14 @@ export default function LyricsPlayer() {
           WebkitMaskImage: 'linear-gradient(to bottom, transparent 2%, black 10%, black 90%, transparent 98%)'
         }}
       >
-        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-12 pb-32 text-left items-start relative">
+        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-20 pb-32 text-left items-start relative">
           
-          <div className="flex flex-col w-full gap-6">
+          <div className="flex flex-col w-full gap-8">
             {lyrics.map((line, lineIdx) => {
               const isActiveLine = activeLineIndex === lineIdx;
               const hasPassed = activeLineIndex !== -1 && lineIdx < activeLineIndex && line.start !== null;
 
-              // 🟢 FIX: No more "Instrumental" logic. Just use the original text or dots for empty gaps.
-              const displayText = line.text?.trim() || "• • •";
+              const displayText = getDisplayText(line) || "• • •";
 
               let colorClass = "";
               if (isActiveLine) {
@@ -178,7 +261,7 @@ export default function LyricsPlayer() {
                 <div
                   key={lineIdx}
                   ref={(el) => { lineRefs.current[lineIdx] = el; }}
-                  className="flex w-full cursor-pointer justify-start"
+                  className="flex flex-col w-full cursor-pointer justify-start transition-transform duration-300 origin-left"
                   onClick={() => {
                       if (line.start !== null) {
                           setSeekRequest(line.start);
@@ -189,6 +272,12 @@ export default function LyricsPlayer() {
                   <span className={`text-2xl font-bold transition-colors duration-300 ${colorClass}`}>
                     {displayText}
                   </span>
+
+                  {showTranslation && line.text_translation && (
+                    <span className={`text-sm italic mt-2 transition-colors duration-300 ${isActiveLine ? 'text-neutral-300' : 'text-neutral-600'}`}>
+                      "{line.text_translation}"
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -197,7 +286,6 @@ export default function LyricsPlayer() {
         </div>
       </div>
 
-      {/* RESUME SYNC BUTTON */}
       <AnimatePresence>
         {!isAutoSyncing && (
           <motion.div
@@ -212,12 +300,17 @@ export default function LyricsPlayer() {
                       const activeEl = lineRefs.current[activeLineIndexRef.current];
                       if (activeEl && containerRef.current) {
                           isProgrammaticScrollRef.current = true;
+                          if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
                           const offsetTarget = containerRef.current.clientHeight * 0.3;
                           containerRef.current.scrollTo({
                               top: activeEl.offsetTop + (activeEl.clientHeight / 2) - offsetTarget,
                               behavior: 'smooth'
                           });
-                          setTimeout(() => { isProgrammaticScrollRef.current = false; }, 600);
+                          
+                          unlockTimeoutRef.current = setTimeout(() => { 
+                              isProgrammaticScrollRef.current = false; 
+                          }, 600);
                       }
                   }}
                   className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-full border border-neutral-700 shadow-xl text-sm font-bold flex items-center gap-2 transition"

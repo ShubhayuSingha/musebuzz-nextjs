@@ -1,15 +1,40 @@
 [
   {
-    "versionName": "v1.14",
-    "date": "2nd March 2026", 
-    "time": "11:20 PM IST",
+    "versionName": "v1.16",
+    "date": "3 March 2026", 
+    "time": "01:25 PM IST",
+    "title": "⚡ Native Languages Support in Lyrics ⚡",
+    "description": "Now songs other than English has native language support with English translation.",
+    "changes": [
+      "Modifed the admin page to support multilingual songs.",
+      "The lyrics panel features buttons to toggle different options like English-lettered lyrics, or native language lyrics, or show / hide the translation.",
+      "Modified the lyrics sync so that the sync doesn't break when doing other things like dragging seek bar or scrolling outside. There might still be minor issues with sync."
+    ]
+  },
+  {
+    "versionName": "v1.15",
+    "date": "2 March 2026", 
+    "time": "11:00 PM IST",
     "title": "⚡Lyrics Window⚡",
-    "description": "Added a lyrics button on the player for songs which has lyrics.",
+    "description": "Added lyrics for certain songs, and a lyrics sync for the admins.",
     "changes": [
       "Added lyrics button on the player which opens the lyrics window beside the queue button.",
       "Added a lyrics syncing page for the admins. They can press space bar as the song is playing to sync lines with audio. Regular users are not supposed to access this. For now, this is public, but we will change it later, maybe.",
       "User can scroll on the lyrics window up and down. Resume Sync button appears to let them get back to the current line.",
       "User can also click on a line to go to that timestamp directly."
+    ]
+  },
+  {
+    "versionName": "v1.14",
+    "date": "1st March 2026", 
+    "time": "9:00 AM IST",
+    "title": "⚡New Loader, Queue, and Homepage Arrows⚡",
+    "description": "Fixed minor issues with loading screens, queue emergence, and visible arrows in each row-wise section of the homepage.",
+    "changes": [
+      "Fixed shifting of layout because of items were loading gradually with a new loading icon.",
+      "Used the same loading icon for page-to-page navigation.",
+      "Queue window from the right now appears below the header.",
+      "Fixed issue with the homepage rows where the arrows on each row did not appear when queue or sidebar was opened and then visible space decreased. Now the arrow presence are re-calculated after those actions."
     ]
   },
   {

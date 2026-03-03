@@ -445,11 +445,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           {/* 🟢 LYRICS BUTTON (Greyed out if no lyrics exist) */}
           <div 
               onClick={() => {
-                 if (hasLyrics) toggle('lyrics');
+                 if (hasLyrics || !hasLyrics) toggle('lyrics');
               }}
               className={`transition ${
                  !hasLyrics 
-                   ? 'text-neutral-800 cursor-not-allowed' 
+                   ? 'text-neutral-800 cursor-pointer' 
                    : activeView === 'lyrics' && isOpen 
                      ? 'text-green-500 cursor-pointer' 
                      : 'text-neutral-400 hover:text-white cursor-pointer'
