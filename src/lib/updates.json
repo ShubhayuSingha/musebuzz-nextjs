@@ -1,5 +1,17 @@
 [
   {
+    "versionName": "v1.17",
+    "date": "3 March 2026", 
+    "time": "08:25 PM IST",
+    "title": "⚡ Better Lyrics Panel Look ⚡",
+    "description": "Changed the look of the buttons in the lyrics panel.",
+    "changes": [
+      "Changed the button look in the lyrics panel.",
+      "Improved the visibility of the translations.",
+      "Changed the cursor-pointer attribute in like button on the player, and the translate button."
+    ]
+  },
+  {
     "versionName": "v1.16",
     "date": "3 March 2026", 
     "time": "01:25 PM IST",

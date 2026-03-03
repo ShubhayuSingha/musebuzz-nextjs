@@ -205,13 +205,13 @@ export default function LyricsPlayer() {
             <div className="flex bg-neutral-900/80 backdrop-blur-md rounded-full p-1 border border-neutral-800 shadow-xl">
               <button 
                 onClick={() => handleScriptToggle('native')} 
-                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'native' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'native' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white cursor-pointer'}`}
               >
                 Native
               </button>
               <button 
                 onClick={() => handleScriptToggle('romanized')} 
-                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'romanized' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white'}`}
+                className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'romanized' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white cursor-pointer'}`}
               >
                 English
               </button>
@@ -221,9 +221,9 @@ export default function LyricsPlayer() {
           {hasTranslation && (
             <button 
               onClick={handleTranslationToggle} 
-              className={`px-4 py-2 text-xs font-bold rounded-full border backdrop-blur-md transition shadow-xl ${showTranslation ? 'bg-purple-600 border-purple-600 text-white' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:text-white'}`}
+              className={`px-4 py-2 text-xs font-bold rounded-full border backdrop-blur-md transition shadow-xl cursor-pointer ${showTranslation ? 'bg-purple-600 border-purple-600 text-white' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:text-white'}`}
             >
-              {showTranslation ? 'Hide Translation' : 'A / अ Translate'}
+              A/अ/অ
             </button>
           )}
 
@@ -274,8 +274,8 @@ export default function LyricsPlayer() {
                   </span>
 
                   {showTranslation && line.text_translation && (
-                    <span className={`text-sm italic mt-2 transition-colors duration-300 ${isActiveLine ? 'text-neutral-300' : 'text-neutral-600'}`}>
-                      "{line.text_translation}"
+                    <span className={`text-m italic mt-2 transition-colors duration-300 ${isActiveLine ? 'text-purple-200' : 'text-neutral-300'}`}>
+                      {line.text_translation}
                     </span>
                   )}
                 </div>
