@@ -196,7 +196,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   useEffect(() => {
       const handleBeforeUnload = () => {
           if (soundRef.current) {
-             saveProgress(soundRef.current.seek() as number);
+             const seekTime = soundRef.current.seek() as number;
+             saveProgress(seekTime);
+             // 🟢 THE FIX: Actually save the time to sessionStorage!
+             sessionStorage.setItem('restore_seek', seekTime.toString());
           }
       };
       window.addEventListener('beforeunload', handleBeforeUnload);

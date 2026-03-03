@@ -120,6 +120,51 @@ export default function LyricsPlayer() {
     return () => window.removeEventListener('lyrics-time-update', handleTimeUpdate);
   }, [lyrics]);
 
+// 🟢 THE FIX: The "Paused/Idle" Sync
+  useEffect(() => {
+    // Only run this if the panel is actually open and lyrics exist
+    if (!isOpen || activeView !== 'lyrics' || lyrics.length === 0) return;
+
+    const checkTime = () => {
+        // Read the global time that PlayerContent restored
+        const time = (window as any).__musebuzzCurrentTime || 0;
+        
+        const newIndex = lyrics.findIndex(line => {
+            if (line.start === null) return false;
+            const endTime = line.end !== null ? line.end : line.start + 5;
+            return time >= line.start && time < endTime;
+        });
+        
+        // If we found a valid line and it's not currently active, snap to it!
+        if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
+            activeLineIndexRef.current = newIndex;
+            setActiveLineIndex(newIndex);
+            
+            // Force the scroll to snap to this newly found line
+            const activeEl = lineRefs.current[newIndex];
+            const container = containerRef.current;
+            if (activeEl && container) {
+                isProgrammaticScrollRef.current = true;
+                if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+                
+                container.scrollTo({
+                    top: activeEl.offsetTop + (activeEl.clientHeight / 2) - (container.clientHeight * 0.4),
+                    behavior: 'smooth' // use 'auto' if you want an instant teleport
+                });
+
+                unlockTimeoutRef.current = setTimeout(() => {
+                    isProgrammaticScrollRef.current = false;
+                }, 800);
+            }
+        }
+    };
+
+    // Run it instantly, then set it to check every 500ms while paused/idle
+    checkTime();
+    const interval = setInterval(checkTime, 500);
+    return () => clearInterval(interval);
+  }, [lyrics, isOpen, activeView]);
+
   // THE MATHEMATICAL AUTO-SCROLL
   useEffect(() => {
     if (!isAutoSyncing || activeLineIndex === -1) return; 

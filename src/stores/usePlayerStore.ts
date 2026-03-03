@@ -510,123 +510,142 @@ const usePlayerStore = create<PlayerStore>()(
         });
       },
 
-      playNext: () => {
+playNext: () => {
         const { bucketA, bucketB, autoplay, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, isPlayingAutoplay, repeatMode } = get();
 
-        // 1. Priority
-        if (bucketB.length > 0) {
-            const [next, ...rest] = bucketB;
-            set({
-                activeId: next.id,
-                activeIdSignature: activeIdSignature + 1,
-                bucketB: rest, 
-                isPlayingPriority: true,
-                isPlayingAutoplay: false, 
-                isPlaying: true
-            });
-            return;
-        }
+        // 1. 🟢 IMMEDIATELY STOP
+        // This forces the current PlayerContent to call sound.pause() via its useEffect
+        set({ isPlaying: false });
 
-        // 2. Autoplay
-        if (isPlayingAutoplay) {
-             const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
-             const nextIdx = currentIdx + 1;
-             if (nextIdx < autoplay.length) {
-                 set({
-                     activeId: autoplay[nextIdx],
-                     activeIdSignature: activeIdSignature + 1,
-                     isPlaying: true
-                 });
-             }
-             return; 
-        }
+        // 2. 🟢 THE GAP: Wait for the audio buffer to clear
+        setTimeout(() => {
+          const state = get(); // Get fresh state after delay
 
-        // 3. Context
-        if (bucketA.length > 0) {
-             const refId = isPlayingPriority ? lastActiveContextId : activeId;
-             const currentIdx = refId ? bucketA.indexOf(refId) : -1;
-             let nextIdx = currentIdx + 1;
+          // --- YOUR ORIGINAL LOGIC STARTS HERE ---
+          
+          // 1. Priority
+          if (bucketB.length > 0) {
+              const [next, ...rest] = bucketB;
+              set({
+                  activeId: next.id,
+                  activeIdSignature: activeIdSignature + 1,
+                  bucketB: rest, 
+                  isPlayingPriority: true,
+                  isPlayingAutoplay: false, 
+                  isPlaying: true
+              });
+              return;
+          }
 
-             if (nextIdx >= bucketA.length) {
-                 if (repeatMode === 'off') {
-                     if (autoplay.length > 0) {
-                         set({
-                             activeId: autoplay[0],
-                             activeIdSignature: activeIdSignature + 1,
-                             isPlayingPriority: false,
-                             isPlayingAutoplay: true, 
-                             isPlaying: true
-                         });
-                         return;
-                     } else {
-                         set({ isPlaying: false, isPlayingPriority: false });
-                         return;
-                     }
-                 }
-                 if (repeatMode === 'context') {
-                     nextIdx = 0; 
-                 }
-             }
-             const nextId = bucketA[nextIdx];
-             set({
-                 activeId: nextId,
-                 activeIdSignature: activeIdSignature + 1,
-                 lastActiveContextId: nextId, 
-                 isPlayingPriority: false, 
-                 isPlayingAutoplay: false,
-                 isPlaying: true
-             });
-        }
+          // 2. Autoplay
+          if (isPlayingAutoplay) {
+               const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
+               const nextIdx = currentIdx + 1;
+               if (nextIdx < autoplay.length) {
+                   set({
+                       activeId: autoplay[nextIdx],
+                       activeIdSignature: activeIdSignature + 1,
+                       isPlaying: true
+                   });
+               }
+               return; 
+          }
+
+          // 3. Context
+          if (bucketA.length > 0) {
+               const refId = isPlayingPriority ? lastActiveContextId : activeId;
+               const currentIdx = refId ? bucketA.indexOf(refId) : -1;
+               let nextIdx = currentIdx + 1;
+
+               if (nextIdx >= bucketA.length) {
+                   if (repeatMode === 'off') {
+                       if (autoplay.length > 0) {
+                           set({
+                               activeId: autoplay[0],
+                               activeIdSignature: activeIdSignature + 1,
+                               isPlayingPriority: false,
+                               isPlayingAutoplay: true, 
+                               isPlaying: true
+                           });
+                           return;
+                       } else {
+                           set({ isPlaying: false, isPlayingPriority: false });
+                           return;
+                       }
+                   }
+                   if (repeatMode === 'context') {
+                       nextIdx = 0; 
+                   }
+               }
+               const nextId = bucketA[nextIdx];
+               set({
+                   activeId: nextId,
+                   activeIdSignature: activeIdSignature + 1,
+                   lastActiveContextId: nextId, 
+                   isPlayingPriority: false, 
+                   isPlayingAutoplay: false,
+                   isPlaying: true
+               });
+          }
+        }, 300); // 300ms is the sweet spot for a clean transition
       },
 
-      playPrevious: () => {
+playPrevious: () => {
         const { bucketA, autoplay, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, isPlayingAutoplay } = get();
 
-        if (isPlayingPriority && lastActiveContextId) {
-            set({
-                activeId: lastActiveContextId,
-                activeIdSignature: activeIdSignature + 1,
-                isPlayingPriority: false, 
-                isPlaying: true
-            });
-            return;
-        }
+        // 1. 🟢 IMMEDIATELY STOP
+        set({ isPlaying: false });
 
-        if (isPlayingAutoplay) {
-            const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
-            if (currentIdx > 0) {
-                set({
-                    activeId: autoplay[currentIdx - 1],
-                    activeIdSignature: activeIdSignature + 1,
-                    isPlaying: true
-                });
-            } else {
-                if (bucketA.length > 0) {
-                    const lastContextId = bucketA[bucketA.length - 1];
-                    set({
-                        activeId: lastContextId,
-                        activeIdSignature: activeIdSignature + 1,
-                        lastActiveContextId: lastContextId,
-                        isPlayingAutoplay: false, 
-                        isPlaying: true
-                    });
-                }
-            }
-            return;
-        }
+        // 2. 🟢 THE GAP
+        setTimeout(() => {
+          const state = get();
 
-        if (!bucketA.length) return;
-        let idx = activeId ? bucketA.indexOf(activeId) : -1;
-        let prevIdx = idx - 1;
-        if (prevIdx < 0) prevIdx = 0;
-        const prevId = bucketA[prevIdx];
-        set({
-            activeId: prevId,
-            activeIdSignature: activeIdSignature + 1,
-            lastActiveContextId: prevId,
-            isPlayingPriority: false,
-            isPlaying: true
-        });
+          if (isPlayingPriority && lastActiveContextId) {
+              set({
+                  activeId: lastActiveContextId,
+                  activeIdSignature: activeIdSignature + 1,
+                  isPlayingPriority: false, 
+                  isPlaying: true
+              });
+              return;
+          }
+
+          if (isPlayingAutoplay) {
+              const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
+              if (currentIdx > 0) {
+                  set({
+                      activeId: autoplay[currentIdx - 1],
+                      activeIdSignature: activeIdSignature + 1,
+                      isPlaying: true
+                  });
+              } else {
+                  if (bucketA.length > 0) {
+                      const lastContextId = bucketA[bucketA.length - 1];
+                      set({
+                          activeId: lastContextId,
+                          activeIdSignature: activeIdSignature + 1,
+                          lastActiveContextId: lastContextId,
+                          isPlayingAutoplay: false, 
+                          isPlaying: true
+                      });
+                  }
+              }
+              return;
+          }
+
+          if (!bucketA.length) return;
+          let idx = activeId ? bucketA.indexOf(activeId) : -1;
+          let prevIdx = idx - 1;
+          if (prevIdx < 0) prevIdx = 0;
+          const prevId = bucketA[prevIdx];
+          set({
+              activeId: prevId,
+              activeIdSignature: activeIdSignature + 1,
+              lastActiveContextId: prevId,
+              isPlayingPriority: false,
+              isPlaying: true
+          });
+        }, 300);
       },
 
       setIsPlaying: (value) => set({ isPlaying: value }),

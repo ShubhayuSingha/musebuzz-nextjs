@@ -1,5 +1,19 @@
 [
   {
+    "versionName": "v1.18",
+    "date": "4 March 2026", 
+    "time": "03:00 AM IST",
+    "title": "⚡ Redefined Search Bar and Lyrics Sync ⚡",
+    "description": "Added search history in search bar and changed lyrics sync logic.",
+    "changes": [
+      "Added scrollable container in the search where you can view search history as well as search many more items by scrolling.",
+      "Improved the search context, now many contexts are taken into consideration. You can search by playlists, albums, song names, artist names, even lyrics.",      
+      "Lyrics sync happen automatically when you reload the page and the lyrics panel is open.",
+      "Attempted to change Howler js logic, to add delay after each song so that previous song does not bleed into the next one. However, this has failed and the songs still bleed.",
+      "Lyrics/Queue panel now keeps the open/closed state stored in the browser cache."
+    ]
+  },
+  {
     "versionName": "v1.17",
     "date": "3 March 2026", 
     "time": "08:25 PM IST",

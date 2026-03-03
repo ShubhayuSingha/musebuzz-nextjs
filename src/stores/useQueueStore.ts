@@ -15,7 +15,7 @@ const useQueueStore = create<QueueStore>()(
   persist(
     (set) => ({
       isOpen: false,
-      width: 400, // Default width
+      width: 400,
       activeView: 'queue',
       
       onOpen: (view = 'queue') => set({ 
@@ -28,11 +28,9 @@ const useQueueStore = create<QueueStore>()(
       }),
       
       toggle: (view = 'queue') => set((state) => {
-        // If clicking the exact same button while it's already open, close it
         if (state.isOpen && state.activeView === view) {
             return { isOpen: false };
         }
-        // Otherwise, open the panel and set it to the requested view
         return { isOpen: true, activeView: view };
       }),
       
@@ -41,9 +39,12 @@ const useQueueStore = create<QueueStore>()(
     {
       name: 'musebuzz-queue-prefs',
       storage: createJSONStorage(() => localStorage),
-      // We only persist the width so it remembers their drag preference.
-      // We don't persist activeView so it defaults cleanly on refresh.
-      partialize: (state) => ({ width: state.width } as any), 
+      // 🟢 UPDATED: Now we save isOpen and activeView along with width
+      partialize: (state) => ({ 
+        width: state.width,
+        isOpen: state.isOpen,
+        activeView: state.activeView
+      }), 
     }
   )
 );
