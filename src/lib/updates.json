@@ -1,5 +1,16 @@
 [
   {
+    "versionName": "v1.19",
+    "date": "17 March 2026",
+    "time": "09:22 PM IST",
+    "title": "⚡ Dual Howler & Queue Fixes ⚡",
+    "description": "Decoupled the queue using two Howler instances for better functionality and fixed the empty context queue bug.",
+    "changes": [
+      "Decoupled the queue to better function using two Howler instances.",
+      "Fixed the queue bug where an empty context still showed the text 'end of list', which has now been removed."
+    ]
+  },
+  {
     "versionName": "v1.18",
     "date": "4 March 2026", 
     "time": "03:00 AM IST",
@@ -7,7 +18,21 @@
     "description": "Added search history in search bar and changed lyrics sync logic.",
     "changes": [
       "Added scrollable container in the search where you can view search history as well as search many more items by scrolling.",
-      "Improved the search context, now many contexts are taken into consideration. You can search by playlists, albums, song names, artist names, even lyrics.",      
+      "Improved the search context, now many contexts are taken into consideration. You can search by playlists, albums, song names, artist names, even lyrics.",
+      "Lyrics sync happen automatically when you reload the page and the lyrics panel is open.",
+      "Attempted to change Howler js logic, to add delay after each song so that previous song does not bleed into the next one. However, this has failed and the songs still bleed.",
+      "Lyrics/Queue panel now keeps the open/closed state stored in the browser cache."
+    ]
+  },
+  {
+    "versionName": "v1.18",
+    "date": "4 March 2026",
+    "time": "03:00 AM IST",
+    "title": "⚡ Redefined Search Bar and Lyrics Sync ⚡",
+    "description": "Added search history in search bar and changed lyrics sync logic.",
+    "changes": [
+      "Added scrollable container in the search where you can view search history as well as search many more items by scrolling.",
+      "Improved the search context, now many contexts are taken into consideration. You can search by playlists, albums, song names, artist names, even lyrics.",
       "Lyrics sync happen automatically when you reload the page and the lyrics panel is open.",
       "Attempted to change Howler js logic, to add delay after each song so that previous song does not bleed into the next one. However, this has failed and the songs still bleed.",
       "Lyrics/Queue panel now keeps the open/closed state stored in the browser cache."
@@ -15,7 +40,7 @@
   },
   {
     "versionName": "v1.17",
-    "date": "3 March 2026", 
+    "date": "3 March 2026",
     "time": "08:25 PM IST",
     "title": "⚡ Better Lyrics Panel Look ⚡",
     "description": "Changed the look of the buttons in the lyrics panel.",
@@ -27,7 +52,7 @@
   },
   {
     "versionName": "v1.16",
-    "date": "3 March 2026", 
+    "date": "3 March 2026",
     "time": "01:25 PM IST",
     "title": "⚡ Native Languages Support in Lyrics ⚡",
     "description": "Now songs other than English has native language support with English translation.",
@@ -39,7 +64,7 @@
   },
   {
     "versionName": "v1.15",
-    "date": "2 March 2026", 
+    "date": "2 March 2026",
     "time": "11:00 PM IST",
     "title": "⚡Lyrics Window⚡",
     "description": "Added lyrics for certain songs, and a lyrics sync for the admins.",
@@ -52,7 +77,7 @@
   },
   {
     "versionName": "v1.14",
-    "date": "1st March 2026", 
+    "date": "1st March 2026",
     "time": "9:00 AM IST",
     "title": "⚡New Loader, Queue, and Homepage Arrows⚡",
     "description": "Fixed minor issues with loading screens, queue emergence, and visible arrows in each row-wise section of the homepage.",
@@ -65,7 +90,7 @@
   },
   {
     "versionName": "v1.13",
-    "date": "25th Feb 2026", 
+    "date": "25th Feb 2026",
     "time": "7:15 PM IST",
     "title": "⚡Changed Login System⚡",
     "description": "Removed Email verification for login",
@@ -78,7 +103,7 @@
   },
   {
     "versionName": "v1.12",
-    "date": "25th Feb 2026", 
+    "date": "25th Feb 2026",
     "time": "4:25 AM IST",
     "title": "⚡AI Playlists Re-defined⚡",
     "description": "AI Generated Playlists use a custom machine learning model which takes in factors from your listening history, followed artists, added albums, skipped and completed songs",
@@ -90,7 +115,7 @@
   },
   {
     "versionName": "v1.11",
-    "date": "24th Feb 2026", 
+    "date": "24th Feb 2026",
     "time": "7:00 PM IST",
     "title": "⚡Customised Homepage, AI Playlists, and Context Menus⚡",
     "description": "AI Generated Playlists, Context aware right-click, and add entire context to priority queue.",
@@ -105,7 +130,7 @@
   },
   {
     "versionName": "v1.11",
-    "date": "12th Feb 2026", 
+    "date": "12th Feb 2026",
     "time": "12:00 PM IST",
     "title": "⚡Similar Songs in the Queue⚡",
     "description": "Based on your last songs of your playlist / album, new auto-play songs will be generated.",
@@ -118,7 +143,7 @@
   },
   {
     "versionName": "v1.10",
-    "date": "25th January 2026", 
+    "date": "25th January 2026",
     "time": "7:13 PM IST",
     "title": "⚡Artist Page⚡",
     "description": "The Artist Page has been built!",
@@ -135,7 +160,7 @@
   },
   {
     "versionName": "v1.9",
-    "date": "25th January 2026", 
+    "date": "25th January 2026",
     "time": "9:38 AM IST",
     "title": "⚡Your Library Page and Sleeker Sidebar⚡",
     "description": "The 'Your Library' page is designed to show your recently added / played playlists and albums.",
@@ -149,7 +174,7 @@
   },
   {
     "versionName": "v1.8",
-    "date": "24th January 2026", 
+    "date": "24th January 2026",
     "time": "10:50 PM IST",
     "title": "⚡Persistent Player⚡",
     "description": "Closing the browser while playing won't remove your current song and queue.",
@@ -160,7 +185,7 @@
   },
   {
     "versionName": "v1.7",
-    "date": "22th January 2026", 
+    "date": "22th January 2026",
     "time": "11:10 PM IST",
     "title": "⚡Custom Playlists⚡",
     "description": "You can now create custom playlists.",
@@ -174,7 +199,7 @@
   },
   {
     "versionName": "v1.6",
-    "date": "21th January 2026", 
+    "date": "21th January 2026",
     "time": "12:10 AM IST",
     "title": "⚡Stabilised Features and Simplified Approach⚡",
     "description": "Added persistency to liked songs, changed queue mechanisms, changed vibes.",
@@ -186,9 +211,9 @@
       "Changed main seek slider and volume slider colour from white to purple to match the theme."
     ]
   },
-{
+  {
     "versionName": "v1.5",
-    "date": "18th January 2026", 
+    "date": "18th January 2026",
     "time": "01:10 AM IST",
     "title": "⚡ Modern Queue ⚡",
     "description": "Rearrange songs in the queue.",
@@ -200,7 +225,6 @@
       "Local cached like button to prevent appearance delay"
     ]
   },
-
   {
     "versionName": "v1.4",
     "date": "2026-01-16",
@@ -229,7 +253,6 @@
       "Added queue page animation, handled wrapping of songs at start and end"
     ]
   },
-
   {
     "versionName": "v1.2",
     "date": "2026-01-16",

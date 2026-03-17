@@ -24,8 +24,7 @@ const Player = () => {
   }
 
   return (
-    <PlayerContent 
-      key={songPath} 
+    <PlayerContent       
       song={song} 
       songPath={songPath} 
     />

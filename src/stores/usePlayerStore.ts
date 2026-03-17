@@ -515,10 +515,10 @@ playNext: () => {
 
         // 1. 🟢 IMMEDIATELY STOP
         // This forces the current PlayerContent to call sound.pause() via its useEffect
-        set({ isPlaying: false });
+        
 
-        // 2. 🟢 THE GAP: Wait for the audio buffer to clear
-        setTimeout(() => {
+        // 2. 🟢 THE gap is removed
+        
           const state = get(); // Get fresh state after delay
 
           // --- YOUR ORIGINAL LOGIC STARTS HERE ---
@@ -587,18 +587,15 @@ playNext: () => {
                    isPlaying: true
                });
           }
-        }, 300); // 300ms is the sweet spot for a clean transition
+        
       },
 
 playPrevious: () => {
         const { bucketA, autoplay, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, isPlayingAutoplay } = get();
 
-        // 1. 🟢 IMMEDIATELY STOP
-        set({ isPlaying: false });
+        // 1. 🟢 IMMEDIATELY STOP        
 
-        // 2. 🟢 THE GAP
-        setTimeout(() => {
-          const state = get();
+        // 2. 🟢 THE GAP is removed
 
           if (isPlayingPriority && lastActiveContextId) {
               set({
@@ -645,7 +642,7 @@ playPrevious: () => {
               isPlayingPriority: false,
               isPlaying: true
           });
-        }, 300);
+        
       },
 
       setIsPlaying: (value) => set({ isPlaying: value }),

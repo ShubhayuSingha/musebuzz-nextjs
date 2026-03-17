@@ -486,7 +486,7 @@ export default function Queue() {
                 )}
 
                 {/* 3. CONTEXT QUEUE (Bucket A) */}
-                {(contextItems.length > 0 || !player.isPlayingAutoplay) && (
+                {contextItems.length > 0 && (
                   <div className="mb-2">
                     <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
                       Next from:{' '}
@@ -495,31 +495,25 @@ export default function Queue() {
                       </span>
                     </h3>
 
-                    {contextItems.length === 0 ? (
-                      <p className="text-neutral-500 text-sm px-2 italic mb-4">
-                        End of list
-                      </p>
-                    ) : (
-                      <Reorder.Group
-                        axis="y"
-                        values={contextItems}
-                        onReorder={handleContextReorder}
-                        className="flex flex-col gap-1"
-                      >
-                        {contextItems.map((item, i) => (
-                          <DraggableQueueItem
-                            key={item.uid}
-                            item={item}
-                            song={songsCache[item.id]}
-                            idx={i + 1}
-                            source="context"
-                            onPlay={() => player.setId(item.id)}
-                            onRemove={() => player.removeFromContext(item.id)}
-                            onAddToPriority={() => player.addToQueue(item.id)} 
-                          />
-                        ))}
-                      </Reorder.Group>
-                    )}
+                    <Reorder.Group
+  axis="y"
+  values={contextItems}
+  onReorder={handleContextReorder}
+  className="flex flex-col gap-1"
+>
+  {contextItems.map((item, i) => (
+    <DraggableQueueItem
+      key={item.uid}
+      item={item}
+      song={songsCache[item.id]}
+      idx={i + 1}
+      source="context"
+      onPlay={() => player.setId(item.id)}
+      onRemove={() => player.removeFromContext(item.id)}
+      onAddToPriority={() => player.addToQueue(item.id)} 
+    />
+  ))}
+</Reorder.Group>
                   </div>
                 )}
 
