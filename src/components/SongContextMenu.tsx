@@ -9,10 +9,14 @@ import { v4 as uuidv4 } from 'uuid';
 // Icons
 import { MdOutlinePlaylistAdd, MdDeleteOutline, MdQueueMusic } from 'react-icons/md';
 import { BsDisc, BsPerson } from 'react-icons/bs';
+import { AiFillHeart, AiOutlineHeart } from 'react-icons/ai';
 
 import useAddToPlaylistModal from '@/stores/useAddToPlaylistModal';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { useContextMenuStore } from '@/stores/useContextMenuStore';
+import useLikeStore from '@/stores/useLikeStore';
+import useAuthModalStore from '@/stores/useAuthModalStore';
+import { useUser } from '@supabase/auth-helpers-react';
 
 interface SongContextMenuProps {
   children: React.ReactNode;
@@ -42,6 +46,11 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
   const supabaseClient = useSupabaseClient();
   const router = useRouter();
   const player = usePlayerStore();
+  const user = useUser();
+  const { onOpen } = useAuthModalStore();
+  const { hasLikedId, addLikedId, removeLikedId } = useLikeStore();
+  
+  const isLiked = hasLikedId(songId);
 
   useEffect(() => {
     if (!visible) return;
@@ -71,17 +80,90 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
     e.preventDefault(); 
     e.stopPropagation(); 
 
-    let x = e.pageX;
-    let y = e.pageY;
+    let x = e.clientX;
+    let y = e.clientY;
     
-    // Prevent menu from clipping off the right screen edge
-    if (x + 220 > window.innerWidth) x = x - 220;
+    if (x + 220 > window.innerWidth) x = window.innerWidth - 220;
+    if (y + 250 > window.innerHeight) y = window.innerHeight - 250;
     
     setPoints({ x, y });
     setOpenId(menuId); 
   };
 
+  const handleClickCapture = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    const trigger = target.closest('[data-context-trigger="true"]');
+    if (trigger) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpenId(menuId);
+
+      const rect = trigger.getBoundingClientRect();
+      let x = rect.left - 180; // open to the left of the button
+      let y = rect.top + 20;
+
+      if (x < 10) x = 10;
+      // Clamp Y to viewport height factoring scroll position
+      if (rect.top + 20 + 250 > window.innerHeight) {
+         y = rect.top - 250; // Pop upwards instead
+      }
+
+      setPoints({ x, y });
+    }
+  };
+
   // --- ACTIONS ---
+
+  const handleToggleLike = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user) {
+      setOpenId(null);
+      return onOpen('sign_in');
+    }
+    
+    if (isLiked) {
+      removeLikedId(songId); 
+      player.syncLikedSongs(songId, 'remove');
+      toast('Unliked!', { icon: '💔' });
+      setOpenId(null);
+      
+      try {
+        const { error } = await supabaseClient
+          .from('liked_songs').delete()
+          .eq('user_id', user.id).eq('song_id', songId);
+
+        if (error) throw error;
+        router.refresh();
+      } catch (error: any) {
+        addLikedId(songId);
+        player.syncLikedSongs(songId, 'add');
+        toast.error("Could not unlike");
+      }
+    } else {
+      addLikedId(songId);
+      player.syncLikedSongs(songId, 'add'); 
+      toast('Liked!', { icon: '❤️' });
+      setOpenId(null);
+
+      try {
+        const { error } = await supabaseClient
+          .from('liked_songs').upsert(
+            { song_id: songId, user_id: user.id }, 
+            { onConflict: 'song_id, user_id', ignoreDuplicates: true }
+          );
+
+        if (error) throw error;
+        router.refresh();
+      } catch (error: any) {
+        if (error.code === '23505') router.refresh();
+        else {
+            removeLikedId(songId);
+            player.syncLikedSongs(songId, 'remove');
+            toast.error("Could not like");
+        }
+      }
+    }
+  };
 
   const handleAddToQueue = () => {
     player.addToQueue(songId);
@@ -128,7 +210,7 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
   const menuItemClass = "w-full flex items-center gap-x-3 px-3 py-2.5 text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm cursor-pointer transition";
 
   return (
-    <div onContextMenu={handleContextMenu} className="w-full h-full">
+    <div onContextMenu={handleContextMenu} onClickCapture={handleClickCapture} className="w-full h-full">
       {children}
 
       {visible && (
@@ -144,13 +226,19 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
             "
             style={{ top: points.y, left: points.x }}
          >
-            {/* 1. Add to Queue */}
+            {/* 1. Like / Unlike */}
+            <div onClick={handleToggleLike} className={`${menuItemClass} ${isLiked ? 'text-purple-400 hover:text-purple-300' : ''}`}>
+               {isLiked ? <AiFillHeart size={20} className="text-purple-500" /> : <AiOutlineHeart size={20} />}
+               {isLiked ? 'Unlike' : 'Like'}
+            </div>
+
+            {/* 2. Add to Queue */}
             <div onClick={handleAddToQueue} className={menuItemClass}>
                <MdQueueMusic size={20} />
                Add to Queue
             </div>
 
-            {/* 2. Navigation Group */}
+            {/* 3. Navigation Group */}
             {(artistId || albumId) && <div className="h-[1px] bg-neutral-700 my-1" />}
             
             {artistId && (

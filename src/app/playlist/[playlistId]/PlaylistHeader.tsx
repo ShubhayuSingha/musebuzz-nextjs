@@ -123,7 +123,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
       {/* HEADER CONTENT */}
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
           <div className="p-6">
-            <div className="flex flex-col md:flex-row items-end gap-x-5">
+            <div className="flex flex-col md:flex-row items-center md:items-end gap-x-5">
               
               {/* IMAGE (Fixed Height: h-32 on mobile, h-52 on desktop) */}
               <div className="
@@ -180,14 +180,14 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                 ) : (
                   // VIEW MODE
                   <div className="group flex flex-col gap-y-1">
-                    <div className="flex items-center gap-x-4">
+                    <div className="flex flex-col md:flex-row md:items-center gap-y-2 md:gap-x-4 text-center md:text-left">
                       {/* Title: Truncates at 2 lines to fit within the fixed height */}
                       <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 ${titleSizeClass}`}>
                         {title}
                       </h1>
                       
                       {isOwner && (
-                        <div className="flex items-center gap-x-2 opacity-0 group-hover:opacity-100 transition mb-2">
+                        <div className="flex items-center justify-center md:justify-start gap-x-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition mb-2">
                             <button 
                               onClick={() => setIsEditing(true)}
                               className="p-2 rounded-full bg-neutral-800/50 hover:bg-neutral-700 text-neutral-400 hover:text-white cursor-pointer"
@@ -215,7 +215,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                 )}
 
                 {!isEditing && (
-                  <div className="flex items-center gap-x-2 mt-2">
+                  <div className="flex items-center justify-center md:justify-start gap-x-2 mt-2">
                       <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
                          <span className="text-[10px] text-black font-bold">U</span>
                       </div>

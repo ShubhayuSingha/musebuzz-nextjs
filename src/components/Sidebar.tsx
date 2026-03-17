@@ -23,6 +23,8 @@ import MediaContextMenu from "@/components/MediaContextMenu";
 interface SidebarProps {
   isCollapsed: boolean;
   onToggle: () => void;
+  isMobileOpen?: boolean;
+  closeMobile?: () => void;
 }
 
 interface SidebarItem {
@@ -36,7 +38,7 @@ interface SidebarItem {
   artist_id?: string;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, closeMobile }) => {
   const supabase = useSupabaseClient();
   const router = useRouter();
   const authModal = useAuthModalStore();
@@ -205,7 +207,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   // HELPER: Text container that fades out smoothly
   const textContainerClass = `
       flex flex-col whitespace-nowrap overflow-hidden transition-all duration-300
-      ${isCollapsed ? 'opacity-0 w-0 translate-x-[-10px]' : 'opacity-100 w-auto translate-x-0'}
+      ${(!isMobileOpen && isCollapsed) ? 'opacity-0 w-0 translate-x-[-10px]' : 'opacity-100 w-auto translate-x-0'}
   `;
 
   return (
@@ -214,15 +216,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         bg-gradient-to-b from-purple-950 to-black text-white py-4 
         flex flex-col flex-shrink-0
         transition-all duration-300 ease-in-out h-full max-h-screen z-40
-        ${isCollapsed ? 'w-[80px]' : 'w-72'} 
+        ${isMobileOpen ? 'w-72 md:w-72' : isCollapsed ? 'w-[80px]' : 'w-72'} 
       `}
     >
       <LikeDataLoader />
 
       {/* HEADER */}
       <div className="flex items-center h-10 mb-6 w-full">
-        {/* Toggle Button Wrapper */}
-        <div className={iconBoxClass}>
+        {/* Toggle Button Wrapper - HIDDEN ON MOBILE */}
+        <div className={`${iconBoxClass} hidden md:flex`}>
             <button 
                 onClick={onToggle} 
                 className="rounded-full hover:bg-white/10 transition p-2"
@@ -232,7 +234,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             </button>
         </div>
         {/* Title */}
-        <div className={textContainerClass}>
+        <div className={`${textContainerClass} md:ml-0 ml-4`}>
             <div className="font-bold text-2xl">MuseBuzz</div>
         </div>
       </div>
@@ -243,6 +245,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           <li className="mb-2 w-full">
             <Link 
                 href="/" 
+                onClick={closeMobile}
                 className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
                 title="Home"
             >
@@ -273,7 +276,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             >
                 <Link 
                     href="/liked" 
-                    onClick={handleLikedClick} 
+                    onClick={(e) => {
+                        handleLikedClick(e);
+                        if (closeMobile) closeMobile();
+                    }} 
                     className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
                     title="Liked Songs"
                 >
@@ -289,6 +295,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           <li className="mb-2 w-full">
             <Link 
                 href="/library" 
+                onClick={closeMobile}
                 className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
                 title="Your Library" 
             >
@@ -339,6 +346,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                  >
                       <Link 
                         href={item.path}
+                        onClick={closeMobile}
                         className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
                         title={`${item.title}\n${item.subtitle}`}
                       >

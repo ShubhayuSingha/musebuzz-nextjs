@@ -1,5 +1,21 @@
 [
   {
+    "versionName": "v1.20",
+    "date": "18 March 2026",
+    "time": "01:40 AM IST",
+    "title": "⚡ Mobile Gestures & UX Polish ⚡",
+    "description": "Introduced smooth swipe gestures for mobile search, fixed the queue rearranging touch bug, and refined overall navigation layouts.",
+    "changes": [
+      "Added a dedicated Fullscreen Search Experience on mobile with a clean icon trigger.",
+      "Implemented Swipe Left to delete Search History items on phone view.",
+      "Implemented Swipe Right to instantly Add to Queue from both Search History and live song results.",
+      "Fixed the unscrollable Mobile Queue bug where dragging a song vertically conflicted with horizontal swipe animations.",
+      "Redesigned the main Header. The raw 'Logout' button is now cleanly tucked away inside a Profile Avatar dropdown.",
+      "Corrected the Mobile Expanded Player Header alignment so that 'Now Playing', the down-arrow, and the 3-dots menu are precisely centered using a mathematical grid structure.",
+      "Re-anchored the Desktop Search bar to its intended left-aligned position alongside the menu."
+    ]
+  },
+  {
     "versionName": "v1.19",
     "date": "17 March 2026",
     "time": "09:22 PM IST",

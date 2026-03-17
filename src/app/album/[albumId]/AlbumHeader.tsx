@@ -56,7 +56,7 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
   return (
     <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
-          <div className="flex flex-col md:flex-row items-end gap-x-5">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-x-5">
             
             {/* IMAGE */}
             <div className="
@@ -80,7 +80,7 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
               <div className="group flex flex-col gap-y-1">
                   
                   {/* 🟢 CHANGE: Title & Button Row */}
-                  <div className="flex items-center gap-x-3">
+                  <div className="flex flex-col md:flex-row md:items-center gap-y-3 md:gap-x-3 text-center md:text-left">
                       <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 ${titleSizeClass}`}>
                         {album.title}
                       </h1>
@@ -89,7 +89,7 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
                       <button 
                         onClick={toggleSave}
                         className={`
-                            p-2 rounded-full border transition hover:scale-105 flex-shrink-0
+                            p-2 rounded-full border transition hover:scale-105 flex-shrink-0 mx-auto md:mx-0
                             ${isSaved 
                                 ? 'bg-green-500 border-green-500 text-black' 
                                 : 'bg-transparent border-neutral-400 text-neutral-400 hover:border-white hover:text-white'
@@ -102,13 +102,13 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
                   </div>
 
                   {/* Artist Name */}
-                  <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer w-fit mt-1">
+                  <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer mx-auto md:mx-0 mt-1">
                     {album.artists?.name}
                   </p>
               </div>
 
               {/* Meta Info */}
-              <div className="flex items-center gap-x-2 mt-1">
+              <div className="flex items-center justify-center md:justify-start gap-x-2 mt-1">
                   {releaseYear && (
                     <>
                         <span className="text-neutral-300 text-sm font-medium">

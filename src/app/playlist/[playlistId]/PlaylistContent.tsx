@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image'; 
 import usePlayerStore from '@/stores/usePlayerStore';
 import { useUser } from '@supabase/auth-helpers-react';
-import { BsPlayFill, BsPauseFill, BsClock } from 'react-icons/bs';
+import { BsPlayFill, BsPauseFill, BsClock, BsThreeDotsVertical } from 'react-icons/bs';
 import LikeButton from '@/components/LikeButton';
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
-import { motion, Variants, AnimatePresence } from 'framer-motion';
+import { motion, Variants, AnimatePresence, PanInfo } from 'framer-motion';
+import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu'; 
 
@@ -103,7 +104,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
       
       {/* HEADER */}
       <div className="
-        grid 
+        hidden md:grid 
         grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px]
         items-center 
         px-3 
@@ -158,79 +159,109 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                     animate="show"
                     exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
                     whileTap={{ scale: 0.996 }}
-                    onClick={() => onPlay(song.id)}
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.1}
+                    onDragEnd={(e, info) => {
+                      if (info.offset.x > 80) {
+                        player.addToQueue(song.id);
+                        toast.success('Added to queue');
+                      }
+                    }}
                     className={`
-                      group
-                      grid
-                      grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px]
-                      items-center
-                      px-3
-                      py-2
-                      rounded-md
-                      cursor-pointer
-                      transition-colors
+                      group relative isolate rounded-md cursor-pointer transition-colors
                       ${isActive ? 'bg-neutral-800/50' : 'hover:bg-neutral-800/50'}
                     `}
                   >
-                    {/* INDEX / PLAY */}
-                    <div className="flex justify-center">
-                      {isActive && isPlaying ? (
-                        <>
-                          <div className="group-hover:hidden"><PlayingAnimation /></div>
-                          <BsPauseFill size={22} className="hidden group-hover:block text-white" />
-                        </>
-                      ) : (
-                        <>
-                          <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
-                            {index + 1}
-                          </span>
-                          <BsPlayFill size={22} className="hidden group-hover:block text-white" />
-                        </>
-                      )}
-                    </div>
-
-                    {/* IMAGE COLUMN */}
-                    <div className="relative h-10 w-10 overflow-hidden rounded-md">
-                        <Image
-                            fill
-                            src={song.imageUrl}
-                            alt={song.title}
-                            className="object-cover"
-                        />
-                    </div>
-
-                    {/* TITLE */}
-                    <div className="min-w-0 pr-4">
-                      <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                      <p className="text-sm text-neutral-400 truncate">{song.author}</p>
-                    </div>
-
-                    {/* ALBUM */}
-                    <p 
-                      onClick={(e) => {
-                          e.stopPropagation();
-                          if (song.album_id) router.push(`/album/${song.album_id}`);
-                      }}
-                      className="text-sm text-neutral-400 truncate pr-4 hover:text-white hover:underline cursor-pointer transition"
+                    {/* === DESKTOP LAYOUT === */}
+                    <div 
+                      onClick={() => onPlay(song.id)}
+                      className="hidden md:grid grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] items-center px-3 py-2 w-full"
                     >
-                      {song.album_title}
-                    </p>
+                      {/* INDEX / PLAY */}
+                      <div className="flex justify-center">
+                        {isActive && isPlaying ? (
+                          <>
+                            <div className="group-hover:hidden"><PlayingAnimation /></div>
+                            <BsPauseFill size={22} className="hidden group-hover:block text-white" />
+                          </>
+                        ) : (
+                          <>
+                            <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
+                              {index + 1}
+                            </span>
+                            <BsPlayFill size={22} className="hidden group-hover:block text-white" />
+                          </>
+                        )}
+                      </div>
 
-                    {/* DATE ADDED */}
-                    <p className="text-sm text-neutral-400">
-                        {formatAddedDate(song.added_at)}
-                    </p>
+                      {/* IMAGE COLUMN */}
+                      <div className="relative h-10 w-10 overflow-hidden rounded-md">
+                          <Image
+                              fill
+                              src={song.imageUrl}
+                              alt={song.title}
+                              className="object-cover"
+                          />
+                      </div>
 
-                    {/* ACTIONS */}
-                    <div className="flex justify-center items-center gap-x-3">
-                      <AddToQueueButton songId={song.id} />
-                      <LikeButton songId={song.id} />
+                      {/* TITLE */}
+                      <div className="min-w-0 pr-4">
+                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                        <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                      </div>
+
+                      {/* ALBUM */}
+                      <p 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (song.album_id) router.push(`/album/${song.album_id}`);
+                        }}
+                        className="text-sm text-neutral-400 truncate pr-4 hover:text-white hover:underline cursor-pointer transition"
+                      >
+                        {song.album_title}
+                      </p>
+
+                      {/* DATE ADDED */}
+                      <p className="text-sm text-neutral-400">
+                          {formatAddedDate(song.added_at)}
+                      </p>
+
+                      {/* ACTIONS */}
+                      <div className="flex justify-center items-center gap-x-3">
+                        <AddToQueueButton songId={song.id} />
+                        <LikeButton songId={song.id} />
+                      </div>
+
+                      {/* DURATION */}
+                      <p className="text-sm text-neutral-400 text-right">
+                          {formatTime(song.duration_seconds)}
+                      </p>
                     </div>
 
-                    {/* DURATION */}
-                    <p className="text-sm text-neutral-400 text-right">
-                        {formatTime(song.duration_seconds)}
-                    </p>
+                    {/* === MOBILE LAYOUT === */}
+                    <div 
+                      className="flex md:hidden items-center justify-between px-3 py-2 w-full gap-x-3"
+                    >
+                      <div className="flex items-center gap-x-3 flex-1 min-w-0" onClick={() => onPlay(song.id)}>
+                          <div className="flex items-center gap-x-3 flex-shrink-0">
+                            {isActive && isPlaying && (
+                               <PlayingAnimation />
+                            )}
+                            <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
+                                <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                            </div>
+                          </div>
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                            <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                          </div>
+                      </div>
+                      <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
+                         <BsThreeDotsVertical size={20} />
+                      </button>
+                    </div>
+
                   </motion.li>
               </SongContextMenu>
             );

@@ -5,17 +5,35 @@ import Button from "./Button";
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
+import { useState, useRef, useEffect } from "react";
 import GlobalSearch from "@/components/GlobalSearch"; 
-import usePlayerStore from "@/stores/usePlayerStore"; // 🟢 1. Import your player store
+import usePlayerStore from "@/stores/usePlayerStore";
+import { FaUserCircle } from "react-icons/fa";
 
-const Header = () => {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { onOpen } = useAuthModalStore();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
   const router = useRouter();
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
   
-  // 🟢 2. Extract ONLY the reset function (this prevents the Header from re-rendering every time the volume changes)
   const resetPlayer = usePlayerStore((state) => state.reset); 
+
+  // Close profile dropdown if clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleLogout = async () => {
     // 1. Reset the Zustand store in RAM
@@ -48,24 +66,56 @@ const Header = () => {
     >
       <div className="w-full flex items-center justify-between gap-x-4">
         
-        <div className="flex-1 flex items-center max-w-[500px]">
-           <GlobalSearch />
-        </div>
+        {/* Mobile Hamburger Menu (visible only on phones) */}
+        {onMenuClick && (
+          <button 
+            onClick={onMenuClick} 
+            className="md:hidden p-2 -ml-2 text-neutral-400 hover:text-white transition"
+          >
+            <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" height="24" width="24" xmlns="http://www.w3.org/2000/svg"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+          </button>
+        )}
+
+        {/* Global search stays centered implicitly or grows via its own relative container */}
+        <GlobalSearch isMobileRightAligned={false} />
         
-        {/* Auth Buttons Section */}
-        <div className="flex justify-end items-center gap-x-4">
+        {/* Content Right side */}
+        <div className="flex-1 flex justify-end items-center gap-x-3 md:gap-x-4">
+           {/* Mobile Search Icon rendered on the right */}
+           <GlobalSearch isMobileRightAligned={true} />
+           
           {user ? (
-            <Button 
-              onClick={handleLogout}
-              className="bg-white px-6 py-2 whitespace-nowrap"
-            >
-              Logout
-            </Button>
+            <div ref={profileRef} className="relative">
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                className="flex items-center justify-center rounded-full bg-neutral-800 p-2 text-neutral-400 hover:text-white transition active:scale-95 border border-transparent hover:border-neutral-700"
+              >
+                <FaUserCircle size={24} />
+              </button>
+              
+              {/* Profile Dropdown */}
+              {isProfileOpen && (
+                <div className="absolute right-0 top-[110%] w-40 bg-zinc-900 border border-neutral-800 rounded-lg shadow-2xl py-2 z-50 animate-fade-in flex flex-col overflow-hidden">
+                   <div className="px-4 py-2 border-b border-neutral-800 mb-1">
+                      <p className="text-xs text-neutral-400 truncate">Logged in</p>
+                   </div>
+                   <button 
+                     onClick={() => {
+                       setIsProfileOpen(false);
+                       handleLogout();
+                     }}
+                     className="w-full text-left px-4 py-2 text-sm font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition"
+                   >
+                     Log out
+                   </button>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <Button 
                 onClick={() => onOpen('sign_up')}
-                className="bg-transparent text-neutral-300 font-medium whitespace-nowrap py-2"
+                className="bg-transparent text-neutral-300 font-medium whitespace-nowrap py-2 hidden sm:block"
               >
                 Sign up
               </Button>

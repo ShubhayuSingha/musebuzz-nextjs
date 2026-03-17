@@ -23,7 +23,7 @@ const MixHeader: React.FC<MixHeaderProps> = ({ playlist, imageUrl, songsCount })
   return (
     <div className="bg-gradient-to-b from-purple-900 to-black w-full">
       <div className="p-6">
-        <div className="flex flex-col md:flex-row items-end gap-x-5">
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-x-5">
           
           {/* IMAGE */}
           <div className="
@@ -47,18 +47,18 @@ const MixHeader: React.FC<MixHeaderProps> = ({ playlist, imageUrl, songsCount })
               Generated Mix
             </p>
             
-            <div className="group flex flex-col gap-y-1">
-              <div className="flex items-center gap-x-4">
+            <div className="group flex flex-col gap-y-1 text-center md:text-left">
+              <div className="flex flex-col md:flex-row md:items-center gap-y-2 md:gap-x-4">
                 <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 ${titleSizeClass}`}>
                   {title}
                 </h1>
               </div>
               
-              <p className="text-neutral-400 text-sm font-medium line-clamp-2 max-w-2xl">
+              <p className="text-neutral-400 text-sm font-medium line-clamp-2 max-w-2xl mx-auto md:mx-0">
                 {playlist.description || "Curated just for you"}
               </p>
 
-              <div className="flex items-center gap-x-2 mt-2">
+              <div className="flex items-center justify-center md:justify-start gap-x-2 mt-2">
                   <div className="relative h-6 w-6 rounded-full bg-green-500 flex items-center justify-center overflow-hidden">
                       <span className="text-[10px] text-black font-bold">M</span>
                   </div>

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { BsPlayFill, BsPauseFill, BsTrash, BsPlusLg, BsStars } from 'react-icons/bs'; 
 import { IoClose } from 'react-icons/io5';
 import { AiOutlineClose } from 'react-icons/ai';
+import { MdDragIndicator } from 'react-icons/md';
 import PlayingAnimation from '@/components/PlayingAnimation';
 import usePlayerStore from '@/stores/usePlayerStore';
 import useQueueStore from '@/stores/useQueueStore';
@@ -78,11 +79,10 @@ const QueueItemContent = ({
 
   return (
     <div
-      onPointerDown={(e) => reorderControls?.start(e)}
       className={`
         group grid 
-        grid-cols-[30px_40px_1fr_30px_30px]
-        gap-x-2 items-center w-full px-2 py-2 rounded-md
+        grid-cols-[20px_40px_1fr_20px_20px_30px] md:grid-cols-[30px_40px_1fr_30px_30px]
+        gap-x-2 md:gap-x-2 items-center w-full px-2 py-2 rounded-md
         transition-colors cursor-pointer select-none relative z-10
         ${isActive ? 'bg-white/10' : 'hover:bg-white/5 bg-black'}
       `}
@@ -147,13 +147,25 @@ const QueueItemContent = ({
               onRemove();
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="hidden group-hover:block text-neutral-400 hover:text-white transition p-1"
+            className="hidden group-hover:block text-neutral-400 hover:text-white transition p-1 cursor-pointer"
           >
             <AiOutlineClose size={16} />
           </div>
         ) : (
            <div className="w-[16px]" />
         )}
+      </div>
+
+      {/* MOBILE DRAG HANDLE */}
+      <div 
+         className="md:hidden flex justify-center items-center text-neutral-600 active:text-white p-1 pointer-events-auto cursor-grab active:cursor-grabbing z-50 touch-none"
+         onPointerDown={(e) => {
+             e.preventDefault(); 
+             e.stopPropagation();
+             reorderControls?.start(e);
+         }}
+      >
+         <MdDragIndicator size={20} />
       </div>
     </div>
   );
@@ -191,7 +203,7 @@ const DraggableQueueItem = ({ item, song, idx, source, onPlay, onRemove, onAddTo
       id={item.uid}
       dragListener={false} 
       dragControls={reorderControls}
-      className="relative mb-1 overflow-visible rounded-md bg-black" 
+      className="relative mb-1 overflow-visible rounded-md bg-black touch-pan-y" 
     >
         {/* Swipe Left Background (Trash) */}
         <motion.div style={{ opacity: deleteOpacity }} className="absolute right-4 top-0 bottom-0 flex items-center justify-center text-red-500 z-0">
@@ -209,7 +221,7 @@ const DraggableQueueItem = ({ item, song, idx, source, onPlay, onRemove, onAddTo
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.1}
             onDragEnd={handleDragEnd}
-            className="relative bg-black z-10" 
+            className="relative bg-black z-10 touch-pan-y" 
         >
             <QueueItemContent
                 song={song}
@@ -388,6 +400,35 @@ export default function Queue() {
     };
   }, [resize, stopResizing]);
 
+  /* -------- mobile back button logic -------- */
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    // Push a dummy state so the browser back button has something to pop
+    window.history.pushState({ queueOpen: true }, '');
+
+    const handlePopState = (e: PopStateEvent) => {
+        // When the user presses the back button, we intercept it 
+        // and just close the queue.
+        e.preventDefault();
+        onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+        window.removeEventListener('popstate', handlePopState);
+        // If the component unmounts or queue closes normally, 
+        // we should conceptually clean up the history state we pushed,
+        // but it's tricky without navigating back. Usually, the user 
+        // will just use the normal UI to close it.
+    };
+  }, [isOpen, onClose]);
+
+  /* -------- mobile width override -------- */
+  // Determine actual rendered width based on screen size. We use '100vw' if it's acting as a standalone drawer, 
+  // but if it's inside the player, '100%' works better. We'll simplify to '100%' for mobile.
+  const actualWidth = typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : width;
+
   /* =========================
         RENDER
   ========================= */
@@ -397,16 +438,16 @@ export default function Queue() {
       {isOpen && (
         <motion.div
           initial={{ width: 0 }}
-          animate={{ width }}
+          animate={{ width: actualWidth }}
           exit={{ width: 0 }}
           transition={{ duration: 0.25 }}
-          className="h-full bg-black border-l border-neutral-800 flex flex-col z-40 overflow-hidden relative"
+          className="bg-black border-l border-neutral-800 flex flex-col md:relative md:z-40 z-[90] absolute md:h-full inset-0 overflow-hidden w-full md:w-auto"
         >
-          {/* Resize Handle */}
+          {/* Resize Handle (Desktop Only) */}
           <div
             onMouseDown={startResizing}
             className={`
-              absolute left-0 top-0 bottom-0 w-1 z-50
+              hidden md:block absolute left-0 top-0 bottom-0 w-1 z-50
               cursor-col-resize transition-colors bg-transparent
               hover:bg-purple-500/50
               ${resizing.current ? 'bg-purple-500' : ''}
@@ -418,6 +459,17 @@ export default function Queue() {
           {/* 🟢 THE FIX: Conditional scrolling wrapper prevents double scrollbars */}
           {/* When in lyrics mode, this container becomes overflow-hidden so the Lyrics component can handle its own scrolling */}
           <div className={`flex-1 relative ${activeView === 'queue' ? 'overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-800' : 'overflow-hidden'}`}>
+            
+            {/* Mobile Close Button */}
+            <div className="md:hidden sticky top-0 bg-black/90 backdrop-blur-sm z-50 p-4 border-b border-neutral-800 flex items-center justify-between">
+               <h2 className="font-bold text-white uppercase tracking-wider">{activeView === 'queue' ? 'Queue' : 'Lyrics'}</h2>
+               <button 
+                 onClick={onClose} 
+                 className="p-2 -mr-2 text-neutral-400 hover:text-white transition rounded-full hover:bg-white/10"
+               >
+                  <IoClose size={24} />
+               </button>
+            </div>
             
             {activeView === 'queue' ? (
               <div className="p-2">

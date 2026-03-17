@@ -66,7 +66,7 @@ export default async function Liked() {
       {/* HEADER */}
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
-          <div className="flex flex-col md:flex-row items-end gap-x-5">
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-x-5">
             
             {/* IMAGE */}
             <div className="
@@ -87,13 +87,13 @@ export default async function Liked() {
                 Playlist
               </p>
               
-              <div className="flex items-center gap-x-4">
+              <div className="flex flex-col md:flex-row md:items-center gap-y-2 md:gap-x-4 text-center md:text-left">
                  <h1 className="text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 text-4xl sm:text-5xl lg:text-6xl">
                    Liked Songs
                  </h1>
               </div>
 
-              <div className="flex items-center gap-x-2 mt-2">
+              <div className="flex items-center justify-center md:justify-start gap-x-2 mt-2">
                   <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
                       <span className="text-[10px] text-black font-bold">U</span>
                   </div>

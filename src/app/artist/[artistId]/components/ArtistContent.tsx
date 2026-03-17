@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { BsPlayFill, BsPauseFill, BsClock } from "react-icons/bs";
+import { BsPlayFill, BsPauseFill, BsClock, BsThreeDotsVertical } from "react-icons/bs";
 import { useEffect, useState, useRef, useLayoutEffect } from "react"; 
-import { motion, AnimatePresence, Variants } from "framer-motion"; 
+import { motion, AnimatePresence, Variants, PanInfo } from "framer-motion"; 
+import { toast } from "react-hot-toast";
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import usePlaylistStore from "@/stores/usePlaylistStore"; 
@@ -208,7 +209,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
              
              {/* STICKY HEADER */}
              <div className="
-                grid 
+                hidden md:grid 
                 grid-cols-[40px_50px_4fr_3fr_80px_50px]
                 items-center 
                 px-3 
@@ -259,74 +260,102 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
                                 animate="show"
                                 exit={{ opacity: 0, x: -20, transition: { duration: 0.2 } }}
                                 whileTap={{ scale: 0.996 }}
-                                onClick={() => onPlaySong(song.id)}
+                                drag="x"
+                                dragConstraints={{ left: 0, right: 0 }}
+                                dragElastic={0.1}
+                                onDragEnd={(e, info) => {
+                                  if (info.offset.x > 80) {
+                                    player.addToQueue(song.id);
+                                    toast.success('Added to queue');
+                                  }
+                                }}
                                 className={`
-                                    group 
-                                    grid 
-                                    grid-cols-[40px_50px_4fr_3fr_80px_50px]
-                                    items-center 
-                                    px-3 
-                                    py-2 
-                                    rounded-md 
-                                    cursor-pointer
-                                    transition-colors
+                                    group relative isolate rounded-md cursor-pointer transition-colors
                                     ${isActive ? 'bg-neutral-800/50' : 'hover:bg-neutral-800/50'}
                                 `}
                             >
-                                {/* 1. Icon / Index */}
-                                <div className="flex items-center justify-center">
-                                    {isActive && isPlayingState ? (
-                                        <>
-                                            <div className="group-hover:hidden">
-                                                <PlayingAnimation />
-                                            </div>
-                                            <BsPauseFill size={22} className="hidden group-hover:block text-white" />
-                                        </>
-                                    ) : (
-                                        <>
-                                            <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
-                                                {index + 1}
-                                            </span>
-                                            <BsPlayFill size={22} className="hidden group-hover:block text-white" />
-                                        </>
-                                    )}
+                                {/* === DESKTOP LAYOUT === */}
+                                <div 
+                                  onClick={() => onPlaySong(song.id)}
+                                  className="hidden md:grid grid-cols-[40px_50px_4fr_3fr_80px_50px] items-center px-3 py-2 w-full"
+                                >
+                                    {/* 1. Icon / Index */}
+                                    <div className="flex items-center justify-center">
+                                        {isActive && isPlayingState ? (
+                                            <>
+                                                <div className="group-hover:hidden">
+                                                    <PlayingAnimation />
+                                                </div>
+                                                <BsPauseFill size={22} className="hidden group-hover:block text-white" />
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
+                                                    {index + 1}
+                                                </span>
+                                                <BsPlayFill size={22} className="hidden group-hover:block text-white" />
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* 2. Image */}
+                                    <div className="relative h-10 w-10 overflow-hidden rounded-md">
+                                        <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                    </div>
+
+                                    {/* 3. Title */}
+                                    <div className="min-w-0 pr-4">
+                                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
+                                            {song.title}
+                                        </p>
+                                    </div>
+
+                                    {/* 4. Album Name (Clickable) */}
+                                    <div className="hidden md:flex items-center overflow-hidden min-w-0">
+                                        <p 
+                                            onClick={(e) => {
+                                                e.stopPropagation(); 
+                                                router.push(`/album/${song.album_id}`);
+                                            }}
+                                            className="truncate text-sm text-neutral-400 hover:text-white hover:underline cursor-pointer transition pr-4"
+                                        >
+                                            {song.albums?.title || "Unknown Album"}
+                                        </p>
+                                    </div>
+
+                                    {/* 5. Actions (Queue + Like) */}
+                                    <div className="flex justify-center items-center gap-x-3" onClick={(e) => e.stopPropagation()}>
+                                        <AddToQueueButton songId={song.id} />
+                                        <LikeButton songId={song.id} />
+                                    </div>
+
+                                    {/* 6. Duration */}
+                                    <div className="text-sm text-neutral-400 text-right pr-2">
+                                        {formatTime(song.duration_seconds)}
+                                    </div>
                                 </div>
 
-                                {/* 2. Image */}
-                                <div className="relative h-10 w-10 overflow-hidden rounded-md">
-                                    <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                {/* === MOBILE LAYOUT === */}
+                                <div className="flex md:hidden items-center justify-between px-3 py-2 w-full gap-x-3">
+                                  <div className="flex items-center gap-x-3 flex-1 min-w-0" onClick={() => onPlaySong(song.id)}>
+                                      <div className="flex items-center gap-x-3 flex-shrink-0">
+                                        {isActive && isPlayingState && (
+                                            <PlayingAnimation />
+                                        )}
+                                        <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
+                                            <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col min-w-0 flex-1">
+                                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                                        <p className="text-sm text-neutral-400 truncate">{song.albums?.title || "Unknown Album"}</p>
+                                      </div>
+                                  </div>
+                                  <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
+                                     <BsThreeDotsVertical size={20} />
+                                  </button>
                                 </div>
 
-                                {/* 3. Title */}
-                                <div className="min-w-0 pr-4">
-                                    <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
-                                        {song.title}
-                                    </p>
-                                </div>
-
-                                {/* 4. Album Name (Clickable) */}
-                                <div className="hidden md:flex items-center overflow-hidden min-w-0">
-                                    <p 
-                                        onClick={(e) => {
-                                            e.stopPropagation(); 
-                                            router.push(`/album/${song.album_id}`);
-                                        }}
-                                        className="truncate text-sm text-neutral-400 hover:text-white hover:underline cursor-pointer transition pr-4"
-                                    >
-                                        {song.albums?.title || "Unknown Album"}
-                                    </p>
-                                </div>
-
-                                {/* 5. Actions (Queue + Like) */}
-                                <div className="flex justify-center items-center gap-x-3" onClick={(e) => e.stopPropagation()}>
-                                    <AddToQueueButton songId={song.id} />
-                                    <LikeButton songId={song.id} />
-                                </div>
-
-                                {/* 6. Duration */}
-                                <div className="text-sm text-neutral-400 text-right pr-2">
-                                    {formatTime(song.duration_seconds)}
-                                </div>
                             </motion.div>
                         </SongContextMenu>
                         )
