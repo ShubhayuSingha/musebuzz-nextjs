@@ -44,18 +44,36 @@ export default function LyricsPlayer() {
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
   
-  // 🟢 NEW: Centralized Lock Controller
   const isProgrammaticScrollRef = useRef(false);
   const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const hasNative = useMemo(() => lyrics.some(l => l.text_native), [lyrics]);
   const hasTranslation = useMemo(() => lyrics.some(l => l.text_translation), [lyrics]);
 
+  // 🟢 Helper: Find the most recent line that has started
+  const getActiveLineIndex = (time: number, lyricsData: LyricLine[]) => {
+    for (let i = lyricsData.length - 1; i >= 0; i--) {
+        if (lyricsData[i].start !== null && time >= lyricsData[i].start!) {
+            return i;
+        }
+    }
+    return -1;
+  };
+
   useEffect(() => {
-    if (!activeId) { setLyrics([]); return; }
+    if (!activeId) { 
+        setLyrics([]); 
+        setActiveLineIndex(-1);
+        activeLineIndexRef.current = -1;
+        return; 
+    }
     
+    // 🟢 FIX: Reset instantly on song change to clear the old active line!
+    setActiveLineIndex(-1);
+    activeLineIndexRef.current = -1;
+    setIsLoading(true);
+
     const fetchLyrics = async () => {
-      setIsLoading(true);
       const { data } = await supabase.from('songs').select('lyrics_snippet').eq('id', activeId).single();
       
       if (data?.lyrics_snippet) {
@@ -64,11 +82,7 @@ export default function LyricsPlayer() {
           setLyrics(parsedLyrics); 
 
           const initialTime = (window as any).__musebuzzCurrentTime || 0;
-          const initialIndex = parsedLyrics.findIndex((line: LyricLine) => {
-              if (line.start === null) return false;
-              const endTime = line.end !== null ? line.end : line.start + 5;
-              return initialTime >= line.start && initialTime < endTime;
-          });
+          const initialIndex = getActiveLineIndex(initialTime, parsedLyrics);
           
           if (initialIndex !== -1) {
               activeLineIndexRef.current = initialIndex;
@@ -104,12 +118,7 @@ export default function LyricsPlayer() {
   useEffect(() => {
     const handleTimeUpdate = (e: any) => {
         const time = e.detail;
-        
-        const newIndex = lyrics.findIndex(line => {
-            if (line.start === null) return false;
-            const endTime = line.end !== null ? line.end : line.start + 5;
-            return time >= line.start && time < endTime;
-        });
+        const newIndex = getActiveLineIndex(time, lyrics);
         
         if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
             activeLineIndexRef.current = newIndex;
@@ -120,27 +129,17 @@ export default function LyricsPlayer() {
     return () => window.removeEventListener('lyrics-time-update', handleTimeUpdate);
   }, [lyrics]);
 
-// 🟢 THE FIX: The "Paused/Idle" Sync
   useEffect(() => {
-    // Only run this if the panel is actually open and lyrics exist
     if (!isOpen || activeView !== 'lyrics' || lyrics.length === 0) return;
 
     const checkTime = () => {
-        // Read the global time that PlayerContent restored
         const time = (window as any).__musebuzzCurrentTime || 0;
+        const newIndex = getActiveLineIndex(time, lyrics);
         
-        const newIndex = lyrics.findIndex(line => {
-            if (line.start === null) return false;
-            const endTime = line.end !== null ? line.end : line.start + 5;
-            return time >= line.start && time < endTime;
-        });
-        
-        // If we found a valid line and it's not currently active, snap to it!
         if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
             activeLineIndexRef.current = newIndex;
             setActiveLineIndex(newIndex);
             
-            // Force the scroll to snap to this newly found line
             const activeEl = lineRefs.current[newIndex];
             const container = containerRef.current;
             if (activeEl && container) {
@@ -149,7 +148,7 @@ export default function LyricsPlayer() {
                 
                 container.scrollTo({
                     top: activeEl.offsetTop + (activeEl.clientHeight / 2) - (container.clientHeight * 0.4),
-                    behavior: 'smooth' // use 'auto' if you want an instant teleport
+                    behavior: 'smooth' 
                 });
 
                 unlockTimeoutRef.current = setTimeout(() => {
@@ -159,13 +158,11 @@ export default function LyricsPlayer() {
         }
     };
 
-    // Run it instantly, then set it to check every 500ms while paused/idle
     checkTime();
     const interval = setInterval(checkTime, 500);
     return () => clearInterval(interval);
   }, [lyrics, isOpen, activeView]);
 
-  // THE MATHEMATICAL AUTO-SCROLL
   useEffect(() => {
     if (!isAutoSyncing || activeLineIndex === -1) return; 
     if (!isOpen || activeView !== 'lyrics') return;
@@ -179,7 +176,6 @@ export default function LyricsPlayer() {
         const elTop = activeEl.offsetTop;
         const elHalfHeight = activeEl.clientHeight / 2;
         
-        // 🟢 PREVENT OVERLAPPING TIMEOUTS
         isProgrammaticScrollRef.current = true;
         if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
         
@@ -188,7 +184,6 @@ export default function LyricsPlayer() {
           behavior: 'smooth'
         });
 
-        // Safe 800ms unlock window to cover long scrub jumps
         unlockTimeoutRef.current = setTimeout(() => {
             isProgrammaticScrollRef.current = false;
         }, 800);
@@ -284,7 +279,7 @@ export default function LyricsPlayer() {
           WebkitMaskImage: 'linear-gradient(to bottom, transparent 2%, black 10%, black 90%, transparent 98%)'
         }}
       >
-        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-20 pb-32 text-left items-start relative">
+        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-24 pb-32 text-left items-start relative">
           
           <div className="flex flex-col w-full gap-8">
             {lyrics.map((line, lineIdx) => {

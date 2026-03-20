@@ -1,5 +1,18 @@
 [
   {
+  "versionName": "v1.21",
+  "date": "20 March 2026",
+  "time": "01:15 PM IST",
+  "title": "⚡Mobile Native Polish Update⚡",
+  "description": "New mobile animations, style, functionalities.",
+  "changes": [    
+    "Native Hardware Navigation: Deep integration with mobile hardware back-buttons—seamlessly back out of the Queue, Lyrics, and Player layers without accidentally closing the app.",
+    "Buttery-Smooth UI: Implemented squish-free sliding animations for panel transitions, and replaced the desktop context menu with a custom, touch-friendly Bottom Sheet for mobile.",
+    "Smarter Lyrics Sync: Rewrote the lyrics algorithm to perfectly track vocals even through long instrumental solos, and fixed UI layout overlaps.",
+    "Player Layout Polish: Fixed infinite-looping marquee text, corrected 'Like' button spacing to dynamically hug track titles, and decoupled the volume slider to prevent accidental song resets."
+  ]
+},
+  {
     "versionName": "v1.20",
     "date": "18 March 2026",
     "time": "01:40 AM IST",

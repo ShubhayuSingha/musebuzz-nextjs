@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } fr
 import { useRouter } from "next/navigation";
 import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1, BsChevronDown, BsThreeDotsVertical } from "react-icons/bs";
 import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2";
-import { AiFillStepBackward, AiFillStepForward, AiOutlineExpandAlt } from "react-icons/ai";
+import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
 import { TbMicrophone2 } from "react-icons/tb";
 import Slider from 'rc-slider';
 import Image from "next/image";
@@ -47,7 +47,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   }, [activeId, bucketA, bucketB, autoplay]);
 
   const { songPath: nextSongPath } = useSongById(nextSongId || undefined);
-  const { toggle, activeView, isOpen } = useQueueStore();
+  const { toggle, activeView, isOpen, onClose } = useQueueStore();
 
   const soundRef = useRef<any>(null);
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -63,7 +63,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [isMobileExpanded, setIsMobileExpanded] = useState(false);
+  const [isMobileExpanded, setIsMobileExpanded] = useState(false); 
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const [shouldMarquee, setShouldMarquee] = useState(false);
   const titleMeasureRef = useRef<HTMLSpanElement>(null);
@@ -154,6 +155,32 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       }
     }
   }, [isPlaying, activeId, saveProgress]);
+
+  useEffect(() => {
+    if (isMobileExpanded) window.history.pushState({ playerExpanded: true }, '');
+  }, [isMobileExpanded]);
+
+  useEffect(() => {
+    if (isOpen) window.history.pushState({ queueOpen: true }, '');
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isMobileMenuOpen) window.history.pushState({ mobileMenuOpen: true }, '');
+  }, [isMobileMenuOpen]);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      } else if (isOpen) {
+        onClose(); 
+      } else if (isMobileExpanded) {
+        setIsMobileExpanded(false); 
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isOpen, isMobileExpanded, isMobileMenuOpen, onClose]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -298,6 +325,27 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const onClickAlbum = () => { if (song?.albums?.id) router.push(`/album/${song.albums.id}`); };
   const onClickArtist = () => { if (song?.albums?.artists?.id) router.push(`/artist/${song.albums.artists.id}`); };
 
+  // 🟢 THE FIX: The Master Navigation Controller for Mobile Menus
+  const handleMobileMenuAction = (action: () => void) => {
+    // 1. Calculate how many ghost "pushStates" we need to clean up
+    let stepsToPop = -1; // Pop the Bottom Sheet menu
+    if (isMobileExpanded) stepsToPop--; // Pop the Maximized Player
+    if (isOpen) stepsToPop--; // Pop the Queue/Lyrics if they are open
+
+    // 2. Close everything in the UI instantly
+    setIsMobileMenuOpen(false);
+    setIsMobileExpanded(false);
+    if (isOpen) onClose();
+
+    // 3. Silently scrub the browser history so the back button doesn't break
+    window.history.go(stepsToPop);
+
+    // 4. Execute the navigation a split second later for maximum smoothness
+    setTimeout(() => {
+        action();
+    }, 100);
+  };
+
   useLayoutEffect(() => {
     if (titleMeasureRef.current) {
       const textWidth = titleMeasureRef.current.scrollWidth;
@@ -332,7 +380,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             className="md:hidden fixed bottom-0 w-full bg-neutral-900 border-t border-neutral-800 z-50 rounded-t-xl overflow-hidden shadow-[0_-4px_20px_rgba(0,0,0,0.5)] cursor-pointer touch-none"
             onClick={() => setIsMobileExpanded(true)}
           >
-            {/* Progress Line */}
             <div className="absolute top-0 left-0 h-[2px] w-full bg-neutral-800 pointer-events-none">
               <div
                 className="h-full bg-purple-500"
@@ -347,19 +394,16 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               className="flex items-center justify-between px-3 py-2 active:bg-neutral-800 transition"
             >
               <div className="flex items-center gap-x-3 overflow-hidden flex-1 pointer-events-none">
-                {/* Album Art */}
                 <div className="relative h-10 w-10 min-w-10 rounded shadow-md overflow-hidden bg-neutral-800">
                   {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" />}
                 </div>
 
-                {/* Text block */}
                 <div className="flex flex-col overflow-hidden w-full pt-1">
                   <p className="text-white font-medium text-sm truncate">{song.title}</p>
                   <p className="text-neutral-400 text-xs truncate">{song.albums?.artists?.name || "Unknown Artist"}</p>
                 </div>
               </div>
 
-              {/* Play/Pause Button */}
               <div
                 className="flex-shrink-0 flex items-center justify-center p-3 z-10"
                 onClick={(e) => { e.stopPropagation(); handlePlay(); }}
@@ -379,66 +423,54 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="md:hidden fixed inset-0 bg-zinc-950 z-[100] flex flex-col pt-12"
+            className="md:hidden fixed inset-0 bg-zinc-950 z-[100] flex flex-col pt-2"
           >
-            {/* 🟢 THE FIX: Bulletproof Absolute Top Bar */}
-            <div className="w-full pb-6 px-6">
-              <div className="relative flex w-full items-center justify-center h-10">
+            <div className="flex-1 relative flex flex-col w-full min-h-0 pt-10">
+              
+              <div className="w-full pb-6 px-6">
+                <div className="relative flex w-full items-center justify-center h-10">
+                  
+                  <button
+                    onClick={() => {
+                       if (isOpen) {
+                          window.history.back();
+                          setTimeout(() => window.history.back(), 50);
+                       } else {
+                          window.history.back();
+                       }
+                    }}
+                    className="absolute left-0 top-1/2 -translate-y-1/2 p-2 -ml-2 text-neutral-400 hover:text-white transition active:scale-95"
+                  >
+                    <BsChevronDown size={28} />
+                  </button>
 
-                {/* 1. Left: Chevron Down (Pinned absolutely to the left) */}
-                <button
-                  onClick={() => setIsMobileExpanded(false)}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 p-2 -ml-2 text-neutral-400 hover:text-white transition active:scale-95"
-                >
-                  <BsChevronDown size={28} />
-                </button>
+                  <p className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase pointer-events-none mt-1">
+                    Now Playing
+                  </p>
 
-                {/* 2. Middle: Title Text (Naturally centered) */}
-                <p className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase pointer-events-none mt-1">
-                  Now Playing
-                </p>
-
-                {/* 3. Right: 3-Dots Menu (Pinned absolutely to the right) */}
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-2">
-                  <SongContextMenu songId={song.id} albumId={song.albums?.id} artistId={song.albums?.artists?.id}>
-                    <button data-context-trigger="true" className="p-2 text-neutral-400 hover:text-white transition active:scale-95 flex items-center justify-center">
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-2">
+                    <button 
+                      onClick={() => setIsMobileMenuOpen(true)}
+                      className="p-2 text-neutral-400 hover:text-white transition active:scale-95 flex items-center justify-center"
+                    >
                       <BsThreeDotsVertical size={24} />
                     </button>
-                  </SongContextMenu>
+                  </div>
                 </div>
-
               </div>
+
+              <div className="flex-1 w-full flex items-center justify-center px-8 relative">
+                <div className="aspect-square relative w-full h-auto max-h-full max-w-[400px] mx-auto rounded-xl overflow-hidden shadow-2xl bg-neutral-800">
+                  {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" priority />}
+                </div>
+              </div>
+
+              <Queue />
+
             </div>
 
-            {/* ARTWORK OR QUEUE/LYRICS INJECTION SPACE */}
-            <div className="flex-1 w-full flex flex-col overflow-hidden relative min-h-0">
-              <AnimatePresence mode="wait">
-                {isOpen ? (
-                  <motion.div
-                    key="queue"
-                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }}
-                    className="w-full h-full relative overflow-hidden"
-                  >
-                    <Queue />
-                  </motion.div>
-                ) : (
-                  <motion.div
-                    key="artwork"
-                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }}
-                    className="w-full h-full flex items-center justify-center px-8 relative"
-                  >
-                    <div className="aspect-square relative w-full h-auto max-h-full max-w-[400px] mx-auto rounded-xl overflow-hidden shadow-2xl bg-neutral-800">
-                      {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" priority />}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* SQUISHED BOTTOM CONTROLS (35-40% height) */}
             <div className="flex flex-col w-full h-[40vh] min-h-[300px] max-h-[380px] bg-gradient-to-t from-black via-zinc-950/95 to-transparent flex-shrink-0 mt-auto justify-end">
 
-              {/* INFO ROW */}
               <div className="px-8 flex items-center justify-between mb-4">
                 <div className="flex flex-col overflow-hidden max-w-[80%]">
                   <h2 className="text-2xl font-bold text-white truncate break-words">{song.title}</h2>
@@ -449,13 +481,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </div>
               </div>
 
-              {/* PROGRESS BAR */}
-              <div className="px-8 mb-4 group cursor-pointer">
+              <div className="px-8 mb-4 cursor-pointer">
                 <Slider
                   min={0} max={duration || 100} value={currentTime}
                   onChange={handleSliderChange} onChangeComplete={handleSliderAfterChange} step={0.1}
                   styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none', width: '12px', height: '12px', marginTop: '-4px' }, rail: { backgroundColor: 'rgb(63 63 70)' } }}
-                  className="[&_.rc-slider-handle]:opacity-0 active:[&_.rc-slider-handle]:opacity-100"
+                  className={`[&_.rc-slider-handle]:transition-opacity ${isDragging ? '[&_.rc-slider-handle]:opacity-100' : '[&_.rc-slider-handle]:opacity-0'}`}
                 />
                 <div className="flex justify-between items-center mt-2 text-xs text-neutral-400 tabular-nums">
                   <p>{formatTime(currentTime)}</p>
@@ -463,7 +494,6 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </div>
               </div>
 
-              {/* MAIN CONTROLS */}
               <div className="px-8 flex items-center justify-between mb-4">
                 <BsShuffle size={24} onClick={isPlayingAutoplay ? undefined : toggleShuffle} className={`transition active:scale-90 ${isPlayingAutoplay ? 'text-neutral-700' : isShuffled ? 'text-green-500' : 'text-neutral-400'}`} />
                 <AiFillStepBackward size={45} onClick={handlePrevious} className="text-neutral-100 active:scale-90 transition" />
@@ -478,20 +508,75 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </div>
               </div>
 
-              {/* BOTTOM UTILITY BAR */}
               <div className="pb-6 pt-2 px-8 flex items-center justify-between w-full">
-                <div onClick={() => { toggle('queue'); }} className={`p-3 rounded-full active:scale-95 transition ${activeView === 'queue' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
+                
+                <div onClick={() => { 
+                   if (isOpen && activeView === 'queue') window.history.back();
+                   else if (isOpen && activeView !== 'queue') toggle('queue');
+                   else toggle('queue');
+                }} className={`p-3 rounded-full active:scale-95 transition ${activeView === 'queue' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
                   <HiQueueList size={22} />
                 </div>
+                
                 <div className="flex items-center justify-center w-[120px] gap-2">
                   <VolumeIcon onClick={toggleMute} className="text-neutral-400" size={20} />
                   <Slider min={0} max={1} step={0.01} value={volume} onChange={(value) => setVolume(value as number)} styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }} className="!cursor-auto" />
                 </div>
-                <div onClick={() => { if (hasLyrics || !hasLyrics) { toggle('lyrics'); } }} className={`p-3 rounded-full active:scale-95 transition ${!hasLyrics ? 'text-neutral-700 bg-transparent pointer-events-none' : activeView === 'lyrics' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
+                
+                <div onClick={() => { 
+                   if (!hasLyrics) return;
+                   if (isOpen && activeView === 'lyrics') window.history.back();
+                   else if (isOpen && activeView !== 'lyrics') toggle('lyrics');
+                   else toggle('lyrics');
+                }} className={`p-3 rounded-full active:scale-95 transition ${!hasLyrics ? 'text-neutral-600 bg-transparent' : activeView === 'lyrics' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
                   <TbMicrophone2 size={22} />
                 </div>
+
               </div>
             </div>
+
+            <AnimatePresence>
+              {isMobileMenuOpen && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                    className="absolute inset-0 bg-black/60 z-[110]"
+                    onClick={() => window.history.back()}
+                  />
+                  <motion.div
+                    initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                    className="absolute bottom-0 left-0 w-full bg-neutral-900 border-t border-neutral-800 rounded-t-2xl z-[120] p-4 pb-8 flex flex-col gap-2 shadow-2xl"
+                  >
+                    <div className="w-12 h-1.5 bg-neutral-700 rounded-full mx-auto mb-4" />
+                    
+                    <div className="flex items-center gap-3 p-2 mb-2 border-b border-neutral-800 pb-4">
+                      <div className="relative h-12 w-12 rounded-md overflow-hidden bg-neutral-800 flex-shrink-0">
+                        {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" />}
+                      </div>
+                      <div className="flex flex-col overflow-hidden">
+                        <p className="text-white font-bold text-sm truncate">{song.title}</p>
+                        <p className="text-neutral-400 text-xs truncate">{song.albums?.artists?.name}</p>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => handleMobileMenuAction(onClickArtist)} 
+                      className="flex items-center gap-3 p-3 w-full text-left text-neutral-200 hover:bg-neutral-800 transition rounded-md font-medium"
+                    >
+                      Go to Artist
+                    </button>
+
+                    <button 
+                      onClick={() => handleMobileMenuAction(onClickAlbum)} 
+                      className="flex items-center gap-3 p-3 w-full text-left text-neutral-200 hover:bg-neutral-800 transition rounded-md font-medium"
+                    >
+                      Go to Album
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+
           </motion.div>
         )}
       </AnimatePresence>
@@ -549,7 +634,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-x-3 w-full group px-2">
+          <div className="flex items-center gap-x-3 w-full group px-2 cursor-pointer">
             <p className="text-neutral-400 text-[12px] w-10 text-right tabular-nums">{formatTime(currentTime)}</p>
             <Slider
               min={0} max={duration || 100} value={currentTime}
@@ -570,8 +655,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           </div>
           <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon onClick={toggleMute} className="cursor-pointer hover:text-white transition text-neutral-400" size={24} />
-            <div className="relative w-full flex items-center group">
-              <Slider min={0} max={1} step={0.01} value={volume} onChange={(value) => setVolume(value as number)} styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }} className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity" />
+            <div className="relative w-full flex items-center group cursor-pointer">
+              <SongContextMenu songId={song.id} albumId={song.albums?.id} artistId={song.albums?.artists?.id}>
+                <Slider min={0} max={1} step={0.01} value={volume} onChange={(value) => setVolume(value as number)} styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }} className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity" />
+              </SongContextMenu>
             </div>
           </div>
         </div>
