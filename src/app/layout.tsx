@@ -18,6 +18,9 @@ const font = Figtree({
 export const metadata = {
   title: 'MuseBuzz',
   description: 'Listen to music!',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default async function RootLayout({
