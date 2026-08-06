@@ -69,7 +69,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
                 
                 {/* 2. Main content and Queue sit side-by-side UNDER the Header */}
                 <div className="flex flex-1 overflow-hidden relative">
-                    <main className="flex-1 overflow-y-auto pb-20 md:pb-0 min-w-0">
+                    <main className="flex-1 overflow-y-auto pb-28 min-w-0">
                         {children}
                     </main>
                     
