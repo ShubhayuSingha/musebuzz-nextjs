@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import useQueueStore from '@/stores/useQueueStore';
 import { supabase } from '@/lib/supabaseClient';
+import { offlineDb } from '@/lib/offlineDb';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface LyricLine {
@@ -74,11 +75,35 @@ export default function LyricsPlayer() {
     setIsLoading(true);
 
     const fetchLyrics = async () => {
-      const { data } = await supabase.from('songs').select('lyrics_snippet').eq('id', activeId).single();
+      let lyricsSnippet: string | null = null;
+
+      // 1. If offline, read lyrics from local IndexedDB
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        try {
+          const offlineSong = await offlineDb.songs.get(activeId);
+          lyricsSnippet = offlineSong?.lyrics_snippet || null;
+        } catch (e) {
+          console.warn("[LyricsPlayer] Offline lyrics read failed:", e);
+        }
+      } else {
+        // 2. Online: Fetch from Supabase with IndexedDB fallback
+        try {
+          const { data, error } = await supabase.from('songs').select('lyrics_snippet').eq('id', activeId).single();
+          if (error || !data) {
+            const offlineSong = await offlineDb.songs.get(activeId);
+            lyricsSnippet = offlineSong?.lyrics_snippet || null;
+          } else {
+            lyricsSnippet = data.lyrics_snippet;
+          }
+        } catch {
+          const offlineSong = await offlineDb.songs.get(activeId);
+          lyricsSnippet = offlineSong?.lyrics_snippet || null;
+        }
+      }
       
-      if (data?.lyrics_snippet) {
+      if (lyricsSnippet) {
         try { 
-          const parsedLyrics = JSON.parse(data.lyrics_snippet);
+          const parsedLyrics = JSON.parse(lyricsSnippet);
           setLyrics(parsedLyrics); 
 
           const initialTime = (window as any).__musebuzzCurrentTime || 0;

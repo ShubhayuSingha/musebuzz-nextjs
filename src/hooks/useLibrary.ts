@@ -120,13 +120,17 @@ const useLibrary = () => {
 
     // 🟢 NEW FUNCTION: Updates 'last_accessed_at' to bring artist to top of sidebar
     const updateArtistAccess = async (artistId: string) => {
-        if (!user) return;
+        if (!user || typeof navigator === 'undefined' || !navigator.onLine) return;
         
-        await supabase
-            .from('saved_artists')
-            .update({ last_accessed_at: new Date().toISOString() })
-            .eq('user_id', user.id)
-            .eq('artist_id', artistId);
+        try {
+            await supabase
+                .from('saved_artists')
+                .update({ last_accessed_at: new Date().toISOString() })
+                .eq('user_id', user.id)
+                .eq('artist_id', artistId);
+        } catch {
+            // Silently ignore offline error
+        }
     };
 
     return { 

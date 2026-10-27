@@ -19,6 +19,10 @@ import LikeDataLoader from "@/components/LikeDataLoader";
 import usePlaylistStore from '@/stores/usePlaylistStore';
 import usePlaybackSync from "@/hooks/usePlaybackSync"; 
 import MediaContextMenu from "@/components/MediaContextMenu";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import useDownloadStore from "@/stores/useDownloadStore";
+import usePlayerStore from "@/stores/usePlayerStore";
+import { offlineDb } from "@/lib/offlineDb";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -48,46 +52,103 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   const { refreshPlaylists, version } = usePlaylistStore();
   const [libraryItems, setLibraryItems] = useState<SidebarItem[]>([]);
   
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const { downloadedIds } = useDownloadStore();
+
+  const loadOfflineDownloads = async () => {
+    try {
+      const [offlinePlaylists, offlineAlbums] = await Promise.all([
+        offlineDb.playlists.toArray(),
+        offlineDb.albums.toArray()
+      ]);
+      const offlinePlItems: SidebarItem[] = offlinePlaylists
+        .filter(pl => pl.id !== 'liked')
+        .map(pl => {
+          let imageUrl = '/images/playlist-placeholder.jpg';
+          if (pl.image_path && pl.image_url) {
+            imageUrl = pl.image_url;
+          }
+        return {
+          id: pl.id,
+          type: 'playlist',
+          title: pl.title,
+          subtitle: 'Downloaded Playlist',
+          imageUrl: imageUrl,
+          path: `/playlist/${pl.id}`,
+          sortDate: pl.last_accessed_at || new Date(pl.downloaded_at).toISOString()
+        };
+      });
+      const offlineAlbItems: SidebarItem[] = offlineAlbums.map(alb => ({
+        id: alb.id,
+        type: 'album',
+        title: alb.title,
+        subtitle: alb.artists?.name ? `Album • ${alb.artists.name}` : 'Downloaded Album',
+        imageUrl: alb.image_url || '/images/album-placeholder.png',
+        path: `/album/${alb.id}`,
+        sortDate: alb.last_accessed_at || new Date(alb.downloaded_at).toISOString(),
+        artist_id: alb.artist_id
+      }));
+      return [...offlinePlItems, ...offlineAlbItems].sort(
+        (a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime()
+      );
+    } catch {
+      return [];
+    }
+  };
+
   // --- FETCH LOGIC ---
   const fetchLibrary = async () => {
-    if (!user?.id) {
-        setLibraryItems([]);
+    const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+
+    if (isOffline || !user?.id) {
+        const offlineData = await loadOfflineDownloads();
+        setLibraryItems(offlineData.slice(0, 10));
         return;
     }
 
-    // 1. Fetch Playlists
-    const { data: playlists } = await supabase
-      .from('playlists')
-      .select('id, title, image_path, user_id, last_accessed_at, created_at')
-      .eq('user_id', user.id)
-      .eq('type', 'personal');
+    try {
+      // 1. Fetch Playlists
+      const { data: playlists, error: plError } = await supabase
+        .from('playlists')
+        .select('id, title, image_path, user_id, last_accessed_at, created_at')
+        .eq('user_id', user.id)
+        .eq('type', 'personal');
 
-    // 2. Fetch Saved Albums
-    const { data: savedAlbums } = await supabase
-      .from('saved_albums')
-      .select(`
-         created_at,
-         last_accessed_at,
-         albums (
-            id, title, image_path, artists (id, name)
-         )
-      `)
-      .eq('user_id', user.id);
+      if (plError) throw plError;
 
-    // 3. Fetch Saved Artists
-    const { data: savedArtists } = await supabase
-      .from('saved_artists')
-      .select(`
-         created_at,
-         last_accessed_at,
-         artists (id, name, image_path)
-      `)
-      .eq('user_id', user.id);
+      // 2. Fetch Saved Albums
+      const { data: savedAlbums, error: albError } = await supabase
+        .from('saved_albums')
+        .select(`
+           created_at,
+           last_accessed_at,
+           albums (
+              id, title, image_path, artists (id, name)
+           )
+        `)
+        .eq('user_id', user.id);
+
+      if (albError) throw albError;
+
+      // 3. Fetch Saved Artists
+      const { data: savedArtists, error: artError } = await supabase
+        .from('saved_artists')
+        .select(`
+           created_at,
+           last_accessed_at,
+           artists (id, name, image_path)
+        `)
+        .eq('user_id', user.id);
+
+      if (artError) throw artError;
 
     // 4. Normalize Playlists
     const formattedPlaylists: SidebarItem[] = (playlists || []).map((pl: any) => {
-        const imgPath = pl.image_path || 'playlist-placeholder.jpg';
-        const { data: imgData } = supabase.storage.from('playlist_images').getPublicUrl(imgPath);
+        let imageUrl = '/images/playlist-placeholder.jpg';
+        if (pl.image_path) {
+            const { data: imgData } = supabase.storage.from('playlist_images').getPublicUrl(pl.image_path);
+            imageUrl = imgData?.publicUrl || imageUrl;
+        }
         const userName = user.user_metadata.full_name || 'User';
 
         return {
@@ -95,7 +156,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             type: 'playlist',
             title: pl.title,
             subtitle: `Playlist • ${userName}`,
-            imageUrl: imgData.publicUrl,
+            imageUrl: imageUrl,
             path: `/playlist/${pl.id}`,
             sortDate: pl.last_accessed_at || pl.created_at
         };
@@ -154,16 +215,38 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         .slice(0, 10); 
 
     setLibraryItems(combined);
+    } catch {
+      const offlineData = await loadOfflineDownloads();
+      setLibraryItems(offlineData.slice(0, 10));
+    }
   };
+
+  const activeContext = usePlayerStore((state) => state.activeContext);
 
   useEffect(() => {
     fetchLibrary();
-  }, [user, supabase, version]); 
+  }, [user, supabase, version, isOnline, isOfflineMode, downloadedIds, activeContext?.id]); 
+
+  useEffect(() => {
+    const handleNetworkChange = () => {
+      fetchLibrary();
+    };
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+    return () => {
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+    };
+  }, []);
 
 
   // --- CREATE PLAYLIST LOGIC ---
   const handleCreatePlaylist = async (e: React.MouseEvent) => {
     e.preventDefault();
+    if (!isOnline || isOfflineMode) {
+      toast.error('Creating playlists is disabled offline');
+      return;
+    }
     if (!user) return authModal.onOpen('sign_in');
 
     const { count } = await supabase.from('playlists').select('*', { count: 'exact', head: true }).eq('user_id', user.id);
@@ -207,7 +290,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   // HELPER: Text container that fades out smoothly
   const textContainerClass = `
       flex flex-col whitespace-nowrap overflow-hidden transition-all duration-300
-      ${(!isMobileOpen && isCollapsed) ? 'opacity-0 w-0 translate-x-[-10px]' : 'opacity-100 w-auto translate-x-0'}
+      ${isCollapsed ? 'md:opacity-0 md:w-0 md:-translate-x-[10px]' : 'md:opacity-100 md:w-auto md:translate-x-0'}
+      opacity-100 w-auto translate-x-0
   `;
 
   return (
@@ -216,7 +300,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         bg-gradient-to-b from-purple-950 to-black text-white py-4 
         flex flex-col flex-shrink-0
         transition-all duration-300 ease-in-out h-full max-h-screen z-40
-        ${isMobileOpen ? 'w-72 md:w-72' : isCollapsed ? 'w-[80px]' : 'w-72'} 
+        w-72 ${isCollapsed ? 'md:w-[80px]' : 'md:w-72'} 
       `}
     >
       <LikeDataLoader />
@@ -233,9 +317,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
                 <FiMenu size={26} />
             </button>
         </div>
-        {/* Title */}
+        {/* Title & Brand Logo */}
         <div className={`${textContainerClass} md:ml-0 ml-4`}>
-            <div className="font-bold text-2xl">MuseBuzz</div>
+          <div className="flex items-center gap-2.5">
+            <Image 
+              src="/icon.svg" 
+              alt="MuseBuzz" 
+              width={28} 
+              height={28} 
+              className="w-7 h-7 object-contain rounded-md drop-shadow shrink-0"
+              priority
+            />
+            <div className="font-bold text-2xl tracking-tight">MuseBuzz</div>
+          </div>
         </div>
       </div>
 
@@ -346,7 +440,22 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
                  >
                       <Link 
                         href={item.path}
-                        onClick={closeMobile}
+                        onClick={() => {
+                          if (closeMobile) closeMobile();
+                          const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+                          if (isOffline) {
+                            const now = new Date().toISOString();
+                            if (item.type === 'playlist') {
+                              offlineDb.playlists.update(item.id, { last_accessed_at: now })
+                                .then(() => refreshPlaylists())
+                                .catch(() => {});
+                            } else if (item.type === 'album') {
+                              offlineDb.albums.update(item.id, { last_accessed_at: now })
+                                .then(() => refreshPlaylists())
+                                .catch(() => {});
+                            }
+                          }
+                        }}
                         className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
                         title={`${item.title}\n${item.subtitle}`}
                       >
@@ -354,10 +463,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
                           <div className={iconBoxClass}>
                              <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
                                  <Image 
+                                     unoptimized
                                      fill
-                                     src={item.imageUrl || '/images/playlist-placeholder.jpg'}
+                                     sizes="48px"
+                                     src={item.imageUrl || (item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : '/images/playlist-placeholder.jpg')}
                                      alt={item.title}
                                      className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
+                                     onError={(e) => {
+                                         e.currentTarget.src = item.type === 'album' 
+                                             ? '/images/album-placeholder.png' 
+                                             : item.type === 'artist' 
+                                             ? '/images/artist-placeholder.png' 
+                                             : '/images/playlist-placeholder.jpg';
+                                     }}
                                  />
                              </div>
                           </div>

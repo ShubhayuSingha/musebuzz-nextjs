@@ -79,8 +79,9 @@ const ArtistItem: React.FC<ArtistItemProps> = ({ artist }) => {
             onDragStart={(e) => e.preventDefault()}
           >
             <Image
+              unoptimized
               draggable={false}
-              src={imageUrl}
+              src={imageUrl || '/images/artist-placeholder.png'}
               fill
               alt={artist.name}
               className="
@@ -90,6 +91,9 @@ const ArtistItem: React.FC<ArtistItemProps> = ({ artist }) => {
                 ease-out
               "
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              onError={(e) => {
+                e.currentTarget.src = '/images/artist-placeholder.png';
+              }}
             />
           </div>
 

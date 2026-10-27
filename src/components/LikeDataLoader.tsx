@@ -11,21 +11,24 @@ const LikeDataLoader = () => {
   useEffect(() => {
     // Define the secure fetch function
     const fetchLikedSongs = async () => {
-      // 1. Securely get the verified user from the server
-      const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-      
-      if (userError || !user) return;
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
 
-      // 2. Fetch Data using the verified User ID
       try {
-        const { data, error } = await supabaseClient
+        // 1. Securely get the verified user from the server
+        const { data, error: userError } = await supabaseClient.auth.getUser();
+        const user = data?.user;
+        
+        if (userError || !user) return;
+
+        // 2. Fetch Data using the verified User ID
+        const { data: songsData, error } = await supabaseClient
           .from('liked_songs')
           .select('song_id')
           .eq('user_id', user.id)
           .abortSignal(AbortSignal.timeout(10000));
 
-        if (data) {
-          setLikedIds(data.map((item: any) => item.song_id));
+        if (songsData) {
+          setLikedIds(songsData.map((item: any) => item.song_id));
         }
       } catch (err) {
         console.warn("Like fetch failed", err);

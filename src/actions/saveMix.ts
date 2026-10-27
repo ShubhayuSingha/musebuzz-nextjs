@@ -12,11 +12,11 @@ export async function saveMixToLibrary(mixId: string) {
   const supabase = createServerComponentClient({ cookies: () => cookieStore as any });
   
   // 1. Auth Check
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
       return { success: false, error: "Unauthorized" };
   }
-  const user_id = session.user.id;
+  const user_id = user.id;
 
   // 2. Fetch the Generated Mix Source
   const { data: mix, error: mixError } = await supabase

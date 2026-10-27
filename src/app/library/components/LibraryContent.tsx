@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useRef, useLayoutEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { AiFillHeart } from "react-icons/ai";
 import { RiAlbumLine, RiPlayListFill } from "react-icons/ri"; 
 import { BsPersonFill } from "react-icons/bs"; // 🟢 Added Icon for Artists
+import { HiArrowDownTray } from "react-icons/hi2";
 import MediaContextMenu from "@/components/MediaContextMenu"; 
 import { motion, AnimatePresence } from "framer-motion"; 
+import useDownloadStore from "@/stores/useDownloadStore";
+import { offlineDb } from "@/lib/offlineDb"; 
 
 export interface LibraryItem {
     id: string;
@@ -53,11 +56,19 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
                 ${data.type === 'artist' ? 'rounded-full' : 'rounded-md'} 
             `}>
                 <Image 
+                    unoptimized
                     className="object-cover"
-                    src={data.imageUrl || '/images/liked.png'} 
+                    src={data.imageUrl || (data.type === 'album' ? '/images/album-placeholder.png' : data.type === 'artist' ? '/images/artist-placeholder.png' : '/images/playlist-placeholder.jpg')} 
                     fill 
                     alt={data.title} 
                     sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    onError={(e) => {
+                        e.currentTarget.src = data.type === 'album' 
+                            ? '/images/album-placeholder.png' 
+                            : data.type === 'artist' 
+                            ? '/images/artist-placeholder.png' 
+                            : '/images/playlist-placeholder.jpg';
+                    }}
                 />
             </div>
 
@@ -87,11 +98,68 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
 // --- MAIN COMPONENT ---
 const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) => {
     const router = useRouter();
-    // 🟢 UPDATED: Added 'artist' to filter state
-    const [filter, setFilter] = useState<'all' | 'playlist' | 'album' | 'artist'>('all');
+    const { downloadedIds } = useDownloadStore();
+    const [filter, setFilter] = useState<'all' | 'playlist' | 'album' | 'artist' | 'downloaded'>('all');
+    const [offlineItems, setOfflineItems] = useState<LibraryItem[]>([]);
+    const [offlineLikedCount, setOfflineLikedCount] = useState<number | null>(null);
     
     const [gridCols, setGridCols] = useState(4);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Merge any offline downloaded items if they aren't already in items
+    useEffect(() => {
+        const loadOfflineItems = async () => {
+            try {
+                const [offlinePlaylists, offlineAlbums, offlineLiked] = await Promise.all([
+                    offlineDb.playlists.toArray(),
+                    offlineDb.albums.toArray(),
+                    offlineDb.playlists.get('liked')
+                ]);
+
+                if (offlineLiked) {
+                    setOfflineLikedCount(offlineLiked.playlist_songs?.length || 0);
+                }
+
+                const existingIds = new Set(items.map(it => it.id));
+                const extraItems: LibraryItem[] = [];
+
+                for (const pl of offlinePlaylists) {
+                    if (pl.id !== 'liked' && !existingIds.has(pl.id)) {
+                        extraItems.push({
+                            id: pl.id,
+                            type: 'playlist',
+                            title: pl.title,
+                            author: 'Offline Playlist',
+                            created_at: new Date(pl.downloaded_at).toISOString(),
+                            imageUrl: (pl.image_path && pl.image_url) ? pl.image_url : '/images/playlist-placeholder.jpg',
+                        });
+                    }
+                }
+
+                for (const alb of offlineAlbums) {
+                    if (!existingIds.has(alb.id)) {
+                        extraItems.push({
+                            id: alb.id,
+                            type: 'album',
+                            title: alb.title,
+                            author: alb.artists?.name || 'Offline Album',
+                            created_at: new Date(alb.downloaded_at).toISOString(),
+                            imageUrl: alb.image_url || '/images/album-placeholder.png',
+                            artist_id: alb.artist_id
+                        });
+                    }
+                }
+
+                setOfflineItems(extraItems);
+            } catch (err) {
+                console.warn('[LibraryContent] Error loading offline items:', err);
+            }
+        };
+
+        loadOfflineItems();
+    }, [items, downloadedIds]);
+
+    const combinedItems = [...items, ...offlineItems];
 
     const handleItemClick = (item: LibraryItem) => {
         if (item.type === 'playlist') {
@@ -138,17 +206,23 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
         };
     }, []);
 
-    const filteredItems = items.filter((item) => {
+    const isLikedDownloaded = downloadedIds.has('liked');
+
+    const filteredItems = combinedItems.filter((item) => {
+        if (item.id === 'liked') return false;
         if (filter === 'all') return true;
+        if (filter === 'downloaded') return downloadedIds.has(item.id);
         return item.type === filter;
     });
+
+    const showLikedCard = filter === 'all' || filter === 'playlist' || (filter === 'downloaded' && isLikedDownloaded);
 
     const getChipClass = (type: string) => {
         const isActive = filter === type;
         return `
-            px-3 py-1.5 rounded-full font-medium text-sm cursor-pointer transition 
+            px-3 py-1.5 rounded-full font-medium text-sm cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap
             ${isActive 
-                ? 'bg-white text-black hover:scale-105' 
+                ? 'bg-white text-black hover:scale-105 shadow-md' 
                 : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
             }
         `;
@@ -162,6 +236,10 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                 <div onClick={() => setFilter('all')} className={getChipClass('all')}>
                     All
                 </div>
+                <div onClick={() => setFilter('downloaded')} className={getChipClass('downloaded')}>
+                    <HiArrowDownTray className="w-3.5 h-3.5" />
+                    Downloaded {downloadedIds.size > 0 ? `(${downloadedIds.size})` : ''}
+                </div>
                 <div onClick={() => setFilter('playlist')} className={getChipClass('playlist')}>
                     Playlists
                 </div>
@@ -174,6 +252,19 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                 </div>
             </div>
 
+            {/* EMPTY STATE FOR DOWNLOADED FILTER */}
+            {filter === 'downloaded' && filteredItems.length === 0 && !isLikedDownloaded && (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-neutral-400 px-4">
+                    <div className="w-16 h-16 rounded-full bg-neutral-800/80 border border-neutral-700/60 flex items-center justify-center mb-4">
+                        <HiArrowDownTray className="w-8 h-8 text-neutral-500" />
+                    </div>
+                    <p className="text-white font-semibold text-lg mb-1">No downloaded music</p>
+                    <p className="text-sm text-neutral-400 max-w-sm">
+                        Download albums or playlists to listen offline even without an internet connection.
+                    </p>
+                </div>
+            )}
+
             {/* GRID WITH MOTION */}
             <motion.div 
                 ref={containerRef}
@@ -185,7 +276,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
             >
                 <AnimatePresence mode="popLayout">
                     {/* Liked Songs Card */}
-                    {(filter === 'all' || filter === 'playlist') && (
+                    {showLikedCard && (
                         <motion.div 
                             layout
                             initial={{ opacity: 0, scale: 0.9 }}
@@ -213,7 +304,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                                         <RiPlayListFill size={14} />
                                     </div>
                                     <p className="truncate font-medium text-xs">
-                                        {likedCount} songs
+                                        {likedCount || offlineLikedCount || 0} songs
                                     </p>
                                 </div>
                             </div>

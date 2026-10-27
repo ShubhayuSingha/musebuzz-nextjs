@@ -1,5 +1,11 @@
 // src/lib/audioEngine.ts
-import { Howl } from "howler";
+import { Howl, Howler } from "howler";
+
+if (typeof window !== "undefined") {
+  // Expand HTML5 audio pool size so preloading and fast song switching never exhaust the pool
+  Howler.html5PoolSize = 50;
+  Howler.autoUnlock = true;
+}
 
 let currentSound: Howl | null = null;
 let nextSound: Howl | null = null;

@@ -13,6 +13,7 @@ import { MdDragIndicator } from "react-icons/md";
 import PlayingAnimation from "@/components/PlayingAnimation";
 import usePlayerStore from "@/stores/usePlayerStore";
 import useQueueStore from "@/stores/useQueueStore";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import { supabase } from "@/lib/supabaseClient";
 import LikeButton from "@/components/LikeButton";
 import {
@@ -73,10 +74,9 @@ const QueueItemContent = ({
   onHandlePointerUp,
 }: QueueItemContentProps) => {
   // @ts-ignore
-  const imageUrl = song?.albums?.image_path
-    ? supabase.storage.from("images").getPublicUrl(song.albums.image_path).data
-        .publicUrl
-    : "/images/music-placeholder.png";
+  const imageUrl = (song as any)?.imageUrl || (song?.albums as any)?.image_url || (song?.albums?.image_path
+    ? supabase.storage.from("images").getPublicUrl(song.albums.image_path).data.publicUrl
+    : "/images/album-placeholder.png");
   const artistName = song?.albums?.artists?.name || "Unknown";
 
   return (
@@ -121,10 +121,15 @@ const QueueItemContent = ({
       <div className="relative h-[40px] w-[40px] overflow-hidden rounded-md bg-neutral-800 pointer-events-none">
         {song && (
           <Image
+            unoptimized
             fill
+            sizes="40px"
             src={imageUrl}
             alt={song.title || ""}
             className="object-cover"
+            onError={(e) => {
+              e.currentTarget.src = '/images/album-placeholder.png';
+            }}
           />
         )}
       </div>
@@ -320,6 +325,9 @@ export default function Queue() {
 
   const actualWidth = isMobile ? "100vw" : width;
 
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isEffectivelyOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+
   const priorityList = player.bucketB;
   const fullContextList = useMemo(
     () => (player.isShuffled ? player.shuffledOrder : player.bucketA),
@@ -353,6 +361,7 @@ export default function Queue() {
   }, [fullContextList, currentIndex, player.isPlayingAutoplay]);
 
   const autoplayItems = useMemo<ContextItem[]>(() => {
+    if (isEffectivelyOffline) return [];
     let listToDisplay = player.autoplay;
     if (player.isPlayingAutoplay && player.activeId) {
       const currentIdx = player.autoplay.indexOf(player.activeId);
@@ -360,7 +369,7 @@ export default function Queue() {
         listToDisplay = player.autoplay.slice(currentIdx + 1);
     }
     return listToDisplay.map((id) => ({ id, uid: `auto-${id}` }));
-  }, [player.autoplay, player.isPlayingAutoplay, player.activeId]);
+  }, [player.autoplay, player.isPlayingAutoplay, player.activeId, isEffectivelyOffline]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -370,7 +379,9 @@ export default function Queue() {
 
     priorityList.forEach((i) => ids.add(i.id));
     contextItems.slice(0, 30).forEach((i) => ids.add(i.id));
-    autoplayItems.slice(0, 20).forEach((i) => ids.add(i.id));
+    if (!isEffectivelyOffline) {
+      autoplayItems.slice(0, 20).forEach((i) => ids.add(i.id));
+    }
 
     const toFetch = Array.from(ids).filter((id) => !fetchedIds.current.has(id));
     if (!toFetch.length) return;
@@ -610,7 +621,7 @@ export default function Queue() {
                         </div>
                       )}
 
-                      {autoplayItems.length > 0 && (
+                      {autoplayItems.length > 0 && !isEffectivelyOffline && (
                         <div className="mt-8 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
                           <div className="flex items-center gap-2 mb-3 px-2 border-t border-neutral-800 pt-6">
                             <BsStars className="text-emerald-500" size={14} />

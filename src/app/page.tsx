@@ -11,11 +11,16 @@ import ArtistItem from '@/components/ArtistItem';
 import Greeting from '@/components/Greeting';
 import { HiChevronLeft, HiChevronRight } from 'react-icons/hi2';
 import { motion } from 'framer-motion';
+import { RiWifiOffLine } from 'react-icons/ri';
+import { HiArrowDownTray } from 'react-icons/hi2';
 
 import usePlaylistStore from '@/stores/usePlaylistStore';
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import useDownloadStore from '@/stores/useDownloadStore';
+import { offlineDb } from '@/lib/offlineDb';
 import MediaContextMenu from "@/components/MediaContextMenu"; 
 
-type SectionKey = 'jumpBackIn' | 'madeForYou' | 'suggestedAlbums' | 'yourPlaylists' | 'newestAlbums';
+type SectionKey = 'jumpBackIn' | 'madeForYou' | 'suggestedAlbums' | 'yourPlaylists' | 'newestAlbums' | 'offlinePlaylists' | 'offlineAlbums';
 
 const STAGGER = 0.08;
 const INITIAL_DELAY = 0.25;
@@ -24,17 +29,25 @@ const DRAG_THRESHOLD = 5;
 export default function Home() {
   const { version } = usePlaylistStore();
   const user = useUser();
+  const { isOnline, isOfflineMode, toggleOfflineMode } = useOfflineModeStore();
+  const { downloadedIds } = useDownloadStore();
 
-  // 🟢 NEW: Global Loading State
+  const isEffectivelyOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+
+  // Global Loading State
   const [isLoading, setIsLoading] = useState(true);
 
-  // Data States
+  // Online Data States
   const [jumpBackIn, setJumpBackIn] = useState<any[]>([]);
   const [madeForYou, setMadeForYou] = useState<any[]>([]); 
   const [suggestedAlbums, setSuggestedAlbums] = useState<any[]>([]);
   const [aiTitle, setAiTitle] = useState("Suggested Albums");
   const [yourPlaylists, setYourPlaylists] = useState<any[]>([]);
   const [newestAlbums, setNewestAlbums] = useState<any[]>([]);
+
+  // Offline Data States
+  const [offlinePlaylists, setOfflinePlaylists] = useState<any[]>([]);
+  const [offlineAlbums, setOfflineAlbums] = useState<any[]>([]);
 
   const [isDragging, setIsDragging] = useState(false);
 
@@ -44,6 +57,8 @@ export default function Home() {
   const suggestedRef = useRef<HTMLDivElement>(null);
   const yourPlaylistsRef = useRef<HTMLDivElement>(null);
   const newestRef = useRef<HTMLDivElement>(null);
+  const offlinePlaylistsRef = useRef<HTMLDivElement>(null);
+  const offlineAlbumsRef = useRef<HTMLDivElement>(null);
 
   // native drag state
   const isDown = useRef(false);
@@ -63,6 +78,8 @@ export default function Home() {
     suggestedAlbums: false,
     yourPlaylists: false,
     newestAlbums: false,
+    offlinePlaylists: false,
+    offlineAlbums: false,
   });
 
   const [canScrollRight, setCanScrollRight] = useState<Record<SectionKey, boolean>>({
@@ -71,16 +88,19 @@ export default function Home() {
     suggestedAlbums: false,
     yourPlaylists: false,
     newestAlbums: false,
+    offlinePlaylists: false,
+    offlineAlbums: false,
   });
 
   /* =======================
-        DATA FETCH
+        ONLINE DATA FETCH
      ======================= */
 
   useEffect(() => {
+    if (isEffectivelyOffline) return;
+
     const fetchDashboard = async () => {
-      // 🟢 1. Instantly trigger the loader      
-      
+      setIsLoading(true);
       try {
         // 1. PUBLIC DATA (Fetch this for EVERYONE)
         const { data: newAlbums } = await supabase
@@ -197,13 +217,74 @@ export default function Home() {
       } catch (error) {
         console.error("Failed to load dashboard data:", error);
       } finally {
-        // 🟢 2. Turn off the loader ONLY after everything has been fetched and set
         setIsLoading(false);
       }
     };
 
     fetchDashboard();
-  }, [version, user]);
+  }, [version, user, isEffectivelyOffline]);
+
+  /* =======================
+        OFFLINE DATA FETCH
+     ======================= */
+
+  useEffect(() => {
+    if (!isEffectivelyOffline) return;
+
+    const loadOfflineHomeData = async () => {
+      setIsLoading(true);
+      try {
+        const [allPlaylists, allAlbums] = await Promise.all([
+          offlineDb.playlists.toArray(),
+          offlineDb.albums.toArray()
+        ]);
+
+        // Format playlists. If 'liked' exists, sort it to the top!
+        const formattedPlaylists = allPlaylists
+          .map((p) => {
+            return {
+              id: p.id,
+              title: p.title || (p.id === 'liked' ? 'Liked Songs' : 'Playlist'),
+              image_path: p.image_path || null,
+              image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
+              user_id: p.user_id,
+              type: 'playlist',
+              downloaded_at: p.downloaded_at,
+              songsCount: p.playlist_songs?.length || 0
+            };
+          })
+          .sort((a, b) => {
+            if (a.id === 'liked') return -1;
+            if (b.id === 'liked') return 1;
+            return (b.downloaded_at || 0) - (a.downloaded_at || 0);
+          });
+
+        // Format albums
+        const formattedAlbums = allAlbums
+          .map((a) => ({
+            id: a.id,
+            title: a.title,
+            image_path: a.image_path || null,
+            image_url: a.image_url || a.songs?.[0]?.imageUrl || null,
+            genre: a.genre,
+            artists: a.artists,
+            type: 'album',
+            downloaded_at: a.downloaded_at,
+            songsCount: a.songs?.length || 0
+          }))
+          .sort((a, b) => (b.downloaded_at || 0) - (a.downloaded_at || 0));
+
+        setOfflinePlaylists(formattedPlaylists);
+        setOfflineAlbums(formattedAlbums);
+      } catch (err) {
+        console.warn("[Home] Failed to load offline items:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadOfflineHomeData();
+  }, [isEffectivelyOffline, downloadedIds]);
 
   /* =======================
         SCROLL HELPERS
@@ -365,7 +446,7 @@ export default function Home() {
   ) => {
     const DefaultRenderer = (item: any) => {
        if (item.type === 'artist') return <ArtistItem artist={item} />;
-       if (key === 'yourPlaylists') return <PlaylistItem playlist={item} />;
+       if (key === 'yourPlaylists' || key === 'offlinePlaylists') return <PlaylistItem playlist={item} />;
        return <AlbumItem album={item} />;
     };
 
@@ -437,17 +518,22 @@ export default function Home() {
     </div>
   )};
 
-/* =======================
+  /* =======================
         INIT & RESIZE OBSERVER
      ======================= */
 
   useEffect(() => {
     const checkAllScrolls = () => {
-      updateScrollButtons(jumpBackInRef, 'jumpBackIn');
-      updateScrollButtons(madeForYouRef, 'madeForYou'); 
-      updateScrollButtons(suggestedRef, 'suggestedAlbums');
-      updateScrollButtons(yourPlaylistsRef, 'yourPlaylists');
-      updateScrollButtons(newestRef, 'newestAlbums');
+      if (isEffectivelyOffline) {
+        updateScrollButtons(offlinePlaylistsRef, 'offlinePlaylists');
+        updateScrollButtons(offlineAlbumsRef, 'offlineAlbums');
+      } else {
+        updateScrollButtons(jumpBackInRef, 'jumpBackIn');
+        updateScrollButtons(madeForYouRef, 'madeForYou'); 
+        updateScrollButtons(suggestedRef, 'suggestedAlbums');
+        updateScrollButtons(yourPlaylistsRef, 'yourPlaylists');
+        updateScrollButtons(newestRef, 'newestAlbums');
+      }
     };
 
     // 1. Initial check when data loads
@@ -463,6 +549,8 @@ export default function Home() {
     if (suggestedRef.current) observer.observe(suggestedRef.current);
     if (yourPlaylistsRef.current) observer.observe(yourPlaylistsRef.current);
     if (newestRef.current) observer.observe(newestRef.current);
+    if (offlinePlaylistsRef.current) observer.observe(offlinePlaylistsRef.current);
+    if (offlineAlbumsRef.current) observer.observe(offlineAlbumsRef.current);
 
     // 3. Fallback for entire window resizing
     window.addEventListener('resize', checkAllScrolls);
@@ -471,13 +559,13 @@ export default function Home() {
       observer.disconnect();
       window.removeEventListener('resize', checkAllScrolls);
     };
-  }, [jumpBackIn, madeForYou, suggestedAlbums, yourPlaylists, newestAlbums]);
+  }, [jumpBackIn, madeForYou, suggestedAlbums, yourPlaylists, newestAlbums, offlinePlaylists, offlineAlbums, isEffectivelyOffline]);
 
   /* =======================
         RENDER
      ======================= */
 
-  // 🟢 3. The Loading Screen Interceptor
+  // The Loading Screen Interceptor
   if (isLoading) {
     return (
       <div className="h-[calc(100vh-100px)] w-full flex items-center justify-center bg-black">
@@ -489,7 +577,96 @@ export default function Home() {
     );
   }
 
-  // 🟢 4. The main return only executes when isLoading is false
+  /* =======================
+        OFFLINE VIEW
+     ======================= */
+  if (isEffectivelyOffline) {
+    const hasOfflineContent = offlinePlaylists.length > 0 || offlineAlbums.length > 0;
+
+    return (
+      <div className="p-8 select-none">
+        {/* Offline Banner / Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
+                Offline Music
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-semibold select-none">
+                <RiWifiOffLine className="w-3.5 h-3.5" />
+                Offline Mode
+              </span>
+            </div>
+            <p className="mt-2 text-zinc-400 text-sm sm:text-base">
+              Showing playlists and albums downloaded directly to this device.
+            </p>
+          </div>
+
+          <button
+            onClick={toggleOfflineMode}
+            type="button"
+            className="self-start md:self-auto px-4 py-2 rounded-full text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition active:scale-95 flex items-center gap-2 cursor-pointer"
+          >
+            <span>Switch to Online Mode</span>
+          </button>
+        </div>
+
+        {/* Empty State */}
+        {!hasOfflineContent && (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <div className="w-16 h-16 rounded-full bg-purple-900/30 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-5 shadow-lg shadow-purple-900/20">
+              <HiArrowDownTray size={30} />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">No Downloaded Music Found</h2>
+            <p className="text-zinc-400 text-sm max-w-md mb-6 leading-relaxed">
+              You haven&apos;t downloaded any playlists or albums for offline playback yet. Switch back online to download your favourite music.
+            </p>
+            <button
+              onClick={toggleOfflineMode}
+              type="button"
+              className="px-6 py-2.5 rounded-full font-semibold text-sm bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/50 transition active:scale-95 cursor-pointer"
+            >
+              Switch to Online Mode
+            </button>
+          </div>
+        )}
+
+        {/* Row 1: Downloaded Playlists */}
+        {offlinePlaylists.length > 0 && (
+          <div className="mt-8">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-2xl font-semibold text-white">Downloaded Playlists</h2>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-800 text-zinc-400 font-mono font-medium">
+                {offlinePlaylists.length}
+              </span>
+            </div>
+            {renderScroller(offlinePlaylists, offlinePlaylistsRef, 'offlinePlaylists', (item) => (
+              <PlaylistItem playlist={item} />
+            ))}
+          </div>
+        )}
+
+        {/* Row 2: Downloaded Albums */}
+        {offlineAlbums.length > 0 && (
+          <div className="mt-12">
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-2xl font-semibold text-white">Downloaded Albums</h2>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-800 text-zinc-400 font-mono font-medium">
+                {offlineAlbums.length}
+              </span>
+            </div>
+            {renderScroller(offlineAlbums, offlineAlbumsRef, 'offlineAlbums', (item) => (
+              <AlbumItem album={item} />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* =======================
+        ONLINE VIEW
+     ======================= */
   return (
     <div className="p-8 select-none">
       <Greeting />

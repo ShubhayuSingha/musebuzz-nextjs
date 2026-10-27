@@ -11,6 +11,7 @@ import { motion, Variants, PanInfo } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu';
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
 
 // 🟢 FIX: Added local helper function
 const formatTime = (seconds: number) => {
@@ -63,16 +64,18 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
       );
       player.setId(id, context);
     }
+    
+    const isDeviceOnline = typeof navigator !== 'undefined' && navigator.onLine && !useOfflineModeStore.getState().isOfflineMode && useOfflineModeStore.getState().isOnline;
 
-    if (user) {
-       const { error } = await supabase
-        .from('saved_albums')
-        .update({ last_accessed_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .eq('album_id', albumId);
-
-       if (error) {
-         console.error("Failed to update album access time:", error);
+    if (user && isDeviceOnline) {
+       try {
+         await supabase
+          .from('saved_albums')
+          .update({ last_accessed_at: new Date().toISOString() })
+          .eq('user_id', user.id)
+          .eq('album_id', albumId);
+       } catch {
+         // Silently ignore offline error
        }
     }
   };

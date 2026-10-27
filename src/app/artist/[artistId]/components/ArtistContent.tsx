@@ -300,7 +300,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
 
                                     {/* 2. Image */}
                                     <div className="relative h-10 w-10 overflow-hidden rounded-md">
-                                        <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                        <Image fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
                                     </div>
 
                                     {/* 3. Title */}
@@ -343,7 +343,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
                                             <PlayingAnimation />
                                         )}
                                         <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
-                                            <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                            <Image fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
                                         </div>
                                       </div>
                                       <div className="flex flex-col min-w-0 flex-1">
@@ -403,6 +403,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
                                 <div className="relative aspect-square w-full rounded-md overflow-hidden mb-4 shadow-lg bg-neutral-800">
                                     <Image 
                                         fill 
+                                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
                                         src={album.imageUrl} 
                                         alt={album.title} 
                                         className="object-cover" 

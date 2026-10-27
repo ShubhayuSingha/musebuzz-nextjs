@@ -17,6 +17,7 @@
     "@supabase/auth-ui-shared": "^0.1.8",
     "@supabase/supabase-js": "^2.57.0",
     "@types/howler": "^2.2.12",
+    "dexie": "^4.4.7",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.26.2",
     "fuse.js": "^7.1.0",

@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/lib/supabaseClient'; 
 import { saveContextSettings, loadContextSettings } from '@/lib/playerContextSettings';
 import usePlaylistStore from '@/stores/usePlaylistStore'; 
+import { offlineDb } from '@/lib/offlineDb'; 
 
 /* =========================
    TYPES
@@ -117,17 +118,43 @@ const updateLastAccessed = async (context?: PlayerContext) => {
     if (!context?.id) return;
     const now = new Date().toISOString();
 
-    if (context.type === 'playlist') {
-        const { error } = await supabase.from('playlists').update({ last_accessed_at: now }).eq('id', context.id);
-        if (!error) usePlaylistStore.getState().refreshPlaylists();
+    // 1. ALWAYS update offlineDb so offline sidebar sorting reflects recently played items
+    try {
+      if (context.type === 'playlist') {
+        const pl = await offlineDb.playlists.get(context.id);
+        if (pl) {
+          await offlineDb.playlists.update(context.id, { last_accessed_at: now });
+          usePlaylistStore.getState().refreshPlaylists();
+        }
+      } else if (context.type === 'album') {
+        const alb = await offlineDb.albums.get(context.id);
+        if (alb) {
+          await offlineDb.albums.update(context.id, { last_accessed_at: now });
+          usePlaylistStore.getState().refreshPlaylists();
+        }
+      }
+    } catch {
+      // Ignore Dexie errors
     }
 
-    if (context.type === 'album') {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-            const { error } = await supabase.from('saved_albums').update({ last_accessed_at: now }).eq('album_id', context.id).eq('user_id', user.id);
-            if (!error) usePlaylistStore.getState().refreshPlaylists();
-        }
+    // 2. Also sync to cloud if online
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    try {
+      if (context.type === 'playlist') {
+          const { error } = await supabase.from('playlists').update({ last_accessed_at: now }).eq('id', context.id);
+          if (!error) usePlaylistStore.getState().refreshPlaylists();
+      }
+
+      if (context.type === 'album') {
+          const { data } = await supabase.auth.getUser();
+          if (data?.user) {
+              const { error } = await supabase.from('saved_albums').update({ last_accessed_at: now }).eq('album_id', context.id).eq('user_id', data.user.id);
+              if (!error) usePlaylistStore.getState().refreshPlaylists();
+          }
+      }
+    } catch {
+      // Offline: ignore network failure silently
     }
 };
 
@@ -480,14 +507,14 @@ const usePlayerStore = create<PlayerStore>()(
         }
         
         const context = state.activeContext;
-        if (context?.id) {
+        if (context?.id && (typeof navigator === 'undefined' || navigator.onLine)) {
           supabase.auth.getUser().then(({ data }) => {
-            if (!data.user) return;
+            if (!data?.user) return;
             saveContextSettings(data.user.id, context, {
               shuffle_mode: next,
               repeat_mode: state.repeatMode,
             });
-          });
+          }).catch(() => {});
         }
       },
 
@@ -497,14 +524,14 @@ const usePlayerStore = create<PlayerStore>()(
           const next = modes[(modes.indexOf(state.repeatMode) + 1) % modes.length];
 
           const context = state.activeContext;
-          if (context?.id) {
+          if (context?.id && (typeof navigator === 'undefined' || navigator.onLine)) {
             supabase.auth.getUser().then(({ data }) => {
-              if (!data.user) return;
+              if (!data?.user) return;
               saveContextSettings(data.user.id, context, {
                 shuffle_mode: state.isShuffled,
                 repeat_mode: next,
               });
-            });
+            }).catch(() => {});
           }
           return { repeatMode: next };
         });
@@ -671,8 +698,25 @@ playPrevious: () => {
       name: 'musebuzz-player-storage',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        // UI preferences
         volume: state.volume,
         prevVolume: state.prevVolume,
+        repeatMode: state.repeatMode,
+        isShuffled: state.isShuffled,
+        // Queue state — allows the player bar to appear immediately on reload
+        activeId: state.activeId,
+        activeContext: state.activeContext,
+        lastActiveContextId: state.lastActiveContextId,
+        bucketA: state.bucketA,
+        bucketB: state.bucketB,
+        autoplay: state.autoplay,
+        shuffledOrder: state.shuffledOrder,
+        sourceContextIds: state.sourceContextIds,
+        ids: state.ids,
+        isPlayingPriority: state.isPlayingPriority,
+        isPlayingAutoplay: state.isPlayingAutoplay,
+        // Always restore as paused — user must press play
+        isPlaying: false,
       }),
     }
   )

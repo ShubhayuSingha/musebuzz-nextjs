@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import ArtistContent from "./components/ArtistContent";
 import ArtistHeader from "./components/ArtistHeader";
+import { withTimeout } from "@/lib/helpers";
 
 export const revalidate = 0;
 
@@ -21,29 +22,27 @@ export default async function ArtistPage(props: ArtistPageProps) {
     cookies: () => cookieStore as any
   });
 
-  // 1. Fetch Artist Details
-  const { data: artist, error: artistError } = await supabase
-    .from('artists')
-    .select('*')
-    .eq('id', artistId)
-    .single();
+  // 1. Fetch Artist Details with 3-second timeout protection
+  const { data: artist, error: artistError } = await withTimeout(
+    supabase.from('artists').select('*').eq('id', artistId).single(),
+    3000
+  ).catch((e) => ({ data: null, error: e }));
 
   if (artistError || !artist) {
     return notFound();
   }
 
-  // 2. Fetch ALL Songs
-  const { data: songsData } = await supabase
-    .from('songs')
-    .select('*, albums!inner(id, title, image_path, artist_id)')
-    .eq('albums.artist_id', artistId);
+  // 2. Fetch Songs and Albums concurrently
+  const [songsRes, albumsRes] = await withTimeout(
+    Promise.all([
+      supabase.from('songs').select('*, albums!inner(id, title, image_path, artist_id)').eq('albums.artist_id', artistId),
+      supabase.from('albums').select('*').eq('artist_id', artistId).order('created_at', { ascending: false })
+    ]),
+    3000
+  ).catch(() => [{ data: [] }, { data: [] }]);
 
-  // 3. Fetch Albums
-  const { data: albumsData } = await supabase
-    .from('albums')
-    .select('*')
-    .eq('artist_id', artistId)
-    .order('created_at', { ascending: false });
+  const songsData = songsRes?.data;
+  const albumsData = albumsRes?.data;
 
   // --- Normalization ---
   

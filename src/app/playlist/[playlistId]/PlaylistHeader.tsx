@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { toast } from 'react-hot-toast';
@@ -8,15 +8,24 @@ import Image from 'next/image';
 import { BsMusicNoteBeamed } from 'react-icons/bs';
 import { FiEdit2, FiTrash } from 'react-icons/fi'; 
 import { HiCheck, HiX } from 'react-icons/hi'; 
+import { RiWifiOffLine } from 'react-icons/ri';
 import usePlaylistStore from '@/stores/usePlaylistStore';
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import DownloadButton from '@/components/DownloadButton';
 
 interface PlaylistHeaderProps {
   playlist: any;
   imageUrl: string;
+  fallbackImageUrl?: string;
   songsCount: number;
 }
 
-const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, songsCount }) => {
+const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ 
+  playlist, 
+  imageUrl, 
+  fallbackImageUrl,
+  songsCount 
+}) => {
   const router = useRouter();
   const supabaseClient = useSupabaseClient();
   const user = useUser();
@@ -30,8 +39,27 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
   const [description, setDescription] = useState(playlist.description || ''); 
   const [isLoading, setIsLoading] = useState(false);
 
+  const [currentImgSrc, setCurrentImgSrc] = useState(imageUrl || fallbackImageUrl || '');
+  const [hasImageError, setHasImageError] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    setCurrentImgSrc(imageUrl || fallbackImageUrl || '');
+    setHasImageError(false);
+  }, [imageUrl, fallbackImageUrl]);
+
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+
   // --- SAVE LOGIC ---
   const handleSave = async () => {
+    if (!isOnline || isOfflineMode) {
+      return toast.error("Editing playlists is not available offline");
+    }
+
     if (!title.trim()) return toast.error("Title cannot be empty");
     if (title.length > 50) return toast.error("Title must be less than 50 characters");
     if (description.length > 100) return toast.error("Description must be less than 100 characters");
@@ -56,6 +84,10 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
 
   // --- DELETE LOGIC ---
   const handleDelete = async () => {
+    if (!isOnline || isOfflineMode) {
+      return toast.error("Deleting playlists is not available offline");
+    }
+
     setIsLoading(true);
 
     const { error } = await supabaseClient
@@ -131,10 +163,26 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                 overflow-hidden shadow-2xl flex-shrink-0 bg-neutral-800 
                 flex items-center justify-center
               ">
-                {playlist.image_path || imageUrl ? (
-                  <Image fill src={imageUrl} alt={playlist.title} className="object-cover" />
+                {!hasImageError && currentImgSrc ? (
+                  <Image 
+                    unoptimized 
+                    fill 
+                    sizes="(max-width: 768px) 128px, 208px"
+                    src={currentImgSrc} 
+                    alt={playlist.title} 
+                    className="object-cover" 
+                    onError={() => {
+                      if (fallbackImageUrl && currentImgSrc !== fallbackImageUrl) {
+                        setCurrentImgSrc(fallbackImageUrl);
+                      } else {
+                        setHasImageError(true);
+                      }
+                    }}
+                  />
                 ) : (
-                  <BsMusicNoteBeamed size={60} className="text-neutral-500" />
+                  <div className="w-full h-full bg-gradient-to-br from-purple-800 via-indigo-950 to-neutral-900 flex items-center justify-center">
+                    <BsMusicNoteBeamed size={56} className="text-white/60 drop-shadow" />
+                  </div>
                 )}
               </div>
 
@@ -144,9 +192,16 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                   flex flex-col gap-y-2 mt-4 md:mt-0 mb-2 w-full flex-1 min-w-0 
                   justify-end lg:h-52
               ">
-                <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
-                  {playlist.type === 'personal' ? 'Playlist' : 'Curated List'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-xs md:text-sm text-neutral-200 uppercase tracking-wider">
+                    Playlist
+                  </p>
+                  {mounted && (!isOnline || isOfflineMode) && (
+                    <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-semibold flex items-center gap-1 select-none">
+                      <RiWifiOffLine className="w-3 h-3" /> Offline
+                    </span>
+                  )}
+                </div>
                 
                 {/* EDIT FORM */}
                 {isEditing ? (
@@ -180,34 +235,12 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                 ) : (
                   // VIEW MODE
                   <div className="group flex flex-col gap-y-1">
-                    <div className="flex flex-col md:flex-row md:items-center gap-y-2 md:gap-x-4 text-center md:text-left">
-                      {/* Title: Truncates at 2 lines to fit within the fixed height */}
-                      <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 ${titleSizeClass}`}>
-                        {title}
-                      </h1>
-                      
-                      {isOwner && (
-                        <div className="flex items-center justify-center md:justify-start gap-x-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition mb-2">
-                            <button 
-                              onClick={() => setIsEditing(true)}
-                              className="p-2 rounded-full bg-neutral-800/50 hover:bg-neutral-700 text-neutral-400 hover:text-white cursor-pointer"
-                              title="Edit Details"
-                            >
-                              <FiEdit2 size={24} />
-                            </button>
-                            <button 
-                              onClick={() => setShowDeleteModal(true)}
-                              className="p-2 rounded-full bg-neutral-800/50 hover:bg-neutral-700 text-neutral-400 hover:text-red-500 cursor-pointer"
-                              title="Delete Playlist"
-                            >
-                              <FiTrash size={24} />
-                            </button>
-                        </div>
-                      )}
-                    </div>
+                    <h1 className={`text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 text-center md:text-left ${titleSizeClass}`}>
+                      {title}
+                    </h1>
                     
                     {description && (
-                      <p className="text-neutral-400 text-sm font-medium line-clamp-2 max-w-2xl">
+                      <p className="text-neutral-400 text-sm font-medium line-clamp-2 max-w-2xl text-center md:text-left">
                         {description}
                       </p>
                     )}
@@ -230,6 +263,61 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({ playlist, imageUrl, son
                 )}
               </div>
             </div>
+
+            {/* ACTION CONTROLS ROW (Bottom part of header, on the left side) */}
+            {!isEditing && (
+              <div className="flex items-center justify-center md:justify-start gap-x-4 mt-6">
+                {/* Download Button */}
+                <DownloadButton id={playlist.id} type="playlist" title={title} />
+
+                {isOwner && (
+                  <div className="flex items-center gap-x-2">
+                    <button 
+                      onClick={() => {
+                        if (!isOnline || isOfflineMode) {
+                          toast.error("Editing playlists is disabled offline");
+                          return;
+                        }
+                        setIsEditing(true);
+                      }}
+                      disabled={!isOnline || isOfflineMode}
+                      className={`
+                        p-2.5 rounded-full transition
+                        ${
+                          !isOnline || isOfflineMode
+                            ? 'bg-neutral-800/30 text-neutral-600 cursor-not-allowed'
+                            : 'bg-neutral-800/60 hover:bg-neutral-700 text-neutral-400 hover:text-white cursor-pointer hover:scale-105 active:scale-95'
+                        }
+                      `}
+                      title={!isOnline || isOfflineMode ? "Editing unavailable offline" : "Edit Details"}
+                    >
+                      <FiEdit2 size={19} />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (!isOnline || isOfflineMode) {
+                          toast.error("Deleting playlists is disabled offline");
+                          return;
+                        }
+                        setShowDeleteModal(true);
+                      }}
+                      disabled={!isOnline || isOfflineMode}
+                      className={`
+                        p-2.5 rounded-full transition
+                        ${
+                          !isOnline || isOfflineMode
+                            ? 'bg-neutral-800/30 text-neutral-600 cursor-not-allowed'
+                            : 'bg-neutral-800/60 hover:bg-neutral-700 text-neutral-400 hover:text-red-500 cursor-pointer hover:scale-105 active:scale-95'
+                        }
+                      `}
+                      title={!isOnline || isOfflineMode ? "Deleting unavailable offline" : "Delete Playlist"}
+                    >
+                      <FiTrash size={19} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
       </div>
     </>

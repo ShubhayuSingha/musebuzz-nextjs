@@ -13,6 +13,7 @@ import useLibrary from "@/hooks/useLibrary";
 import usePlaylistStore from "@/stores/usePlaylistStore"; 
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { saveMixToLibrary } from '@/actions/saveMix'; 
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
 
 import { useUser, useSupabaseClient } from "@supabase/auth-helpers-react";
 import { useEffect, useState } from "react";
@@ -70,9 +71,13 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
     checkStatus();
   }, [data.id, data.type, user, library]);
 
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isOffline = !isOnline || isOfflineMode;
+
   // --- ACTIONS ---
 
   const handleFollow = async () => {
+      if (isOffline) return toast.error("Action not available offline");
       if (!user) return toast.error("Log in to follow artists");
       setIsFollowing(true); 
       await library.followArtist(data.id);
@@ -81,6 +86,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   }
 
   const handleUnfollow = async () => {
+      if (isOffline) return toast.error("Action not available offline");
       if (!user) return;
       setIsFollowing(false);
       await library.unfollowArtist(data.id);
@@ -89,6 +95,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   }
 
   const handleAddToLibrary = async () => {
+    if (isOffline) return toast.error("Action not available offline");
     if (!user) return toast.error("Log in to save albums");
     setIsSaved(true); 
     await library.addAlbum(data.id); 
@@ -97,6 +104,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   const handleRemoveFromLibrary = async () => {
+     if (isOffline) return toast.error("Action not available offline");
      if (!user) return;
      setIsSaved(false); 
      await library.removeAlbum(data.id); 
@@ -105,6 +113,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   const handleSaveMix = async () => {
+    if (isOffline) return toast.error("Action not available offline");
     if (!user) return toast.error("Log in to save mixes");
     const toastId = toast.loading('Saving to library...');
     try {
@@ -122,11 +131,13 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   const handleDeletePlaylist = () => {
+      if (isOffline) return toast.error("Action not available offline");
       if (!user) return;
       openDelete(data.id); 
   };
 
   const handleRemoveFromPlaylist = async () => {
+    if (isOffline) return toast.error("Action not available offline");
     if (!user || !finalPlaylistId || !finalSongId) return;
 
     const { error } = await supabase

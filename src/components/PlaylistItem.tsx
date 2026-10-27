@@ -21,14 +21,19 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   const supabaseClient = useSupabaseClient();
 
   const isLikedSongs = playlist.id === 'liked';
-  const imagePath = playlist.image_path || 'playlist-placeholder.jpg';
+  let imageUrl = '/images/playlist-placeholder.jpg';
 
-  const { data: imageData } = supabaseClient
-    .storage
-    .from('playlist_images') 
-    .getPublicUrl(imagePath);
-
-  const imageUrl = imageData.publicUrl;
+  if (playlist.image_path) {
+    if ((playlist as any).image_url) {
+      imageUrl = (playlist as any).image_url;
+    } else {
+      const { data: imageData } = supabaseClient
+        .storage
+        .from('playlist_images')
+        .getPublicUrl(playlist.image_path);
+      imageUrl = imageData?.publicUrl || imageUrl;
+    }
+  }
 
   const handleClick = () => {
     if (isLikedSongs) {
@@ -93,8 +98,9 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
            </div>
         ) : (
            <Image
+             unoptimized
              draggable={false}
-             src={imageUrl}
+             src={imageUrl || '/images/playlist-placeholder.jpg'}
              fill
              alt={playlist.title}
              className="
@@ -104,6 +110,9 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
                ease-out
              "
              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+             onError={(e) => {
+               e.currentTarget.src = '/images/playlist-placeholder.jpg';
+             }}
            />
         )}
       </div>

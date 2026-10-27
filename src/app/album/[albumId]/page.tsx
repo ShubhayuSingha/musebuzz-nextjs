@@ -1,9 +1,7 @@
-// src/app/album/[albumId]/page.tsx
-
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import AlbumContent from "./AlbumContent";
-import AlbumHeader from "./AlbumHeader";
+import AlbumView from "./AlbumView";
+import { withTimeout } from "@/lib/helpers";
 
 export const revalidate = 0;
 
@@ -17,53 +15,43 @@ export default async function Album(props: AlbumProps) {
   const params = await props.params;
   const { albumId } = params;
 
-  const cookieStore = await cookies();
-  
-  const supabase = createServerComponentClient({
-    cookies: () => cookieStore as any
-  });
+  let album: any = null;
+  let imageUrl = '/images/album-placeholder.png';
+  let releaseYear: number | null = null;
 
-  const { data: album } = await supabase
-    .from('albums')
-    .select('*, songs(*), artists(*)')
-    .eq('id', albumId)
-    .single();
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerComponentClient({
+      cookies: () => cookieStore as any
+    });
 
-  if (!album) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-neutral-400">
-        Album not found.
-      </div>
-    )
+    const albumQuery = supabase
+      .from('albums')
+      .select('*, songs(*), artists(*)')
+      .eq('id', albumId)
+      .single();
+
+    const { data } = await withTimeout(albumQuery, 3000);
+
+    if (data) {
+      album = data;
+      const { data: imageData } = supabase.storage
+        .from('images')
+        .getPublicUrl(album.image_path);
+
+      imageUrl = imageData?.publicUrl || imageUrl;
+      releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
+    }
+  } catch (e) {
+    // Server fetch error or offline: AlbumView will hydrate from IndexedDB
   }
 
-  const { data: imageData } = supabase
-    .storage
-    .from('images')
-    .getPublicUrl(album.image_path);
-
-  // Format Year
-  const releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
-
   return (
-    <div className="h-full w-full overflow-hidden overflow-y-auto bg-black">
-      
-      <AlbumHeader 
-        album={album}
-        imageUrl={imageData.publicUrl}
-        songsCount={album.songs.length}
-        releaseYear={releaseYear}
-      />
-
-      <div className="flex flex-col gap-y-2 p-6 w-full">
-        <AlbumContent 
-          songs={album.songs} 
-          albumName={album.title}
-          albumId={album.id} 
-          // 🟢 Pass Artist ID to enable "Go to Artist"
-          artistId={album.artists?.id}
-        />
-      </div>
-    </div>
+    <AlbumView 
+      initialAlbum={album}
+      initialImageUrl={imageUrl}
+      initialReleaseYear={releaseYear}
+      albumId={albumId}
+    />
   );
 }

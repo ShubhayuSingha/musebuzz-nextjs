@@ -64,7 +64,7 @@ const SwipeableHistoryItem = ({ item, onClick, onRemove, onAddToQueue, getImageU
         >
             <div className="flex items-center gap-x-3 overflow-hidden flex-1 pointer-events-none">
               <div className={`relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0 ${item.item_type === 'artist' ? 'rounded-full' : ''}`}>
-                  <Image fill src={getImageUrl(path, bucket)} alt={item.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                  <Image fill sizes="48px" src={getImageUrl(path, bucket)} alt={item.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
               </div>
               <div className="flex flex-col overflow-hidden">
                   <p className="text-[15px] font-medium text-white truncate">{item.title}</p>
@@ -109,7 +109,7 @@ const SwipeableSongItem = ({ song, onClick, onAddToQueue, getImageUrl, children 
         >
             <div className="flex items-center gap-x-3 overflow-hidden pointer-events-none">
               <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                <Image fill src={getImageUrl(song.albums?.image_path || 'sample.jpg')} alt={song.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                <Image fill sizes="48px" src={getImageUrl(song.albums?.image_path || 'sample.jpg')} alt={song.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
               </div>
               <div className="flex flex-col overflow-hidden">
                 <p className="text-[15px] font-medium text-white truncate">{song.title}</p>
@@ -304,9 +304,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                 >
                    <div className="flex items-center gap-x-3 overflow-hidden">
                       <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                         <Image 
-                           fill 
-                           src={getImageUrl(path, bucket)} 
+                         <Image fill sizes="48px" src={getImageUrl(path, bucket)} 
                            alt={item.title} 
                            className={`object-cover ${item.item_type === 'artist' ? 'rounded-full' : ''}`} 
                            unoptimized 
@@ -364,9 +362,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                      className="flex items-center gap-x-3 hover:bg-neutral-800 p-2 rounded-md cursor-pointer transition w-full"
                    >
                       <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
-                         <Image 
-                           fill 
-                           src={getImageUrl(results.artists[0].image_path, 'artist_images')} 
+                         <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_path, 'artist_images')} 
                            alt={results.artists[0].name} 
                            className="object-cover" 
                            unoptimized 
@@ -390,9 +386,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                          className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer w-full"
                        >
                          <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                             <Image 
-                               fill 
-                               src={getImageUrl(playlist._unified_image || 'playlist-placeholder.jpg', 'playlist_images')} 
+                             <Image fill sizes="48px" src={getImageUrl(playlist._unified_image || 'playlist-placeholder.jpg', 'playlist_images')} 
                                alt={playlist.title} 
                                className="object-cover" 
                                unoptimized 
@@ -420,9 +414,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                          className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer w-full"
                        >
                          <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                             <Image 
-                               fill 
-                               src={getImageUrl(album.image_path || 'sample.jpg')} 
+                             <Image fill sizes="48px" src={getImageUrl(album.image_path || 'sample.jpg')} 
                                alt={album.title} 
                                className="object-cover" 
                                unoptimized 
@@ -452,9 +444,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                        >
                          <div className="flex items-center gap-x-3 overflow-hidden">
                            <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                             <Image 
-                               fill 
-                               src={getImageUrl(song.albums?.image_path || 'sample.jpg')} 
+                             <Image fill sizes="48px" src={getImageUrl(song.albums?.image_path || 'sample.jpg')} 
                                alt={song.title} 
                                className="object-cover" 
                                unoptimized 
@@ -579,7 +569,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                        <MediaContextMenu data={{ id: results.artists[0].id, type: 'artist', title: results.artists[0].name }}>
                            <div onClick={() => handleSearchResultClick(results.artists[0], 'artist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800">
                               <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
-                                 <Image fill src={getImageUrl(results.artists[0].image_path, 'artist_images')} alt={results.artists[0].name} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                                 <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_path, 'artist_images')} alt={results.artists[0].name} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                               </div>
                               <p className="font-medium text-[15px] text-white">{results.artists[0].name}</p>
                            </div>
@@ -595,7 +585,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                            <MediaContextMenu key={playlist.id} data={{ id: playlist.id, type: 'playlist', title: playlist.title }}>
                                <div onClick={() => handleSearchResultClick(playlist, 'playlist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                                  <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                                     <Image fill src={getImageUrl(playlist._unified_image || 'playlist-placeholder.jpg', 'playlist_images')} alt={playlist.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                                     <Image fill sizes="48px" src={getImageUrl(playlist._unified_image || 'playlist-placeholder.jpg', 'playlist_images')} alt={playlist.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                                   </div>
                                   <div className="flex flex-col overflow-hidden">
                                      <p className="text-[15px] font-medium text-white truncate">{playlist.title}</p>
@@ -615,7 +605,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                            <MediaContextMenu key={album.id} data={{ id: album.id, type: 'album', title: album.title, artist_id: album.artists?.id }}>
                                <div onClick={() => handleSearchResultClick(album, 'album')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                                  <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                                     <Image fill src={getImageUrl(album.image_path || 'sample.jpg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                                     <Image fill sizes="48px" src={getImageUrl(album.image_path || 'sample.jpg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                                   </div>
                                   <div className="flex flex-col overflow-hidden">
                                      <p className="text-[15px] font-medium text-white truncate">{album.title}</p>

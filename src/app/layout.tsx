@@ -10,6 +10,7 @@ import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import SupabaseProvider from "@/providers/SupabaseProvider";
 // 🟢 Update Import
 import ClientLayout from "@/components/ClientLayout"; 
+import PwaRegister from "@/components/PwaRegister";
 
 const font = Figtree({ 
   subsets: ["latin"] 
@@ -18,10 +19,30 @@ const font = Figtree({
 export const metadata = {
   title: 'MuseBuzz',
   description: 'Listen to music!',
+  manifest: '/manifest.json',
   icons: {
-    icon: '/icon.svg',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: '/icon.svg',
+    apple: [
+      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'MuseBuzz',
   },
 };
+
+export const viewport = {
+  themeColor: '#18181b',
+};
+
+import { withTimeout } from "@/lib/helpers";
 
 export default async function RootLayout({
   children,
@@ -31,9 +52,18 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   
   const supabase = createServerComponentClient({ cookies: () => cookieStore as any });
-  const {
-      data: { session },
-  } = await supabase.auth.getSession();
+  // Suppress server-side proxy warning while safely validating with getUser()
+  (supabase.auth as any).suppressGetSessionWarning = true;
+  let session = null;
+  try {
+    const { data: userData } = await withTimeout(supabase.auth.getUser(), 1000);
+    if (userData?.user) {
+      const sessionRes = await withTimeout(supabase.auth.getSession(), 1000);
+      session = sessionRes?.data?.session || null;
+    }
+  } catch {
+    session = null;
+  }
 
   const collapsedCookie = cookieStore.get('sidebar_collapsed');
   const defaultCollapsed = collapsedCookie?.value === 'true';
@@ -47,6 +77,7 @@ export default async function RootLayout({
            <ClientLayout defaultCollapsed={defaultCollapsed}>
               {children}
            </ClientLayout>
+           <PwaRegister />
 
         </SupabaseProvider>
       </body>

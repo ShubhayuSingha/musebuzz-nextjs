@@ -199,6 +199,7 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
                       <div className="relative h-10 w-10 overflow-hidden rounded-md">
                           <Image
                               fill
+                              sizes="40px"
                               src={song.imageUrl}
                               alt={song.title}
                               className="object-cover"
@@ -247,7 +248,7 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
                                <PlayingAnimation />
                             )}
                             <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
-                                <Image fill src={song.imageUrl} alt={song.title} className="object-cover" />
+                                <Image fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
                             </div>
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">

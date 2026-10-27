@@ -33,6 +33,10 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
     setMobileMenuOpen(!mobileMenuOpen);
   };
 
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
   return (
     <>
         <ToasterProvider />
@@ -44,7 +48,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
             {mobileMenuOpen && (
               <div 
                 className="fixed inset-0 bg-black/50 z-[55] md:hidden"
-                onClick={toggleMobileMenu}
+                onClick={closeMobileMenu}
               />
             )}
 
@@ -58,7 +62,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
                 transition-transform duration-300 ease-in-out
                 flex h-full
             `}>
-               <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} isMobileOpen={mobileMenuOpen} closeMobile={toggleMobileMenu} />
+               <Sidebar isCollapsed={isCollapsed} onToggle={toggleSidebar} isMobileOpen={mobileMenuOpen} closeMobile={closeMobileMenu} />
             </div>
             
             {/* 🟢 THE FIX: A vertical column wrapper for the entire right side */}

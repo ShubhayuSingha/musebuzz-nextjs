@@ -1,8 +1,8 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
 import { cookies } from "next/headers";
-import { notFound } from "next/navigation";
-import PlaylistContent from "./PlaylistContent";
-import PlaylistHeader from "./PlaylistHeader"; 
+import { redirect } from "next/navigation";
+import PlaylistView from "./PlaylistView";
+import { withTimeout } from "@/lib/helpers";
 
 export const revalidate = 0;
 
@@ -16,80 +16,87 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
   const params = await props.params;
   const { playlistId } = params;
 
-  const cookieStore = await cookies();
-  const supabase = createServerComponentClient({
-    cookies: () => cookieStore as any
-  });
-
-  const { data: playlist, error } = await supabase
-    .from('playlists')
-    .select(`
-      *, 
-      playlist_songs(
-        created_at, 
-        song_order, 
-        songs(
-          *, 
-          albums(
-            id, 
-            title, 
-            image_path,
-            artists(id, name)
-          )
-        )
-      )
-    `)
-    .eq('id', playlistId)
-    .single();
-
-  if (error || !playlist) {
-    return notFound();
+  if (playlistId === 'liked') {
+    redirect('/liked');
   }
 
-  const songs = playlist.playlist_songs
-    ?.sort((a: any, b: any) => a.song_order - b.song_order)
-    .map((item: any) => {
-        const imagePath = item.songs.albums?.image_path;
-        let imageUrl = '/images/album-placeholder.png'; 
-        
-        if (imagePath) {
-           const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
-           imageUrl = imgData.publicUrl;
-        }
+  let playlist: any = null;
+  let songs: any[] = [];
+  let imageUrl = '/images/playlist-placeholder.jpg';
 
-        return {
-          ...item.songs,
-          author: item.songs.albums?.artists?.name || "Unknown Artist",
-          album_title: item.songs.albums?.title || "Unknown Album",
-          album_id: item.songs.albums?.id,
-          added_at: item.created_at,
-          imageUrl: imageUrl 
-        };
-    })
-    .filter((song: any) => song.id); 
+  try {
+    const cookieStore = await cookies();
+    const supabase = createServerComponentClient({
+      cookies: () => cookieStore as any
+    });
 
-  const imagePath = playlist.image_path || 'playlist-placeholder.jpg';
-  
-  const { data: imageData } = supabase
-    .storage
-    .from('playlist_images')
-    .getPublicUrl(imagePath);
+    const playlistQuery = supabase
+      .from('playlists')
+      .select(`
+        *, 
+        playlist_songs(
+          created_at, 
+          song_order, 
+          songs(
+            *, 
+            albums(
+              id, 
+              title, 
+              image_path,
+              genre,
+              release_type,
+              artists(id, name)
+            )
+          )
+        )
+      `)
+      .eq('id', playlistId)
+      .single();
+
+    const { data, error } = await withTimeout(playlistQuery, 3000);
+
+    if (!error && data) {
+      playlist = data;
+
+      songs = (playlist.playlist_songs || [])
+        .sort((a: any, b: any) => a.song_order - b.song_order)
+        .map((item: any) => {
+          const imagePath = item.songs?.albums?.image_path;
+          let songImg = '/images/album-placeholder.png'; 
+          
+          if (imagePath) {
+            const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
+            songImg = imgData?.publicUrl || songImg;
+          }
+
+          return {
+            ...item.songs,
+            author: item.songs?.albums?.artists?.name || "Unknown Artist",
+            album_title: item.songs?.albums?.title || "Unknown Album",
+            album_id: item.songs?.albums?.id,
+            added_at: item.created_at,
+            imageUrl: songImg 
+          };
+        })
+        .filter((song: any) => song.id);
+
+      if (playlist.image_path) {
+        const { data: imageData } = supabase.storage
+          .from('playlist_images')
+          .getPublicUrl(playlist.image_path);
+        imageUrl = imageData?.publicUrl || imageUrl;
+      }
+    }
+  } catch (e) {
+    // Server fetch error or offline: PlaylistView will hydrate from IndexedDB
+  }
 
   return (
-    <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">
-      <PlaylistHeader 
-        playlist={playlist} 
-        imageUrl={imageData.publicUrl} 
-        songsCount={songs.length} 
-      />
-
-      <div className="flex flex-col gap-y-2 p-6 w-full">
-        <PlaylistContent 
-           songs={songs} 
-           playlistId={playlist.id} 
-           playlistTitle={playlist.title}
-        />
-      </div>
-    </div>
+    <PlaylistView 
+      initialPlaylist={playlist}
+      initialSongs={songs}
+      initialImageUrl={imageUrl}
+      playlistId={playlistId}
+    />
   );
 }

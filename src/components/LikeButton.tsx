@@ -12,6 +12,7 @@ import useAuthModalStore from "@/stores/useAuthModalStore";
 import { supabase } from "@/lib/supabaseClient";
 import useLikeStore from "@/stores/useLikeStore";
 import usePlayerStore from "@/stores/usePlayerStore";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 
 interface LikeButtonProps {
   songId: string;
@@ -29,8 +30,17 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
 
   const isLiked = hasLikedId(songId);
 
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isOffline = !isOnline || isOfflineMode;
+
   const handleLike = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
+
+    // Restriction: Cannot like/unlike songs while offline
+    if (isOffline) {
+      toast('Liking songs is disabled in offline mode', { icon: '⚠️' });
+      return;
+    }
 
     if (!user) {
       return onOpen('sign_in');
@@ -117,7 +127,9 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   return (
     <button 
       onClick={handleLike}
-      className="hover:opacity-75 transition cursor-pointer"
+      disabled={isOffline}
+      className={`transition ${isOffline ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-75 cursor-pointer active:scale-95'}`}
+      title={isOffline ? 'Liking songs is disabled while offline' : isLiked ? 'Unlike' : 'Like'}
     >
       <Icon size={25} color={isLiked ? '#8f04b1ff' : 'white'} />
     </button>

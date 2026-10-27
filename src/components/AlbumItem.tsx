@@ -14,11 +14,11 @@ const FALLBACK_IMAGE = '/images/album-placeholder.png';
 const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
   const router = useRouter();
 
-  const imageUrl = album.image_path
+  const imageUrl = album.image_url || (album.image_path
     ? supabase.storage
         .from('images')
         .getPublicUrl(album.image_path).data.publicUrl
-    : FALLBACK_IMAGE;
+    : FALLBACK_IMAGE);
 
   const handleClick = () => {
     router.push(`/album/${album.id}`);
@@ -79,8 +79,9 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
             onDragStart={(e) => e.preventDefault()}
           >
             <Image
+              unoptimized
               draggable={false}
-              src={imageUrl}
+              src={imageUrl || '/images/album-placeholder.png'}
               fill
               alt={album.title}
               className="
@@ -90,6 +91,9 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
                 ease-out
               "
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              onError={(e) => {
+                e.currentTarget.src = '/images/album-placeholder.png';
+              }}
             />
           </div>
 

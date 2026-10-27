@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 
 import useAddToPlaylistModal from '@/stores/useAddToPlaylistModal';
 import usePlayerStore from '@/stores/usePlayerStore'; // 🟢 Import Player Store
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import Modal from './Modal'; 
 import Button from './Button'; 
 
@@ -30,9 +31,12 @@ const AddToPlaylistModal = () => {
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isOffline = !isOnline || isOfflineMode;
+
   // 1. Fetch user's playlists when modal opens
   useEffect(() => {
-    if (isOpen && user) {
+    if (isOpen && user && !isOffline) {
       const fetchPlaylists = async () => {
         const { data, error } = await supabaseClient
           .from('playlists')
@@ -47,10 +51,14 @@ const AddToPlaylistModal = () => {
       
       fetchPlaylists();
     }
-  }, [isOpen, user, supabaseClient]);
+  }, [isOpen, user, supabaseClient, isOffline]);
 
   // 2. Handle adding the song
   const handleAdd = async (playlistId: string) => {
+    if (isOffline) {
+      toast.error("Cannot modify playlists while offline");
+      return;
+    }
     if (!songId) return;
     setIsLoading(true);
 
@@ -112,7 +120,17 @@ const AddToPlaylistModal = () => {
       }}
     >
       <div className="flex flex-col gap-y-4">
-        {playlists.length === 0 ? (
+        {isOffline ? (
+          <div className="text-center text-neutral-400 py-6 px-4">
+            <p className="font-semibold text-white mb-2">Offline Mode</p>
+            <p className="text-xs text-neutral-400 leading-relaxed mb-4">
+              Adding tracks to playlists is not available while offline. Please reconnect to update your playlists.
+            </p>
+            <Button onClick={onClose} className="w-full">
+              Close
+            </Button>
+          </div>
+        ) : playlists.length === 0 ? (
            <div className="text-center text-neutral-400 py-4">
               No playlists found.
               <Button onClick={handleCreateNew} className="mt-4">

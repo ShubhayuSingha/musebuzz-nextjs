@@ -31,11 +31,15 @@ const SongItem: React.FC<SongItemProps> = ({ song }) => {
     >
       <div className="relative aspect-square w-full h-full rounded-md overflow-hidden">
         <Image
+          unoptimized
           className="object-cover"
-          src={imageData.publicUrl}
+          src={imageData?.publicUrl || '/images/album-placeholder.png'}
           fill
           alt={song.title}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+          onError={(e) => {
+            e.currentTarget.src = '/images/album-placeholder.png';
+          }}
         />
       </div>
       <div className="flex flex-col items-start w-full pt-4 gap-y-1">

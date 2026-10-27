@@ -32,7 +32,7 @@ const MixHeader: React.FC<MixHeaderProps> = ({ playlist, imageUrl, songsCount })
             flex items-center justify-center
           ">
             {imageUrl ? (
-              <Image fill src={imageUrl} alt={title} className="object-cover" />
+              <Image fill sizes="(max-width: 768px) 128px, 208px" src={imageUrl} alt={title} className="object-cover" />
             ) : (
               <BsMusicNoteBeamed size={60} className="text-neutral-500" />
             )}

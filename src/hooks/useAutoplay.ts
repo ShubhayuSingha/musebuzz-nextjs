@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import usePlayerStore from "@/stores/usePlayerStore";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import { useSupabaseClient } from "@supabase/auth-helpers-react";
 
 // Helper: Safely parse embedding string/array
@@ -66,13 +67,32 @@ const useAutoplay = () => {
     bucketA,      
     autoplay,     
     isPlayingAutoplay,
-    appendAutoplay
+    appendAutoplay,
+    setAutoplay
   } = usePlayerStore();
+
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isEffectivelyOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
 
   const isFetching = useRef(false);
 
+  // 0. Purge AI autoplay recommendations whenever offline mode is active
+  useEffect(() => {
+    if (isEffectivelyOffline) {
+      if (autoplay.length > 0) {
+        setAutoplay([]);
+      }
+      if (isPlayingAutoplay) {
+        usePlayerStore.setState({ isPlayingAutoplay: false, isPlaying: false });
+      }
+    }
+  }, [isEffectivelyOffline, autoplay.length, isPlayingAutoplay, setAutoplay]);
+
   useEffect(() => {
     const checkAndRefillQueue = async () => {
+      // Disable cloud vector recommendations when offline
+      if (isEffectivelyOffline) return;
+
       if (bucketA.length === 0 && autoplay.length === 0) return;
       if (isFetching.current) return;
 
@@ -154,6 +174,12 @@ const useAutoplay = () => {
 
            if (error) throw error;
 
+           // Double-check we haven't switched to offline mode while awaiting fetch
+           const currentOfflineState = useOfflineModeStore.getState();
+           if (currentOfflineState.isOfflineMode || !currentOfflineState.isOnline || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+             return;
+           }
+
            if (newSongs && newSongs.length > 0) {
              const newIds = newSongs.map((s: any) => s.id);
              appendAutoplay(newIds); 
@@ -168,7 +194,7 @@ const useAutoplay = () => {
     };
 
     checkAndRefillQueue();
-  }, [activeId, bucketA, autoplay, isPlayingAutoplay, appendAutoplay, supabase]);
+  }, [activeId, bucketA, autoplay, isPlayingAutoplay, appendAutoplay, supabase, isEffectivelyOffline]);
 };
 
 export default useAutoplay;

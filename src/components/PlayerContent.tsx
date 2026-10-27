@@ -18,6 +18,7 @@ import LikeButton from "@/components/LikeButton";
 import SongContextMenu from "@/components/SongContextMenu";
 import { loadSong, stopSound, preloadNext } from "@/lib/audioEngine";
 import useSongById from "@/hooks/useSongById";
+import { offlineDb } from "@/lib/offlineDb";
 
 interface PlayerContentProps {
   song: any;
@@ -70,9 +71,14 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const titleMeasureRef = useRef<HTMLSpanElement>(null);
 
   const imageUrl = useMemo(() => {
+    // 1. Top-level imageUrl (set by playlist download service)
+    if (song?.imageUrl) return song.imageUrl;
+    // 2. Resolved image_url inside albums sub-object (set by album download service)
+    if (song?.albums?.image_url) return song.albums.image_url;
+    // 3. Fallback: derive from image_path via Supabase (works online; SW serves from cache offline)
     if (!song?.albums?.image_path) return null;
     const { data: imageData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
-    return imageData.publicUrl;
+    return imageData.publicUrl || null;
   }, [song, supabase]);
 
   const hasLyrics = !!song?.lyrics_snippet;
@@ -107,9 +113,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       is_playing: isPlaying, queue_state: queueState, updated_at: new Date().toISOString(),
     };
 
-    supabase.from('playback_state').upsert(payload).then(({ error }) => {
-      if (error) console.error("Sync Error:", error.message);
-    });
+    // 🟢 Save to local IndexedDB (offline-safe & zero latency)
+    offlineDb.playback_state.put({
+      user_id: user.id,
+      active_song_id: activeId,
+      progress_ms: Math.floor(progress * 1000),
+      is_playing: isPlaying,
+      queue_state: queueState,
+      updated_at: Date.now()
+    }).catch(() => {});
+
+    // Only send network upsert to Supabase if online
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      supabase.from('playback_state').upsert(payload).then(({ error }) => {
+        if (error) console.error("Sync Error:", error.message);
+      });
+    }
   }, [user, activeId, volume, isPlaying, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId, supabase]);
 
   useEffect(() => { saveProgressRef.current = saveProgress; }, [saveProgress]);
@@ -395,7 +414,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             >
               <div className="flex items-center gap-x-3 overflow-hidden flex-1 pointer-events-none">
                 <div className="relative h-10 w-10 min-w-10 rounded shadow-md overflow-hidden bg-neutral-800">
-                  {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" />}
+                  {imageUrl && <Image unoptimized fill sizes="40px" src={imageUrl} alt={song.title} className="object-cover" />}
                 </div>
 
                 <div className="flex flex-col overflow-hidden w-full pt-1">
@@ -461,7 +480,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
               <div className="flex-1 w-full flex items-center justify-center px-8 relative">
                 <div className="aspect-square relative w-full h-auto max-h-full max-w-[400px] mx-auto rounded-xl overflow-hidden shadow-2xl bg-neutral-800">
-                  {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" priority />}
+                  {imageUrl && <Image unoptimized fill sizes="(max-width: 768px) 100vw, 400px" src={imageUrl} alt={song.title} className="object-cover" priority />}
                 </div>
               </div>
 
@@ -551,7 +570,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                     
                     <div className="flex items-center gap-3 p-2 mb-2 border-b border-neutral-800 pb-4">
                       <div className="relative h-12 w-12 rounded-md overflow-hidden bg-neutral-800 flex-shrink-0">
-                        {imageUrl && <Image fill src={imageUrl} alt={song.title} className="object-cover" />}
+                        {imageUrl && <Image unoptimized fill sizes="48px" src={imageUrl} alt={song.title} className="object-cover" />}
                       </div>
                       <div className="flex flex-col overflow-hidden">
                         <p className="text-white font-bold text-sm truncate">{song.title}</p>
@@ -586,7 +605,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
         <div className="flex w-full justify-start items-center gap-x-4 overflow-hidden">
           <div onClick={onClickAlbum} className="relative h-14 w-14 rounded-md overflow-hidden shadow-md cursor-pointer hover:opacity-80 transition flex-shrink-0">
-            {imageUrl ? <Image fill src={imageUrl} alt={song.title} className="object-cover" /> : <div className="bg-neutral-800 h-full w-full" />}
+            {imageUrl ? <Image unoptimized fill sizes="56px" src={imageUrl} alt={song.title} className="object-cover" /> : <div className="bg-neutral-800 h-full w-full" />}
           </div>
 
           <div className="hidden md:flex items-center gap-x-3 max-w-[200px] xl:max-w-[250px]">

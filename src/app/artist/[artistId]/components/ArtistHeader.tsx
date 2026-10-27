@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { BsPatchCheckFill, BsPersonFill } from 'react-icons/bs';
 
@@ -11,6 +12,13 @@ interface ArtistHeaderProps {
 }
 
 const ArtistHeader: React.FC<ArtistHeaderProps> = ({ artist, imageUrl, songsCount, albumsCount }) => {
+  const [imgSrc, setImgSrc] = useState<string>(imageUrl || '/images/artist-placeholder.png');
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(imageUrl || '/images/artist-placeholder.png');
+    setHasError(false);
+  }, [imageUrl]);
   
   // SIZING LOGIC
   const title = artist?.name || 'Unknown Artist';
@@ -32,12 +40,21 @@ const ArtistHeader: React.FC<ArtistHeaderProps> = ({ artist, imageUrl, songsCoun
               flex items-center justify-center
               group
             ">
-              {imageUrl ? (
+              {!hasError && imgSrc ? (
                 <Image 
                     fill 
-                    src={imageUrl} 
+                    unoptimized
+                    sizes="(max-width: 768px) 128px, 208px"
+                    src={imgSrc} 
                     alt={title} 
                     className="object-cover group-hover:scale-105 transition duration-500" 
+                    onError={() => {
+                      if (imgSrc !== '/images/artist-placeholder.png') {
+                        setImgSrc('/images/artist-placeholder.png');
+                      } else {
+                        setHasError(true);
+                      }
+                    }}
                 />
               ) : (
                 <BsPersonFill size={80} className="text-neutral-500" />
