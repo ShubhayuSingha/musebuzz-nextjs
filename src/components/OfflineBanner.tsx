@@ -1,7 +1,7 @@
 // src/components/OfflineBanner.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import { HiSignalSlash, HiCheckCircle, HiXMark } from 'react-icons/hi2';
 import { RiWifiOffLine } from 'react-icons/ri';
@@ -9,6 +9,16 @@ import { RiWifiOffLine } from 'react-icons/ri';
 const OfflineBanner: React.FC = () => {
   const { isOnline, isOfflineMode, setOfflineMode } = useOfflineModeStore();
   const [isDismissed, setIsDismissed] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Avoid hydration mismatch by waiting until client mount
+  if (!mounted) {
+    return null;
+  }
 
   // If online and not in offline mode, show nothing
   if (isOnline && !isOfflineMode) {

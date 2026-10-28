@@ -18,7 +18,7 @@ interface DownloadStore {
   downloadedIds: Set<string>;
   setProgress: (id: string, progress: Partial<DownloadProgress>) => void;
   clearProgress: (id: string) => void;
-  refreshDownloadedStatus: () => Promise<void>;
+  refreshDownloadedStatus: (userId?: string) => Promise<void>;
   isDownloaded: (id: string) => boolean;
 }
 
@@ -55,14 +55,61 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
     });
   },
 
-  refreshDownloadedStatus: async () => {
+  refreshDownloadedStatus: async (userId?: string) => {
     try {
-      const [playlists, albums] = await Promise.all([
-        offlineDb.playlists.toCollection().primaryKeys(),
-        offlineDb.albums.toCollection().primaryKeys()
-      ]);
+      let uid = userId;
+      if (!uid && typeof window !== 'undefined') {
+        try {
+          const { supabase } = await import('@/lib/supabaseClient');
+          const { data } = await supabase.auth.getSession();
+          uid = data?.session?.user?.id;
+        } catch {}
+      }
 
-      const ids = new Set<string>([...playlists, ...albums]);
+      let playlistKeys: string[] = [];
+      let albumKeys: string[] = [];
+
+      if (uid) {
+        // Multi-tenant: User only sees their own playlists
+        const userPlaylists = await offlineDb.playlists
+          .where('user_id')
+          .equals(uid)
+          .primaryKeys();
+        playlistKeys = userPlaylists as string[];
+
+        // User only sees albums saved by them in saved_albums
+        if (offlineDb.saved_albums) {
+          const userSavedAlbums = await offlineDb.saved_albums
+            .where('user_id')
+            .equals(uid)
+            .toArray();
+          albumKeys = userSavedAlbums.map((sa) => sa.album_id);
+          if (albumKeys.length === 0) {
+            const totalSaved = await offlineDb.saved_albums.count();
+            if (totalSaved === 0) {
+              albumKeys = (await offlineDb.albums.toCollection().primaryKeys()) as string[];
+            }
+          }
+        } else {
+          albumKeys = (await offlineDb.albums.toCollection().primaryKeys()) as string[];
+        }
+
+        // Check if user has liked songs downloaded
+        const userLiked = (await offlineDb.playlists.get(`liked_${uid}`)) || (await offlineDb.playlists.get('liked'));
+        if (userLiked && (!userLiked.user_id || userLiked.user_id === uid)) {
+          playlistKeys.push('liked');
+        }
+      } else {
+        // Unauthenticated or fallback
+        const [allPlaylists, allAlbums] = await Promise.all([
+          offlineDb.playlists.toCollection().primaryKeys(),
+          offlineDb.albums.toCollection().primaryKeys()
+        ]);
+        playlistKeys = allPlaylists as string[];
+        albumKeys = allAlbums as string[];
+      }
+
+      const ids = new Set<string>([...playlistKeys, ...albumKeys]);
       set({ downloadedIds: ids });
     } catch (e) {
       console.warn('[Download Store] Could not refresh downloaded status:', e);

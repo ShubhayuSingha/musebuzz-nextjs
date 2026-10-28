@@ -26,9 +26,17 @@ interface DownloadButtonProps {
   id: string;
   type: 'album' | 'playlist';
   title?: string;
+  disabled?: boolean;
+  disabledTooltip?: string;
 }
 
-const DownloadButton: React.FC<DownloadButtonProps> = ({ id, type, title = '' }) => {
+const DownloadButton: React.FC<DownloadButtonProps> = ({ 
+  id, 
+  type, 
+  title = '',
+  disabled = false,
+  disabledTooltip
+}) => {
   const supabase = useSupabaseClient();
   const { downloading, downloadedIds, refreshDownloadedStatus } = useDownloadStore();
   const { isOnline, isOfflineMode } = useOfflineModeStore();
@@ -61,6 +69,11 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ id, type, title = '' })
   const handleStartDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
+    if (disabled) {
+      toast.error(disabledTooltip || 'Please add to library before downloading');
+      return;
+    }
+
     if (!isOnline || isOfflineMode) {
       toast.error('Downloading requires an active internet connection');
       return;
@@ -91,9 +104,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ id, type, title = '' })
 
     try {
       if (type === 'album') {
-        await deleteAlbumDownload(id);
+        await deleteAlbumDownload(id, supabase);
       } else {
-        await deletePlaylistDownload(id);
+        await deletePlaylistDownload(id, supabase);
       }
       toast.success('Download removed from local storage');
       refreshDownloadedStatus();
@@ -190,25 +203,28 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({ id, type, title = '' })
   }
 
   // State 3: Not downloaded
+  const isButtonDisabled = isOffline || disabled;
+  const buttonTooltip = disabled
+    ? (disabledTooltip || 'Add to library before downloading')
+    : isOffline
+      ? 'Download unavailable offline'
+      : `Download ${type === 'album' ? 'Album' : 'Playlist'} for offline listening`;
+
   return (
     <button
       onClick={handleStartDownload}
-      disabled={isOffline}
+      disabled={isButtonDisabled}
       className={`
         inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border transition active:scale-95 text-xs font-semibold
         ${
-          isOffline
-            ? 'bg-zinc-800/40 border-zinc-700/40 text-zinc-500 cursor-not-allowed'
+          isButtonDisabled
+            ? 'bg-zinc-800/40 border-zinc-700/40 text-zinc-500 cursor-not-allowed opacity-60'
             : 'bg-zinc-800/80 hover:bg-zinc-700 border-zinc-600/80 text-zinc-200 hover:text-white cursor-pointer hover:border-zinc-500 shadow-sm'
         }
       `}
-      title={
-        isOffline
-          ? 'Download unavailable offline'
-          : `Download ${type === 'album' ? 'Album' : 'Playlist'} for offline listening`
-      }
+      title={buttonTooltip}
     >
-      <HiArrowDownTray className="w-4 h-4 text-zinc-400 group-hover:text-white" />
+      <HiArrowDownTray className={`w-4 h-4 ${isButtonDisabled ? 'text-zinc-500' : 'text-zinc-400 group-hover:text-white'}`} />
       <span>Download</span>
     </button>
   );

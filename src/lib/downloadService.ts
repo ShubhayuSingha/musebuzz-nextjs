@@ -148,14 +148,16 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
       songs: preparedSongs
     };
 
-    await saveAlbumToDb(offlineAlbum);
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+    await saveAlbumToDb(offlineAlbum, userId);
 
     store.setProgress(albumId, {
       status: 'completed',
       percent: 100
     });
 
-    await store.refreshDownloadedStatus();
+    await store.refreshDownloadedStatus(userId);
 
     // Clear progress after short delay
     setTimeout(() => {
@@ -296,9 +298,10 @@ export async function downloadLikedSongs(supabase: SupabaseClient): Promise<bool
       });
     }
 
-    // 3. Save full liked songs playlist to IndexedDB
+    // 3. Save full liked songs playlist to IndexedDB (scoped to current user)
+    const userLikedKey = `liked_${user.id}`;
     const offlinePlaylist: OfflinePlaylist = {
-      id: likedPlaylistId,
+      id: userLikedKey,
       title: 'Liked Songs',
       image_path: null,
       image_url: null,
@@ -309,14 +312,14 @@ export async function downloadLikedSongs(supabase: SupabaseClient): Promise<bool
       playlist_songs: preparedPlaylistSongs
     };
 
-    await savePlaylistToDb(offlinePlaylist);
+    await savePlaylistToDb(offlinePlaylist, user.id);
 
     store.setProgress(likedPlaylistId, {
       status: 'completed',
       percent: 100
     });
 
-    await store.refreshDownloadedStatus();
+    await store.refreshDownloadedStatus(user.id);
 
     setTimeout(() => {
       store.clearProgress(likedPlaylistId);
@@ -475,26 +478,29 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
     }
 
     // 4. Save full playlist to IndexedDB
+    const { data: authUserData } = await supabase.auth.getUser();
+    const currentUserId = authUserData?.user?.id || playlist.user_id;
+
     const offlinePlaylist: OfflinePlaylist = {
       id: playlist.id,
       title: playlist.title,
       image_path: playlist.image_path || null,
       image_url: resolvedPlaylistImageUrl || null,
-      user_id: playlist.user_id,
+      user_id: currentUserId,
       created_at: playlist.created_at,
       downloaded_at: Date.now(),
       last_accessed_at: playlist.last_accessed_at || new Date().toISOString(),
       playlist_songs: preparedPlaylistSongs
     };
 
-    await savePlaylistToDb(offlinePlaylist);
+    await savePlaylistToDb(offlinePlaylist, currentUserId);
 
     store.setProgress(playlistId, {
       status: 'completed',
       percent: 100
     });
 
-    await store.refreshDownloadedStatus();
+    await store.refreshDownloadedStatus(currentUserId);
 
     setTimeout(() => {
       store.clearProgress(playlistId);
@@ -659,17 +665,31 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
 /**
  * Removes an album download from device
  */
-export async function deleteAlbumDownload(albumId: string): Promise<void> {
+export async function deleteAlbumDownload(albumId: string, supabase?: SupabaseClient): Promise<void> {
   const store = useDownloadStore.getState();
-  await removeAlbumFromDb(albumId);
-  await store.refreshDownloadedStatus();
+  let userId: string | undefined = undefined;
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      userId = data?.user?.id;
+    } catch {}
+  }
+  await removeAlbumFromDb(albumId, userId);
+  await store.refreshDownloadedStatus(userId);
 }
 
 /**
  * Removes a playlist download from device
  */
-export async function deletePlaylistDownload(playlistId: string): Promise<void> {
+export async function deletePlaylistDownload(playlistId: string, supabase?: SupabaseClient): Promise<void> {
   const store = useDownloadStore.getState();
-  await removePlaylistFromDb(playlistId);
-  await store.refreshDownloadedStatus();
+  let userId: string | undefined = undefined;
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getUser();
+      userId = data?.user?.id;
+    } catch {}
+  }
+  await removePlaylistFromDb(playlistId, userId);
+  await store.refreshDownloadedStatus(userId);
 }

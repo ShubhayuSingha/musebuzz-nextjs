@@ -1,9 +1,10 @@
 // src/app/page.tsx
 'use client';
 
-import { useEffect, useRef, useState, MouseEvent } from 'react';
+import { useEffect, useRef, useState, useCallback, MouseEvent } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useUser } from '@supabase/auth-helpers-react'; 
+import { withTimeout } from '@/lib/helpers';
 import AlbumItem from '@/components/AlbumItem';
 import PlaylistItem from '@/components/PlaylistItem';
 import MixPlaylistItem from '@/components/MixPlaylistItem'; 
@@ -17,6 +18,7 @@ import { HiArrowDownTray } from 'react-icons/hi2';
 import usePlaylistStore from '@/stores/usePlaylistStore';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import useDownloadStore from '@/stores/useDownloadStore';
+import useAuthModalStore from '@/stores/useAuthModalStore';
 import { offlineDb } from '@/lib/offlineDb';
 import MediaContextMenu from "@/components/MediaContextMenu"; 
 
@@ -29,6 +31,7 @@ const DRAG_THRESHOLD = 5;
 export default function Home() {
   const { version } = usePlaylistStore();
   const user = useUser();
+  const authModal = useAuthModalStore();
   const { isOnline, isOfflineMode, toggleOfflineMode } = useOfflineModeStore();
   const { downloadedIds } = useDownloadStore();
 
@@ -93,6 +96,107 @@ export default function Home() {
   });
 
   /* =======================
+        OFFLINE DATA FETCH
+     ======================= */
+
+  const loadOfflineHomeData = useCallback(async () => {
+    setIsLoading(true);
+    if (!user) {
+      setOfflinePlaylists([]);
+      setOfflineAlbums([]);
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Only load playlists belonging strictly to THIS user
+      const userPlaylists = await offlineDb.playlists
+        .where('user_id')
+        .equals(user.id)
+        .toArray();
+
+      // Check for user-scoped or matching liked playlist
+      const userLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
+      if (userLiked && (!userLiked.user_id || userLiked.user_id === user.id)) {
+        if (!userPlaylists.some(p => p.id === userLiked.id)) {
+          userPlaylists.push(userLiked);
+        }
+      }
+
+      // 2. Only load albums saved by THIS user in saved_albums
+      let userAlbums: any[] = [];
+      if (offlineDb.saved_albums) {
+        const userSaved = await offlineDb.saved_albums
+          .where('user_id')
+          .equals(user.id)
+          .toArray();
+        let savedAlbumIds = userSaved.map(s => s.album_id);
+        if (savedAlbumIds.length === 0) {
+          const totalSaved = await offlineDb.saved_albums.count();
+          if (totalSaved === 0) {
+            const legacyAlbums = await offlineDb.albums.toArray();
+            savedAlbumIds = legacyAlbums.map(a => a.id);
+          }
+        }
+        if (savedAlbumIds.length > 0) {
+          userAlbums = await offlineDb.albums.where('id').anyOf(savedAlbumIds).toArray();
+        }
+      } else {
+        userAlbums = await offlineDb.albums.toArray();
+      }
+
+      // Format playlists. If 'liked' exists, sort it to the top!
+      const formattedPlaylists = userPlaylists
+        .map((p) => {
+          const isLiked = p.id === 'liked' || p.id === `liked_${user.id}`;
+          return {
+            id: isLiked ? 'liked' : p.id,
+            title: isLiked ? 'Liked Songs' : (p.title || 'Playlist'),
+            image_path: p.image_path || null,
+            image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
+            user_id: p.user_id,
+            type: 'playlist',
+            downloaded_at: p.downloaded_at,
+            songsCount: p.playlist_songs?.length || 0
+          };
+        })
+        .sort((a, b) => {
+          if (a.id === 'liked') return -1;
+          if (b.id === 'liked') return 1;
+          return (b.downloaded_at || 0) - (a.downloaded_at || 0);
+        });
+
+      // Format albums
+      const formattedAlbums = userAlbums
+        .map((a) => ({
+          id: a.id,
+          title: a.title,
+          image_path: a.image_path || null,
+          image_url: a.image_url || a.songs?.[0]?.imageUrl || null,
+          genre: a.genre,
+          artists: a.artists,
+          type: 'album',
+          downloaded_at: a.downloaded_at,
+          songsCount: a.songs?.length || 0
+        }))
+        .sort((a, b) => (b.downloaded_at || 0) - (a.downloaded_at || 0));
+
+      setOfflinePlaylists(formattedPlaylists);
+      setOfflineAlbums(formattedAlbums);
+    } catch (err) {
+      console.warn("[Home] Failed to load offline items:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (isEffectivelyOffline) {
+      loadOfflineHomeData();
+    }
+  }, [isEffectivelyOffline, downloadedIds, loadOfflineHomeData, user]);
+
+  /* =======================
         ONLINE DATA FETCH
      ======================= */
 
@@ -102,37 +206,50 @@ export default function Home() {
     const fetchDashboard = async () => {
       setIsLoading(true);
       try {
-        // 1. PUBLIC DATA (Fetch this for EVERYONE)
-        const { data: newAlbums } = await supabase
+        // 1. PUBLIC DATA (Fetch this for EVERYONE) with timeout protection
+        const { data: newAlbums, error: newAlbumsErr } = await withTimeout(
+          supabase
             .from('albums')
             .select('*, artists(*)')
             .order('created_at', { ascending: false })
-            .limit(10);
+            .limit(10),
+          2500
+        );
+        if (newAlbumsErr) throw newAlbumsErr;
         if (newAlbums) setNewestAlbums(newAlbums);
 
         // 2. USER-ONLY DATA (Only fetch if logged in)
         if (user) {
             // A. JUMP BACK IN
-            const { data: recentAlbums } = await supabase
+            const { data: recentAlbums } = await withTimeout(
+              supabase
                 .from('saved_albums')
                 .select('last_accessed_at, albums(*, artists(*))')
                 .eq('user_id', user.id)
                 .order('last_accessed_at', { ascending: false })
-                .limit(6);
+                .limit(6),
+              2500
+            ).catch(() => ({ data: [] }));
             
-            const { data: recentPlaylists } = await supabase
+            const { data: recentPlaylists } = await withTimeout(
+              supabase
                 .from('playlists')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('last_accessed_at', { ascending: false })
-                .limit(6);
+                .limit(6),
+              2500
+            ).catch(() => ({ data: [] }));
 
-            const { data: recentArtists } = await supabase
+            const { data: recentArtists } = await withTimeout(
+              supabase
                 .from('saved_artists')
                 .select('last_accessed_at, artists(*)')
                 .eq('user_id', user.id)
                 .order('last_accessed_at', { ascending: false })
-                .limit(6);
+                .limit(6),
+              2500
+            ).catch(() => ({ data: [] }));
 
             const combined = [
                 ...(recentAlbums?.map((a: any) => ({ ...a.albums, type: 'album', sortTime: a.last_accessed_at })) || []),
@@ -144,29 +261,38 @@ export default function Home() {
             setJumpBackIn([likedCard, ...combined]);
 
             // B. MADE FOR YOU
-            const { data: generated } = await supabase
+            const { data: generated } = await withTimeout(
+              supabase
                 .from('generated_playlists')
                 .select('*')
                 .eq('user_id', user.id)
                 .order('created_at', { ascending: false })
-                .limit(5);
+                .limit(5),
+              2500
+            ).catch(() => ({ data: [] }));
             if (generated) setMadeForYou(generated);
 
             // C. YOUR PLAYLISTS
-            const { data: allPlaylists } = await supabase
+            const { data: allPlaylists } = await withTimeout(
+              supabase
                 .from('playlists')
                 .select('*')
                 .eq('user_id', user.id)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false }),
+              2500
+            ).catch(() => ({ data: [] }));
             if (allPlaylists) setYourPlaylists(allPlaylists);
 
             // D. AI SUGGESTIONS
-            const { data: history } = await supabase
+            const { data: history } = await withTimeout(
+              supabase
                 .from('listening_history')
                 .select('song_id, played_at, songs(*, albums(*, artists(*)))')
                 .eq('user_id', user.id)
                 .order('played_at', { ascending: false })
-                .limit(20);
+                .limit(20),
+              2500
+            ).catch(() => ({ data: [] }));
 
             if (history && history.length > 0) {
                 const artistCounts: Record<string, number> = {};
@@ -192,22 +318,28 @@ export default function Home() {
                         try { parsedVector = JSON.parse(seedVector); } catch {}
                     }
 
-                    const { data: aiSongs } = await supabase.rpc("match_songs", {
+                    const { data: aiSongs } = await withTimeout(
+                      supabase.rpc("match_songs", {
                           query_embedding: parsedVector,
                           match_threshold: 0.6,
                           match_count: 20,
                           exclude_ids: []
-                    });
+                      }),
+                      2500
+                    ).catch(() => ({ data: [] }));
                     
                     if (aiSongs && aiSongs.length > 0) {
                         const uniqueAlbumIds = new Set<string>();
                         aiSongs.forEach((s: any) => { if (s.album_id) uniqueAlbumIds.add(s.album_id); });
                         if (uniqueAlbumIds.size > 0) {
-                            const { data: albumDetails } = await supabase
+                            const { data: albumDetails } = await withTimeout(
+                              supabase
                                 .from('albums')
                                 .select('*, artists(*)')
                                 .in('id', Array.from(uniqueAlbumIds))
-                                .limit(10);
+                                .limit(10),
+                              2500
+                            ).catch(() => ({ data: [] }));
                             if (albumDetails) setSuggestedAlbums(albumDetails);
                         }
                     }
@@ -215,76 +347,16 @@ export default function Home() {
             }
         }
       } catch (error) {
-        console.error("Failed to load dashboard data:", error);
+        console.warn("Failed to load dashboard data online, switching to offline fallback:", error);
+        useOfflineModeStore.getState().setIsOnline(false);
+        await loadOfflineHomeData();
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchDashboard();
-  }, [version, user, isEffectivelyOffline]);
-
-  /* =======================
-        OFFLINE DATA FETCH
-     ======================= */
-
-  useEffect(() => {
-    if (!isEffectivelyOffline) return;
-
-    const loadOfflineHomeData = async () => {
-      setIsLoading(true);
-      try {
-        const [allPlaylists, allAlbums] = await Promise.all([
-          offlineDb.playlists.toArray(),
-          offlineDb.albums.toArray()
-        ]);
-
-        // Format playlists. If 'liked' exists, sort it to the top!
-        const formattedPlaylists = allPlaylists
-          .map((p) => {
-            return {
-              id: p.id,
-              title: p.title || (p.id === 'liked' ? 'Liked Songs' : 'Playlist'),
-              image_path: p.image_path || null,
-              image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
-              user_id: p.user_id,
-              type: 'playlist',
-              downloaded_at: p.downloaded_at,
-              songsCount: p.playlist_songs?.length || 0
-            };
-          })
-          .sort((a, b) => {
-            if (a.id === 'liked') return -1;
-            if (b.id === 'liked') return 1;
-            return (b.downloaded_at || 0) - (a.downloaded_at || 0);
-          });
-
-        // Format albums
-        const formattedAlbums = allAlbums
-          .map((a) => ({
-            id: a.id,
-            title: a.title,
-            image_path: a.image_path || null,
-            image_url: a.image_url || a.songs?.[0]?.imageUrl || null,
-            genre: a.genre,
-            artists: a.artists,
-            type: 'album',
-            downloaded_at: a.downloaded_at,
-            songsCount: a.songs?.length || 0
-          }))
-          .sort((a, b) => (b.downloaded_at || 0) - (a.downloaded_at || 0));
-
-        setOfflinePlaylists(formattedPlaylists);
-        setOfflineAlbums(formattedAlbums);
-      } catch (err) {
-        console.warn("[Home] Failed to load offline items:", err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadOfflineHomeData();
-  }, [isEffectivelyOffline, downloadedIds]);
+  }, [version, user, isEffectivelyOffline, loadOfflineHomeData]);
 
   /* =======================
         SCROLL HELPERS
@@ -611,8 +683,28 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Empty State */}
-        {!hasOfflineContent && (
+        {/* Logged Out Offline State */}
+        {!user && (
+          <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+            <div className="w-16 h-16 rounded-full bg-neutral-800/80 border border-neutral-700 flex items-center justify-center text-neutral-300 mb-5 shadow-lg">
+              <RiWifiOffLine size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Login Required Offline</h2>
+            <p className="text-zinc-400 text-sm max-w-md mb-6 leading-relaxed">
+              Downloaded music and library items are tied to your personal account. Reconnect to the internet and log in to listen to your downloaded music.
+            </p>
+            <button
+              onClick={() => authModal.onOpen('sign_in')}
+              type="button"
+              className="px-6 py-2.5 rounded-full font-semibold text-sm bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/50 transition active:scale-95 cursor-pointer"
+            >
+              Log in to MuseBuzz
+            </button>
+          </div>
+        )}
+
+        {/* Empty State (Logged in but no downloads) */}
+        {user && !hasOfflineContent && (
           <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
             <div className="w-16 h-16 rounded-full bg-purple-900/30 border border-purple-500/30 flex items-center justify-center text-purple-400 mb-5 shadow-lg shadow-purple-900/20">
               <HiArrowDownTray size={30} />

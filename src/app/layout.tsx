@@ -52,15 +52,12 @@ export default async function RootLayout({
   const cookieStore = await cookies();
   
   const supabase = createServerComponentClient({ cookies: () => cookieStore as any });
-  // Suppress server-side proxy warning while safely validating with getUser()
   (supabase.auth as any).suppressGetSessionWarning = true;
   let session = null;
   try {
-    const { data: userData } = await withTimeout(supabase.auth.getUser(), 1000);
-    if (userData?.user) {
-      const sessionRes = await withTimeout(supabase.auth.getSession(), 1000);
-      session = sessionRes?.data?.session || null;
-    }
+    // Read session directly from cookies (100% offline safe, zero network requests, instant auth)
+    const sessionRes = await supabase.auth.getSession();
+    session = sessionRes?.data?.session || null;
   } catch {
     session = null;
   }
@@ -70,7 +67,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen`}>
+      <body className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen h-[100dvh] overflow-x-hidden`}>
         <SupabaseProvider session={session}>
            
            {/* 🟢 Update Component Usage */}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { offlineDb } from "@/lib/offlineDb";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import { withTimeout } from "@/lib/helpers";
 
 const useSongById = (id?: string) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -18,51 +19,53 @@ const useSongById = (id?: string) => {
     setIsLoading(true);
 
     const fetchSong = async () => {
+      // 1. FAST-PATH: Check local IndexedDB first for instant playback & zero flicker
+      let hasLocal = false;
+      try {
+        const offlineSong = await offlineDb.songs.get(id);
+        if (offlineSong) {
+          setSong(offlineSong);
+          setIsLoading(false);
+          hasLocal = true;
+        }
+      } catch (e) {
+        console.warn("[useSongById] IndexedDB read failed:", e);
+      }
+
       const isOffline = !useOfflineModeStore.getState().isOnline || 
                         useOfflineModeStore.getState().isOfflineMode || 
                         (typeof navigator !== 'undefined' && !navigator.onLine);
 
-      // 1. If device is offline, check local IndexedDB
+      // If device is offline, we're completely done
       if (isOffline) {
-        try {
-          const offlineSong = await offlineDb.songs.get(id);
-          if (offlineSong) {
-            setSong(offlineSong);
-          }
-        } catch (e) {
-          console.warn("[useSongById] IndexedDB read failed:", e);
-        } finally {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
         return;
       }
 
-      // 2. Online: Fetch from Supabase
+      // 2. Online: Fetch fresh metadata from Supabase with timeout protection
       try {
-        const { data, error } = await supabase
-          .from('songs')
-          .select('*, albums(*, artists(*))')
-          .eq('id', id)
-          .single();
+        const { data, error } = await withTimeout(
+          supabase
+            .from('songs')
+            .select('*, albums(*, artists(*))')
+            .eq('id', id)
+            .single(),
+          2500
+        );
 
-        if (error || !data) {
-          // If online query fails, fallback to local IndexedDB
-          const offlineSong = await offlineDb.songs.get(id);
-          if (offlineSong) {
-            setSong(offlineSong);
-          } else {
-            console.error(error);
-          }
-        } else {
+        if (!error && data) {
           setSong(data);
+        } else if (!hasLocal) {
+          const offlineSong = await offlineDb.songs.get(id);
+          if (offlineSong) setSong(offlineSong);
         }
       } catch (err) {
-        // Network catch: fallback to local IndexedDB
-        const offlineSong = await offlineDb.songs.get(id);
-        if (offlineSong) {
-          setSong(offlineSong);
-        } else {
-          console.error(err);
+        // Network timeout / failure: fallback to local IndexedDB
+        if (!hasLocal) {
+          try {
+            const offlineSong = await offlineDb.songs.get(id);
+            if (offlineSong) setSong(offlineSong);
+          } catch {}
         }
       } finally {
         setIsLoading(false);

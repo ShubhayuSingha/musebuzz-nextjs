@@ -9,7 +9,7 @@ import useDownloadStore from '@/stores/useDownloadStore';
 
 interface StorageIndicatorProps {
   compact?: boolean;
-  variant?: 'navbar' | 'sidebar' | 'compact';
+  variant?: 'navbar' | 'sidebar' | 'compact' | 'menu';
 }
 
 const StorageIndicator: React.FC<StorageIndicatorProps> = ({ 
@@ -91,6 +91,48 @@ const StorageIndicator: React.FC<StorageIndicatorProps> = ({
       </div>
     </div>
   );
+
+  if (variant === 'menu') {
+    return (
+      <>
+        {showConfirm && renderConfirmModal()}
+        <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-xs flex flex-col gap-2">
+          <div className="flex items-center justify-between text-neutral-300">
+            <span className="flex items-center gap-1.5 font-medium">
+              <HiCircleStack className="w-4 h-4 text-emerald-400" />
+              Offline Storage
+            </span>
+            <span className="text-neutral-400 font-mono text-[11px]">
+              {estimate?.formattedUsage || '0 B'}
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-full bg-neutral-800 h-1.5 rounded-full overflow-hidden">
+            <div 
+              className="bg-emerald-500 h-full rounded-full transition-all duration-300"
+              style={{ width: `${Math.min(Math.max(estimate?.percentUsed || 0, (estimate?.usageBytes || 0) > 0 ? 3 : 0), 100)}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-[10px] text-neutral-500">
+              {(estimate?.usageBytes || 0) > 0 ? 'Downloaded music on device' : 'No downloads stored'}
+            </span>
+            {(estimate?.usageBytes || 0) > 0 && (
+              <button
+                onClick={() => setShowConfirm(true)}
+                className="text-[11px] font-semibold text-neutral-400 hover:text-red-400 transition flex items-center gap-1 cursor-pointer"
+              >
+                <HiTrash className="w-3.5 h-3.5" />
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (variant === 'navbar') {
     return (

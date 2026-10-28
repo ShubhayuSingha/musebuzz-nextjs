@@ -56,13 +56,50 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   const { downloadedIds } = useDownloadStore();
 
   const loadOfflineDownloads = async () => {
+    if (!user?.id) return [];
+    const currentUserId = user.id;
     try {
-      const [offlinePlaylists, offlineAlbums] = await Promise.all([
-        offlineDb.playlists.toArray(),
-        offlineDb.albums.toArray()
-      ]);
+      // 1. Only load playlists belonging strictly to THIS user
+      const offlinePlaylists = await offlineDb.playlists
+        .where('user_id')
+        .equals(currentUserId)
+        .toArray();
+
+      // 2. Only load albums saved by THIS user in saved_albums
+      let offlineAlbums: any[] = [];
+      if (offlineDb.saved_albums) {
+        const userSaved = await offlineDb.saved_albums
+          .where('user_id')
+          .equals(currentUserId)
+          .toArray();
+        let savedAlbumIds = userSaved.map(s => s.album_id);
+
+        // Auto-heal: If this user downloaded albums in the previous version before saved_albums existed,
+        // automatically link them to this user's account so existing downloads are never lost!
+        if (savedAlbumIds.length === 0) {
+          const totalSavedRecords = await offlineDb.saved_albums.count();
+          if (totalSavedRecords === 0) {
+            const legacyAlbums = await offlineDb.albums.toArray();
+            for (const alb of legacyAlbums) {
+              await offlineDb.saved_albums.put({
+                user_id: currentUserId,
+                album_id: alb.id,
+                downloaded_at: alb.downloaded_at || Date.now(),
+                last_accessed_at: alb.last_accessed_at || new Date().toISOString()
+              });
+            }
+            savedAlbumIds = legacyAlbums.map(a => a.id);
+          }
+        }
+
+        if (savedAlbumIds.length > 0) {
+          offlineAlbums = await offlineDb.albums.where('id').anyOf(savedAlbumIds).toArray();
+        }
+      } else {
+        offlineAlbums = await offlineDb.albums.toArray();
+      }
       const offlinePlItems: SidebarItem[] = offlinePlaylists
-        .filter(pl => pl.id !== 'liked')
+        .filter(pl => pl.id !== 'liked' && !pl.id.startsWith('liked_'))
         .map(pl => {
           let imageUrl = '/images/playlist-placeholder.jpg';
           if (pl.image_path && pl.image_url) {
@@ -100,10 +137,15 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   const fetchLibrary = async () => {
     const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
 
-    if (isOffline || !user?.id) {
-        const offlineData = await loadOfflineDownloads();
-        setLibraryItems(offlineData.slice(0, 10));
-        return;
+    if (!user?.id) {
+      setLibraryItems([]);
+      return;
+    }
+
+    if (isOffline) {
+      const offlineData = await loadOfflineDownloads();
+      setLibraryItems(offlineData.slice(0, 10));
+      return;
     }
 
     try {
@@ -216,8 +258,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
 
     setLibraryItems(combined);
     } catch {
-      const offlineData = await loadOfflineDownloads();
-      setLibraryItems(offlineData.slice(0, 10));
+      if (user?.id) {
+        const offlineData = await loadOfflineDownloads();
+        setLibraryItems(offlineData.slice(0, 10));
+      } else {
+        setLibraryItems([]);
+      }
     }
   };
 
@@ -389,7 +435,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
           <li className="mb-2 w-full">
             <Link 
                 href="/library" 
-                onClick={closeMobile}
+                onClick={(e) => {
+                  if (!user) {
+                    e.preventDefault();
+                    authModal.onOpen('sign_in');
+                    return;
+                  }
+                  if (closeMobile) closeMobile();
+                }}
                 className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
                 title="Your Library" 
             >

@@ -10,8 +10,10 @@ import GlobalSearch from "@/components/GlobalSearch";
 import usePlayerStore from "@/stores/usePlayerStore";
 import { FaUserCircle } from "react-icons/fa";
 import { RiWifiOffLine } from "react-icons/ri";
+import { HiCog6Tooth } from "react-icons/hi2";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import StorageIndicator from "@/components/StorageIndicator";
+import { stopSound } from "@/lib/audioEngine";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -24,6 +26,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const router = useRouter();
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
   
   const [mounted, setMounted] = useState(false);
   const [networkOnline, setNetworkOnline] = useState(true);
@@ -50,11 +55,14 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const isNetworkDisconnected = mounted && (!networkOnline || !isOnline);
   const offlineActive = mounted && isOfflineMode;
 
-  // Close profile dropdown if clicked outside
+  // Close dropdowns if clicked outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
+      }
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setIsSettingsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -62,17 +70,20 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   }, []);
 
   const handleLogout = async () => {
-    // 1. Reset the Zustand store in RAM
+    // 1. Stop audio engine
+    stopSound();
+
+    // 2. Reset the Zustand store in RAM
     resetPlayer(); 
     
-    // 2. Nuke the Zustand persistent storage from the browser's hard drive
+    // 3. Nuke the Zustand persistent storage from the browser's hard drive
     localStorage.removeItem('musebuzz-player-storage');
+    sessionStorage.removeItem('restore_seek');
 
-    // 3. Tell Supabase to destroy the auth session cookie
+    // 4. Tell Supabase to destroy the auth session cookie
     await supabaseClient.auth.signOut();
     
-    // 4. THE MAGIC BULLET: Force a hard browser reload instead of a soft Next.js refresh.
-    // This completely obliterates all React memory, stale states, and ghost UI.
+    // 5. Force a hard browser reload to home
     window.location.href = '/';
   };
 
@@ -110,47 +121,106 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           {/* Mobile Search Icon rendered on the right */}
           <GlobalSearch isMobileRightAligned={true} />
 
-          {/* Network Error Status */}
+          {/* Subtle Network Outage Indicator Icon (visible when disconnected) */}
           {isNetworkDisconnected && (
             <div 
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold whitespace-nowrap animate-pulse select-none"
-              title="Network connection lost"
+              className="relative group p-2 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 hover:bg-red-500/25 transition cursor-help flex items-center justify-center flex-shrink-0"
+              title="Network disconnected — Operating offline"
+              aria-label="Network disconnected — Operating offline"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
-              <span>Network Error</span>
+              <RiWifiOffLine size={18} />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 animate-ping" />
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+
+              {/* Hover Tooltip (desktop) */}
+              <div className="absolute right-0 top-[125%] hidden group-hover:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-700/80 text-[11px] font-medium text-red-300 shadow-2xl whitespace-nowrap z-50 pointer-events-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                <span>Network disconnected</span>
+              </div>
             </div>
           )}
 
-          {/* Offline Mode Toggle Button - Always Visible */}
-          <button
-            onClick={toggleOfflineMode}
-            type="button"
-            className={`
-              flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-semibold transition active:scale-95 select-none whitespace-nowrap
-              ${
-                offlineActive
-                  ? 'bg-purple-600/30 border border-purple-500 text-purple-200 hover:bg-purple-600/40 shadow-sm shadow-purple-900/40'
-                  : 'bg-neutral-800/80 hover:bg-neutral-800 border border-neutral-700/80 text-neutral-300 hover:text-white'
-              }
-            `}
-            title={offlineActive ? "Offline Mode is ON — Click to switch to Online" : "Offline Mode is OFF — Click to switch to Offline"}
-          >
-            <RiWifiOffLine className={`w-3.5 h-3.5 ${offlineActive ? 'text-purple-300' : 'text-neutral-400'}`} />
-            <span className="hidden sm:inline">Offline Mode</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider ${
-              offlineActive ? 'bg-purple-500 text-white' : 'bg-neutral-700 text-neutral-400'
-            }`}>
-              {offlineActive ? 'ON' : 'OFF'}
-            </span>
-          </button>
-           
-          {/* Offline Storage Indicator on Navbar */}
-          <StorageIndicator variant="navbar" />
+          {/* Settings Menu Dropdown (Offline Mode & Storage) */}
+          <div ref={settingsRef} className="relative flex-shrink-0">
+            <button
+              onClick={() => {
+                setIsSettingsOpen(!isSettingsOpen);
+                if (isProfileOpen) setIsProfileOpen(false);
+              }}
+              className={`
+                flex items-center justify-center rounded-full p-2 transition active:scale-95 border
+                ${isSettingsOpen 
+                  ? 'bg-neutral-800 text-white border-neutral-600' 
+                  : 'bg-neutral-800/80 text-neutral-400 hover:text-white border-transparent hover:border-neutral-700'}
+              `}
+              title="Settings & Offline"
+              aria-label="Settings and Offline preferences"
+            >
+              <HiCog6Tooth 
+                size={20} 
+                className={`transition-transform duration-200 ${isSettingsOpen ? 'rotate-45 text-white' : ''}`} 
+              />
+            </button>
 
+            {/* Settings Dropdown Popover */}
+            {isSettingsOpen && (
+              <div className="absolute right-0 top-[120%] w-72 sm:w-80 bg-zinc-900/95 backdrop-blur-md border border-neutral-800 rounded-xl shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-3">
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                  <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wider">
+                    Settings & Offline
+                  </span>
+                </div>
+
+                {/* Offline Mode Toggle Option */}
+                <div className="flex items-center justify-between p-2.5 rounded-lg bg-neutral-950/60 border border-neutral-800/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className={`p-2 rounded-lg ${offlineActive ? 'bg-purple-600/20 text-purple-400' : 'bg-neutral-800 text-neutral-400'}`}>
+                      <RiWifiOffLine size={16} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-white">Offline Mode</span>
+                      <span className="text-[10px] text-neutral-400">
+                        {offlineActive ? 'Using downloaded songs only' : 'Stream songs from cloud'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Toggle Switch */}
+                  <button
+                    onClick={toggleOfflineMode}
+                    type="button"
+                    role="switch"
+                    aria-checked={offlineActive}
+                    className={`
+                      relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                      transition-colors duration-200 ease-in-out focus:outline-none
+                      ${offlineActive ? 'bg-purple-600' : 'bg-neutral-700'}
+                    `}
+                  >
+                    <span
+                      className={`
+                        pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 
+                        transition duration-200 ease-in-out
+                        ${offlineActive ? 'translate-x-5' : 'translate-x-0'}
+                      `}
+                    />
+                  </button>
+                </div>
+
+                {/* Offline Storage Indicator inside Settings Menu */}
+                <StorageIndicator variant="menu" />
+              </div>
+            )}
+          </div>
+
+          {/* Extreme Right: Profile Icon (if logged in) or Login/Signup buttons (if logged out) */}
           {user ? (
-            <div ref={profileRef} className="relative">
+            <div ref={profileRef} className="relative flex-shrink-0">
               <button 
-                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                onClick={() => {
+                  setIsProfileOpen(!isProfileOpen);
+                  if (isSettingsOpen) setIsSettingsOpen(false);
+                }}
                 className="flex items-center justify-center rounded-full bg-neutral-800 p-2 text-neutral-400 hover:text-white transition active:scale-95 border border-transparent hover:border-neutral-700"
               >
                 <FaUserCircle size={24} />

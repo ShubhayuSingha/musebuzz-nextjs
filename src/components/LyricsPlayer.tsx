@@ -9,10 +9,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export interface LyricLine {
   type?: "lyrics" | "music";
-  text?: string;                
-  text_native?: string;         
-  text_romanized?: string;      
-  text_translation?: string;    
+  text?: string;
+  text_native?: string;
+  text_romanized?: string;
+  text_translation?: string;
   start: number | null;
   end: number | null;
 }
@@ -20,10 +20,10 @@ export interface LyricLine {
 export default function LyricsPlayer() {
   const { activeId, setSeekRequest } = usePlayerStore();
   const { isOpen, activeView } = useQueueStore();
-  
+
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [activeLineIndex, setActiveLineIndex] = useState(-1);
   const activeLineIndexRef = useRef(-1);
 
@@ -36,7 +36,7 @@ export default function LyricsPlayer() {
     if (typeof window !== 'undefined') {
       const savedMode = localStorage.getItem('musebuzz-script-mode');
       if (savedMode === 'native' || savedMode === 'romanized') setScriptMode(savedMode);
-      
+
       const savedTrans = localStorage.getItem('musebuzz-show-translation');
       if (savedTrans !== null) setShowTranslation(savedTrans === 'true');
     }
@@ -44,7 +44,7 @@ export default function LyricsPlayer() {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLDivElement | null)[]>([]);
-  
+
   const isProgrammaticScrollRef = useRef(false);
   const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -54,21 +54,21 @@ export default function LyricsPlayer() {
   // 🟢 Helper: Find the most recent line that has started
   const getActiveLineIndex = (time: number, lyricsData: LyricLine[]) => {
     for (let i = lyricsData.length - 1; i >= 0; i--) {
-        if (lyricsData[i].start !== null && time >= lyricsData[i].start!) {
-            return i;
-        }
+      if (lyricsData[i].start !== null && time >= lyricsData[i].start!) {
+        return i;
+      }
     }
     return -1;
   };
 
   useEffect(() => {
-    if (!activeId) { 
-        setLyrics([]); 
-        setActiveLineIndex(-1);
-        activeLineIndexRef.current = -1;
-        return; 
+    if (!activeId) {
+      setLyrics([]);
+      setActiveLineIndex(-1);
+      activeLineIndexRef.current = -1;
+      return;
     }
-    
+
     // 🟢 FIX: Reset instantly on song change to clear the old active line!
     setActiveLineIndex(-1);
     activeLineIndexRef.current = -1;
@@ -100,41 +100,41 @@ export default function LyricsPlayer() {
           lyricsSnippet = offlineSong?.lyrics_snippet || null;
         }
       }
-      
+
       if (lyricsSnippet) {
-        try { 
+        try {
           const parsedLyrics = JSON.parse(lyricsSnippet);
-          setLyrics(parsedLyrics); 
+          setLyrics(parsedLyrics);
 
           const initialTime = (window as any).__musebuzzCurrentTime || 0;
           const initialIndex = getActiveLineIndex(initialTime, parsedLyrics);
-          
-          if (initialIndex !== -1) {
-              activeLineIndexRef.current = initialIndex;
-              setActiveLineIndex(initialIndex);
 
-              setTimeout(() => {
-                  const el = lineRefs.current[initialIndex];
-                  const container = containerRef.current;
-                  if (el && container) {
-                      isProgrammaticScrollRef.current = true;
-                      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-                      
-                      container.scrollTo({
-                          top: el.offsetTop + (el.clientHeight / 2) - (container.clientHeight * 0.3),
-                          behavior: 'auto' 
-                      });
-                      
-                      unlockTimeoutRef.current = setTimeout(() => { 
-                          isProgrammaticScrollRef.current = false; 
-                      }, 200);
-                  }
-              }, 100); 
+          if (initialIndex !== -1) {
+            activeLineIndexRef.current = initialIndex;
+            setActiveLineIndex(initialIndex);
+
+            setTimeout(() => {
+              const el = lineRefs.current[initialIndex];
+              const container = containerRef.current;
+              if (el && container) {
+                isProgrammaticScrollRef.current = true;
+                if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
+                container.scrollTo({
+                  top: el.offsetTop + (el.clientHeight / 2) - (container.clientHeight * 0.3),
+                  behavior: 'auto'
+                });
+
+                unlockTimeoutRef.current = setTimeout(() => {
+                  isProgrammaticScrollRef.current = false;
+                }, 200);
+              }
+            }, 100);
           }
 
         } catch { setLyrics([]); }
       } else { setLyrics([]); }
-      
+
       setIsLoading(false);
     };
     fetchLyrics();
@@ -142,13 +142,13 @@ export default function LyricsPlayer() {
 
   useEffect(() => {
     const handleTimeUpdate = (e: any) => {
-        const time = e.detail;
-        const newIndex = getActiveLineIndex(time, lyrics);
-        
-        if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
-            activeLineIndexRef.current = newIndex;
-            setActiveLineIndex(newIndex); 
-        }
+      const time = e.detail;
+      const newIndex = getActiveLineIndex(time, lyrics);
+
+      if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
+        activeLineIndexRef.current = newIndex;
+        setActiveLineIndex(newIndex);
+      }
     };
     window.addEventListener('lyrics-time-update', handleTimeUpdate);
     return () => window.removeEventListener('lyrics-time-update', handleTimeUpdate);
@@ -158,29 +158,29 @@ export default function LyricsPlayer() {
     if (!isOpen || activeView !== 'lyrics' || lyrics.length === 0) return;
 
     const checkTime = () => {
-        const time = (window as any).__musebuzzCurrentTime || 0;
-        const newIndex = getActiveLineIndex(time, lyrics);
-        
-        if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
-            activeLineIndexRef.current = newIndex;
-            setActiveLineIndex(newIndex);
-            
-            const activeEl = lineRefs.current[newIndex];
-            const container = containerRef.current;
-            if (activeEl && container) {
-                isProgrammaticScrollRef.current = true;
-                if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-                
-                container.scrollTo({
-                    top: activeEl.offsetTop + (activeEl.clientHeight / 2) - (container.clientHeight * 0.4),
-                    behavior: 'smooth' 
-                });
+      const time = (window as any).__musebuzzCurrentTime || 0;
+      const newIndex = getActiveLineIndex(time, lyrics);
 
-                unlockTimeoutRef.current = setTimeout(() => {
-                    isProgrammaticScrollRef.current = false;
-                }, 800);
-            }
+      if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
+        activeLineIndexRef.current = newIndex;
+        setActiveLineIndex(newIndex);
+
+        const activeEl = lineRefs.current[newIndex];
+        const container = containerRef.current;
+        if (activeEl && container) {
+          isProgrammaticScrollRef.current = true;
+          if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
+          container.scrollTo({
+            top: activeEl.offsetTop + (activeEl.clientHeight / 2) - (container.clientHeight * 0.4),
+            behavior: 'smooth'
+          });
+
+          unlockTimeoutRef.current = setTimeout(() => {
+            isProgrammaticScrollRef.current = false;
+          }, 800);
         }
+      }
     };
 
     checkTime();
@@ -189,7 +189,7 @@ export default function LyricsPlayer() {
   }, [lyrics, isOpen, activeView]);
 
   useEffect(() => {
-    if (!isAutoSyncing || activeLineIndex === -1) return; 
+    if (!isAutoSyncing || activeLineIndex === -1) return;
     if (!isOpen || activeView !== 'lyrics') return;
 
     const activeEl = lineRefs.current[activeLineIndex];
@@ -197,20 +197,20 @@ export default function LyricsPlayer() {
 
     if (activeEl && container) {
       const scrollTimeout = setTimeout(() => {
-        const offsetTarget = container.clientHeight * 0.4; 
+        const offsetTarget = container.clientHeight * 0.4;
         const elTop = activeEl.offsetTop;
         const elHalfHeight = activeEl.clientHeight / 2;
-        
+
         isProgrammaticScrollRef.current = true;
         if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-        
+
         container.scrollTo({
           top: elTop + elHalfHeight - offsetTarget,
           behavior: 'smooth'
         });
 
         unlockTimeoutRef.current = setTimeout(() => {
-            isProgrammaticScrollRef.current = false;
+          isProgrammaticScrollRef.current = false;
         }, 800);
 
       }, 50);
@@ -219,31 +219,31 @@ export default function LyricsPlayer() {
   }, [activeLineIndex, isAutoSyncing, scriptMode, showTranslation, isOpen, activeView]);
 
   const handleScriptToggle = (mode: 'native' | 'romanized') => {
-      isProgrammaticScrollRef.current = true;
-      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-      
-      setScriptMode(mode);
-      localStorage.setItem('musebuzz-script-mode', mode);
-      
-      unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
+    isProgrammaticScrollRef.current = true;
+    if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
+    setScriptMode(mode);
+    localStorage.setItem('musebuzz-script-mode', mode);
+
+    unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
   };
 
   const handleTranslationToggle = () => {
-      isProgrammaticScrollRef.current = true;
-      if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-      
-      const nextState = !showTranslation;
-      setShowTranslation(nextState);
-      localStorage.setItem('musebuzz-show-translation', String(nextState));
-      
-      unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
+    isProgrammaticScrollRef.current = true;
+    if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
+    const nextState = !showTranslation;
+    setShowTranslation(nextState);
+    localStorage.setItem('musebuzz-show-translation', String(nextState));
+
+    unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
   };
 
   const handleUserInteraction = () => {
-      if (!isOpen || activeView !== 'lyrics') return;
-      if (!isProgrammaticScrollRef.current && isAutoSyncing) {
-          setIsAutoSyncing(false);
-      }
+    if (!isOpen || activeView !== 'lyrics') return;
+    if (!isProgrammaticScrollRef.current && isAutoSyncing) {
+      setIsAutoSyncing(false);
+    }
   };
 
   const getDisplayText = (line: LyricLine) => {
@@ -255,27 +255,27 @@ export default function LyricsPlayer() {
   if (isLoading) {
     return <div className="h-full w-full flex items-center justify-center text-neutral-500">Loading...</div>;
   }
-  
+
   if (!lyrics.length) {
     return <div className="h-full w-full flex items-center justify-center text-neutral-500">Looks like we don't have lyrics for this song yet.</div>;
   }
 
   return (
     <div className="w-full h-full flex flex-col bg-transparent overflow-hidden relative">
-      
+
       {(hasNative || hasTranslation) && (
         <div className="absolute top-4 right-6 z-[60] flex items-center gap-3">
-          
+
           {hasNative && (
             <div className="flex bg-neutral-900/80 backdrop-blur-md rounded-full p-1 border border-neutral-800 shadow-xl">
-              <button 
-                onClick={() => handleScriptToggle('native')} 
+              <button
+                onClick={() => handleScriptToggle('native')}
                 className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'native' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white cursor-pointer'}`}
               >
                 Native
               </button>
-              <button 
-                onClick={() => handleScriptToggle('romanized')} 
+              <button
+                onClick={() => handleScriptToggle('romanized')}
                 className={`px-4 py-1.5 text-xs font-bold rounded-full transition ${scriptMode === 'romanized' ? 'bg-purple-600 text-white' : 'text-neutral-400 hover:text-white cursor-pointer'}`}
               >
                 English
@@ -284,8 +284,8 @@ export default function LyricsPlayer() {
           )}
 
           {hasTranslation && (
-            <button 
-              onClick={handleTranslationToggle} 
+            <button
+              onClick={handleTranslationToggle}
               className={`px-4 py-2 text-xs font-bold rounded-full border backdrop-blur-md transition shadow-xl cursor-pointer ${showTranslation ? 'bg-purple-600 border-purple-600 text-white' : 'bg-neutral-900/80 border-neutral-800 text-neutral-400 hover:text-white'}`}
             >
               A/अ/অ
@@ -295,7 +295,7 @@ export default function LyricsPlayer() {
         </div>
       )}
 
-      <div 
+      <div
         ref={containerRef}
         onScroll={handleUserInteraction}
         className="flex-1 overflow-y-auto scrollbar-hide relative"
@@ -305,7 +305,7 @@ export default function LyricsPlayer() {
         }}
       >
         <div className="flex flex-col max-w-4xl mx-auto px-6 pt-24 pb-32 text-left items-start relative">
-          
+
           <div className="flex flex-col w-full gap-8">
             {lyrics.map((line, lineIdx) => {
               const isActiveLine = activeLineIndex === lineIdx;
@@ -328,11 +328,11 @@ export default function LyricsPlayer() {
                   ref={(el) => { lineRefs.current[lineIdx] = el; }}
                   className="flex flex-col w-full cursor-pointer justify-start transition-transform duration-300 origin-left"
                   onClick={() => {
-                      if (line.start !== null) {
-                          setSeekRequest(line.start);
-                          setIsAutoSyncing(true);
-                      }
-                  }} 
+                    if (line.start !== null) {
+                      setSeekRequest(line.start);
+                      setIsAutoSyncing(true);
+                    }
+                  }}
                 >
                   <span className={`text-2xl font-bold transition-colors duration-300 ${colorClass}`}>
                     {displayText}
@@ -347,46 +347,47 @@ export default function LyricsPlayer() {
               );
             })}
           </div>
-          
+
         </div>
       </div>
 
       <AnimatePresence>
         {!isAutoSyncing && (
           <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="absolute bottom-[100px] right-6 z-[100]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-[100px] right-6 z-[100]"
           >
-              <button
-                  onClick={() => {
-                      setIsAutoSyncing(true);
-                      const activeEl = lineRefs.current[activeLineIndexRef.current];
-                      if (activeEl && containerRef.current) {
-                          isProgrammaticScrollRef.current = true;
-                          if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+            <button
+              onClick={() => {
+                setIsAutoSyncing(true);
+                const activeEl = lineRefs.current[activeLineIndexRef.current];
+                if (activeEl && containerRef.current) {
+                  isProgrammaticScrollRef.current = true;
+                  if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
 
-                          const offsetTarget = containerRef.current.clientHeight * 0.3;
-                          containerRef.current.scrollTo({
-                              top: activeEl.offsetTop + (activeEl.clientHeight / 2) - offsetTarget,
-                              behavior: 'smooth'
-                          });
-                          
-                          unlockTimeoutRef.current = setTimeout(() => { 
-                              isProgrammaticScrollRef.current = false; 
-                          }, 600);
-                      }
-                  }}
-                  className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-full border border-neutral-700 shadow-xl text-sm font-bold flex items-center gap-2 transition"
-              >
-                  ↓ Resume Sync
-              </button>
+                  const offsetTarget = containerRef.current.clientHeight * 0.3;
+                  containerRef.current.scrollTo({
+                    top: activeEl.offsetTop + (activeEl.clientHeight / 2) - offsetTarget,
+                    behavior: 'smooth'
+                  });
+
+                  unlockTimeoutRef.current = setTimeout(() => {
+                    isProgrammaticScrollRef.current = false;
+                  }, 600);
+                }
+              }}
+              className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-full border border-neutral-700 shadow-xl text-sm font-bold flex items-center gap-2 transition"
+            >
+              ↓ Sync
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
-      
-      <style dangerouslySetInnerHTML={{__html: `
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
       `}} />

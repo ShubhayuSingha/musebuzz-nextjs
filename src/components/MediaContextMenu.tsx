@@ -45,7 +45,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   const supabase = useSupabaseClient();
   
   const { refreshPlaylists } = usePlaylistStore(); 
-  const { openDelete } = useAuthModalStore();
+  const { openDelete, onOpen } = useAuthModalStore();
 
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -166,6 +166,10 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
   // 🟢 UPDATED: Uses addManyToQueue to push items into Bucket B (Priority)
   const handleAddToQueue = async () => {
+     if (!user) {
+        return onOpen('sign_in');
+     }
+
      // 1. Single Song
      if (data.type === 'song') {
         player.addToQueue(finalSongId || data.id); 

@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import useSongById from '@/hooks/useSongById';
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import { withTimeout } from '@/lib/helpers';
 
 const useTracker = () => {
   const supabase = useSupabaseClient();
@@ -31,12 +33,15 @@ const useTracker = () => {
   const logHistory = async (songId: string, listenedSeconds: number, context: string) => {
     if (!user || listenedSeconds < 5) return;
 
+    // Do not attempt cloud tracking when offline
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+    if (isOffline) return;
+
     // 🟢 Retrieve the duration SPECIFICALLY for this song ID from our map
     const totalSongDuration = durationMapRef.current[songId] || 0;
     
-    // Debug log to see what's happening
-    console.log(`[Tracker] Saving: ${songId} | Listened: ${listenedSeconds}s | Total: ${totalSongDuration}s`);
-
     const isCompleted = totalSongDuration > 0 && listenedSeconds >= (totalSongDuration * 0.9);
 
     const payload = {
@@ -49,9 +54,13 @@ const useTracker = () => {
         completed: isCompleted
     };
 
-    supabase.from('listening_history').insert(payload).then(({ error }) => {
-        if (error) console.error("Tracker Error:", error.message);
-    });
+    withTimeout(supabase.from('listening_history').insert(payload), 3000)
+      .then(({ error }) => {
+        if (error) console.warn("Tracker warning:", error.message);
+      })
+      .catch((err) => {
+        console.warn("Tracker offline:", err?.message || err);
+      });
   };
 
   // 1. Update Duration Map whenever song loads

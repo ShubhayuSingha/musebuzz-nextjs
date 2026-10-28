@@ -280,18 +280,24 @@ export async function getOfflineStorageEstimate(): Promise<StorageEstimate> {
 export async function clearAllOfflineStorage(): Promise<void> {
   try {
     // 1. Clear IndexedDB tables
-    await offlineDb.transaction('rw', [
+    const tables: any[] = [
       offlineDb.playlists,
       offlineDb.albums,
       offlineDb.songs,
       offlineDb.song_references,
       offlineDb.playback_state
-    ], async () => {
+    ];
+    if (offlineDb.saved_albums) tables.push(offlineDb.saved_albums);
+    if (offlineDb.liked_songs) tables.push(offlineDb.liked_songs);
+
+    await offlineDb.transaction('rw', tables, async () => {
       await offlineDb.playlists.clear();
       await offlineDb.albums.clear();
       await offlineDb.songs.clear();
       await offlineDb.song_references.clear();
       await offlineDb.playback_state.clear();
+      if (offlineDb.saved_albums) await offlineDb.saved_albums.clear();
+      if (offlineDb.liked_songs) await offlineDb.liked_songs.clear();
     });
 
     // 2. Clear Downloaded Audio & Downloaded Media Images Caches

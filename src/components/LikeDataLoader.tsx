@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 import { useSessionContext } from "@supabase/auth-helpers-react";
 import useLikeStore from "@/stores/useLikeStore";
+import { offlineDb } from "@/lib/offlineDb";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 
 const LikeDataLoader = () => {
   const { supabaseClient } = useSessionContext();
@@ -11,7 +13,32 @@ const LikeDataLoader = () => {
   useEffect(() => {
     // Define the secure fetch function
     const fetchLikedSongs = async () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      const isOffline = !useOfflineModeStore.getState().isOnline || 
+                        useOfflineModeStore.getState().isOfflineMode || 
+                        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      if (isOffline) {
+        try {
+          const { data } = await supabaseClient.auth.getUser();
+          const user = data?.user;
+          if (user) {
+            if (offlineDb.liked_songs) {
+              const likedRows = await offlineDb.liked_songs.where('user_id').equals(user.id).toArray();
+              if (likedRows.length > 0) {
+                setLikedIds(likedRows.map((r) => r.song_id));
+                return;
+              }
+            }
+            const offlineLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
+            if (offlineLiked && (!offlineLiked.user_id || offlineLiked.user_id === user.id) && offlineLiked?.playlist_songs) {
+              setLikedIds(offlineLiked.playlist_songs.map((ps: any) => ps.song_id || ps.songs?.id).filter(Boolean));
+              return;
+            }
+          }
+          setLikedIds([]);
+        } catch {}
+        return;
+      }
 
       try {
         // 1. Securely get the verified user from the server
@@ -28,10 +55,41 @@ const LikeDataLoader = () => {
           .abortSignal(AbortSignal.timeout(10000));
 
         if (songsData) {
-          setLikedIds(songsData.map((item: any) => item.song_id));
+          const ids = songsData.map((item: any) => item.song_id);
+          setLikedIds(ids);
+
+          // Populate offline liked_songs table for seamless offline hearts
+          if (offlineDb.liked_songs && user?.id) {
+            try {
+              await offlineDb.liked_songs.bulkPut(
+                ids.map((id: string) => ({
+                  user_id: user.id,
+                  song_id: id,
+                  created_at: new Date().toISOString()
+                }))
+              );
+            } catch {}
+          }
         }
       } catch (err) {
-        console.warn("Like fetch failed", err);
+        console.warn("Like fetch failed, falling back to offline db:", err);
+        try {
+          const { data } = await supabaseClient.auth.getUser();
+          const user = data?.user;
+          if (user) {
+            if (offlineDb.liked_songs) {
+              const likedRows = await offlineDb.liked_songs.where('user_id').equals(user.id).toArray();
+              if (likedRows.length > 0) {
+                setLikedIds(likedRows.map((r) => r.song_id));
+                return;
+              }
+            }
+            const offlineLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
+            if (offlineLiked && (!offlineLiked.user_id || offlineLiked.user_id === user.id) && offlineLiked?.playlist_songs) {
+              setLikedIds(offlineLiked.playlist_songs.map((ps: any) => ps.song_id || ps.songs?.id).filter(Boolean));
+            }
+          }
+        } catch {}
       }
     };
 
@@ -40,21 +98,25 @@ const LikeDataLoader = () => {
         fetchLikedSongs();
     }
 
-    // B. Set up Realtime Subscription & Auth Listener
-    // This ensures we react if the user logs in/out or data changes
-    const channel = supabaseClient
-      .channel('realtime_liked_songs')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'liked_songs' },
-        (payload) => {
-           // We can't check user_id easily here without 'user' object in scope, 
-           // but RLS ensures we only receive our own events anyway.
-           if (payload.eventType === 'INSERT') addLikedId(payload.new.song_id);
-           if (payload.eventType === 'DELETE') removeLikedId(payload.old.song_id);
-        }
-      )
-      .subscribe();
+    // B. Set up Realtime Subscription & Auth Listener (online only)
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+
+    let channel: any = null;
+    if (!isOffline) {
+      channel = supabaseClient
+        .channel('realtime_liked_songs')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'liked_songs' },
+          (payload) => {
+             if (payload.eventType === 'INSERT') addLikedId(payload.new.song_id);
+             if (payload.eventType === 'DELETE') removeLikedId(payload.old.song_id);
+          }
+        )
+        .subscribe();
+    }
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event) => {
         if (event === 'SIGNED_IN') {
@@ -66,7 +128,7 @@ const LikeDataLoader = () => {
     });
 
     return () => {
-      supabaseClient.removeChannel(channel);
+      if (channel) supabaseClient.removeChannel(channel);
       subscription.unsubscribe();
     };
 

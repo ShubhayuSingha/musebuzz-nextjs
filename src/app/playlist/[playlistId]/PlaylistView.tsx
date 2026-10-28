@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { HiMusicalNote, HiSignalSlash } from 'react-icons/hi2';
 import { offlineDb, type OfflinePlaylist } from '@/lib/offlineDb';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
-import { useSupabaseClient } from '@supabase/auth-helpers-react';
+import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import PlaylistHeader from './PlaylistHeader';
 import PlaylistContent from './PlaylistContent';
 
@@ -25,6 +25,7 @@ export default function PlaylistView({
 }: PlaylistViewProps) {
   const router = useRouter();
   const supabase = useSupabaseClient();
+  const user = useUser();
   const [playlist, setPlaylist] = useState<any>(initialPlaylist);
   const [songs, setSongs] = useState<any[]>(initialSongs);
   const [imageUrl, setImageUrl] = useState<string>(initialImageUrl);
@@ -55,7 +56,12 @@ export default function PlaylistView({
       try {
         const offlinePlaylist: OfflinePlaylist | undefined = await offlineDb.playlists.get(playlistId);
 
+        // Verify that this playlist belongs to current user if user_id is set
         if (offlinePlaylist) {
+          if (offlinePlaylist.user_id && user?.id && offlinePlaylist.user_id !== user.id) {
+            setIsLoading(false);
+            return;
+          }
           const mappedSongs = (offlinePlaylist.playlist_songs || [])
             .sort((a, b) => a.song_order - b.song_order)
             .map((item) => {

@@ -11,6 +11,8 @@ import usePlayerStore from "@/stores/usePlayerStore";
 import { BsPlayFill, BsTrash, BsPlusLg } from "react-icons/bs";
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
+import { useUser } from "@supabase/auth-helpers-react";
+import useAuthModalStore from "@/stores/useAuthModalStore";
 
 import LikeButton from "@/components/LikeButton";
 import AddToQueueButton from "@/components/AddToQueueButton";
@@ -140,6 +142,8 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
   const mobileInputRef = useRef<HTMLInputElement>(null);
   
   const player = usePlayerStore();
+  const user = useUser();
+  const authModal = useAuthModalStore();
 
   const results = searchAll(query);
   const hasResults = results.songs.length > 0 || results.albums.length > 0 || results.artists.length > 0 || results.playlists.length > 0;
@@ -195,6 +199,11 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
 
     // Execute Action
     if (type === 'song') {
+      if (!user) {
+        setIsOpen(false);
+        setIsMobileOpen(false);
+        return authModal.onOpen('sign_in');
+      }
       player.setId(item.id);
       player.setIds([item.id]);
     } else if (type === 'album') {
@@ -212,6 +221,11 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
   // Handles clicking a historical search item
   const handleHistoryClick = (item: SearchHistoryItem) => {
     if (item.item_type === 'song') {
+      if (!user) {
+        setIsOpen(false);
+        setIsMobileOpen(false);
+        return authModal.onOpen('sign_in');
+      }
       player.setId(item.item_id);
       player.setIds([item.item_id]);
     } else {

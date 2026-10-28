@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
 import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
@@ -22,6 +22,11 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   const router = useRouter();
   const { onOpen } = useAuthModalStore();
   const user = useUser();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const { hasLikedId, addLikedId, removeLikedId } = useLikeStore();
   
@@ -31,7 +36,7 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
   const isLiked = hasLikedId(songId);
 
   const { isOnline, isOfflineMode } = useOfflineModeStore();
-  const isOffline = !isOnline || isOfflineMode;
+  const isOffline = mounted && (!isOnline || isOfflineMode);
 
   const handleLike = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();

@@ -12,6 +12,7 @@ import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 
 import usePlayerStore from "@/stores/usePlayerStore";
 import useQueueStore from "@/stores/useQueueStore";
+import useAuthModalStore from "@/stores/useAuthModalStore";
 import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 import Queue from "@/components/Queue";
 import LikeButton from "@/components/LikeButton";
@@ -19,6 +20,8 @@ import SongContextMenu from "@/components/SongContextMenu";
 import { loadSong, stopSound, preloadNext } from "@/lib/audioEngine";
 import useSongById from "@/hooks/useSongById";
 import { offlineDb } from "@/lib/offlineDb";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import { withTimeout } from "@/lib/helpers";
 
 interface PlayerContentProps {
   song: any;
@@ -123,11 +126,24 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       updated_at: Date.now()
     }).catch(() => {});
 
-    // Only send network upsert to Supabase if online
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
-      supabase.from('playback_state').upsert(payload).then(({ error }) => {
-        if (error) console.error("Sync Error:", error.message);
-      });
+    // Only send network upsert to Supabase if truly online
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+
+    if (!isOffline) {
+      withTimeout(supabase.from('playback_state').upsert(payload), 3000)
+        .then(({ error }) => {
+          if (error) {
+            console.warn("Playback sync warning:", error.message);
+            useOfflineModeStore.getState().setIsOnline(false);
+          }
+        })
+        .catch((err) => {
+          // Network failed (e.g. Failed to fetch when offline) - handled cleanly without error overlay
+          console.warn("Playback sync offline:", err?.message || err);
+          useOfflineModeStore.getState().setIsOnline(false);
+        });
     }
   }, [user, activeId, volume, isPlaying, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId, supabase]);
 
@@ -203,15 +219,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (soundRef.current) {
+      if (soundRef.current && song?.id) {
         const seekTime = soundRef.current.seek() as number;
         saveProgress(seekTime);
-        sessionStorage.setItem('restore_seek', seekTime.toString());
+        sessionStorage.setItem('restore_seek', JSON.stringify({
+          songId: song.id,
+          seek: seekTime
+        }));
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveProgress]);
+  }, [saveProgress, song?.id]);
 
   // LOAD LOGIC
   useEffect(() => {
@@ -240,7 +259,43 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
     const newSound = loadSong(songPath, volume);
 
-    newSound.once("play", () => setIsPlaying(true));
+    // Check if we have an intended restore seek for THIS specific song
+    const rawRestore = sessionStorage.getItem("restore_seek");
+    let targetSeek = 0;
+    if (rawRestore) {
+      try {
+        const parsed = JSON.parse(rawRestore);
+        if (parsed?.songId === song.id && typeof parsed.seek === 'number' && parsed.seek > 0) {
+          targetSeek = parsed.seek;
+        }
+      } catch {}
+    }
+
+    // Force seek to targetSeek (0 for new tracks) BEFORE starting playback
+    try {
+      newSound.seek(targetSeek);
+      const node = (newSound as any)?._sounds?.[0]?._node;
+      if (node) {
+        node.currentTime = targetSeek;
+      }
+    } catch {}
+
+    newSound.once("play", () => {
+      setIsPlaying(true);
+      // Guarantee underlying element didn't resume at previous song's offset
+      if (targetSeek === 0) {
+        try {
+          const currentSeek = newSound.seek() as number;
+          if (typeof currentSeek === 'number' && currentSeek > 1) {
+            newSound.seek(0);
+            const node = (newSound as any)?._sounds?.[0]?._node;
+            if (node) node.currentTime = 0;
+            setCurrentTime(0);
+            (window as any).__musebuzzCurrentTime = 0;
+          }
+        } catch {}
+      }
+    });
     newSound.once("pause", () => setIsPlaying(false));
 
     newSound.once("end", () => {
@@ -251,15 +306,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
     const handleLoad = () => {
       setDuration(newSound.duration());
-      const restoreTime = sessionStorage.getItem("restore_seek");
-      if (restoreTime) {
-        const seekSeconds = parseFloat(restoreTime);
-        if (!isNaN(seekSeconds)) {
-          newSound.seek(seekSeconds);
-          setCurrentTime(seekSeconds);
-          (window as any).__musebuzzCurrentTime = seekSeconds;
-        }
+      if (targetSeek > 0) {
         sessionStorage.removeItem("restore_seek");
+        newSound.seek(targetSeek);
+        setCurrentTime(targetSeek);
+        (window as any).__musebuzzCurrentTime = targetSeek;
+      } else {
+        sessionStorage.removeItem("restore_seek");
+        try {
+          newSound.seek(0);
+        } catch {}
+        setCurrentTime(0);
+        (window as any).__musebuzzCurrentTime = 0;
       }
     };
 
@@ -314,7 +372,13 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   }, [seekRequest, setIsPlaying, setSeekRequest, isPlaying]);
 
-  const handlePlay = () => setIsPlaying(!isPlaying);
+  const authModal = useAuthModalStore();
+  const handlePlay = () => {
+    if (!user) {
+      return authModal.onOpen('sign_in');
+    }
+    setIsPlaying(!isPlaying);
+  };
 
   const handleSliderChange = (value: number | number[]) => {
     setIsDragging(true);
@@ -387,24 +451,28 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       {/* --- MOBILE COMPRESSED VIEW (hidden on desktop) --- */}
       <AnimatePresence>
         {!isMobileExpanded && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            transition={{ duration: 0.2 }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.2}
-            onDragEnd={handleSwipe}
-            className="md:hidden fixed bottom-0 w-full bg-neutral-900 border-t border-neutral-800 z-50 rounded-t-xl overflow-hidden shadow-[0_-4px_20px_rgba(0,0,0,0.5)] cursor-pointer touch-none"
-            onClick={() => setIsMobileExpanded(true)}
-          >
+          <>
+            {/* Mobile underlay seal: perfectly seals bottom edge so background list items never peek through */}
+            <div className="md:hidden fixed -bottom-4 left-0 right-0 h-10 bg-neutral-900 z-40 pointer-events-none" />
+
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.2 }}
+              drag="x"
+              dragConstraints={{ left: 0, right: 0 }}
+              dragElastic={0.2}
+              onDragEnd={handleSwipe}
+              className="md:hidden fixed -bottom-[3px] left-0 right-0 w-full bg-neutral-900 border-t border-neutral-800 z-50 rounded-t-xl overflow-hidden shadow-[0_-4px_20px_rgba(0,0,0,0.5)] cursor-pointer touch-none pb-[calc(max(env(safe-area-inset-bottom),0px)+3px)]"
+              onClick={() => setIsMobileExpanded(true)}
+            >
+            {/* Frame-accurate seek progress bar (synced directly at 60fps with zero lag or jump) */}
             <div className="absolute top-0 left-0 h-[2px] w-full bg-neutral-800 pointer-events-none">
               <div
                 className="h-full bg-purple-500"
                 style={{
                   width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%`,
-                  transition: isPlaying && !isDragging ? 'width 0.1s linear' : 'none'
                 }}
               />
             </div>
@@ -431,6 +499,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               </div>
             </div>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 

@@ -3,6 +3,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { offlineDb } from '@/lib/offlineDb';
+import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import { withTimeout } from '@/lib/helpers';
 
 const usePlaybackSync = () => {
   const supabase = useSupabaseClient();
@@ -18,25 +20,30 @@ const usePlaybackSync = () => {
     const loadState = async () => {
       let data: any = null;
 
-      // 1. If offline, load from local IndexedDB
-      if (typeof navigator !== 'undefined' && !navigator.onLine) {
-        try {
-          data = await offlineDb.playback_state.get(user.id);
-        } catch (e) {
-          console.warn('[usePlaybackSync] Local state read failed:', e);
-        }
-      } else {
-        // 2. Online: Query Supabase
-        try {
-          const { data: remoteData, error } = await supabase
-            .from('playback_state')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
+      // 1. FAST-PATH: Load local IndexedDB state immediately (<5ms, zero network latency)
+      try {
+        data = await offlineDb.playback_state.get(user.id);
+      } catch (e) {
+        console.warn('[usePlaybackSync] Local state read failed:', e);
+      }
 
-          if (error && error.code !== 'PGRST116') {
-            console.error('Error loading playback state:', error);
-          } else if (remoteData) {
+      const isOffline = !useOfflineModeStore.getState().isOnline || 
+                        useOfflineModeStore.getState().isOfflineMode || 
+                        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      // 2. If online, sync with Supabase in the background (with 2s timeout)
+      if (!isOffline) {
+        try {
+          const { data: remoteData, error } = await withTimeout(
+            supabase
+              .from('playback_state')
+              .select('*')
+              .eq('user_id', user.id)
+              .single(),
+            2000
+          );
+
+          if (!error && remoteData) {
             data = remoteData;
             // Mirror to local IndexedDB
             offlineDb.playback_state.put({
@@ -52,8 +59,7 @@ const usePlaybackSync = () => {
             }).catch(() => {});
           }
         } catch {
-          // Network failed: fallback to local IndexedDB
-          data = await offlineDb.playback_state.get(user.id);
+          // Cloud sync failed: local state is already safely loaded
         }
       }
 
@@ -86,8 +92,11 @@ const usePlaybackSync = () => {
           savedLastActiveId
         );
 
-        if (data.progress_ms) {
-          sessionStorage.setItem('restore_seek', (data.progress_ms / 1000).toString());
+        if (data.progress_ms && data.active_song_id) {
+          sessionStorage.setItem('restore_seek', JSON.stringify({
+            songId: data.active_song_id,
+            seek: data.progress_ms / 1000
+          }));
         }
       }
 
@@ -156,11 +165,15 @@ const usePlaybackSync = () => {
       updated_at: Date.now()
     }).catch(() => {});
 
-    // Only make network request if currently online
-    if (typeof navigator !== 'undefined' && navigator.onLine) {
+    // Only make network request if truly online
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+
+    if (!isOffline) {
       try {
-        const { error } = await supabase.from('playback_state').upsert(payload);
-        if (error) console.error('Failed to save playback state', error);
+        const { error } = await withTimeout(supabase.from('playback_state').upsert(payload), 3000);
+        if (error) console.warn('Failed to save playback state online:', error.message);
       } catch (e) {
         // Silently catch network drops
       }

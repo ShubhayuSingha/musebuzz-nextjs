@@ -104,11 +104,16 @@ export default function PwaRegister() {
           if (installingWorker) {
             installingWorker.addEventListener('statechange', () => {
               if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] New version available.');
+                console.log('[PWA] New version available, activating immediately...');
+                installingWorker.postMessage({ type: 'SKIP_WAITING' });
               }
             });
           }
         });
+
+        if (registration.waiting) {
+          registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
 
         console.log('[PWA] Service Worker registered with scope:', registration.scope);
       } catch (error) {
@@ -122,10 +127,10 @@ export default function PwaRegister() {
       window.addEventListener('load', registerSW);
     }
 
-    // Proactively cache all currently loaded script chunks when online
+    // Proactively cache all currently loaded script chunks & active HTML shell when online
     const cacheLoadedAssets = () => {
       if (typeof window !== 'undefined' && 'caches' in window && navigator.onLine) {
-        caches.open('musebuzz-static-v3').then((cache) => {
+        caches.open('musebuzz-static-v5').then((cache) => {
           const scripts = Array.from(document.querySelectorAll('script[src]'))
             .map((s: any) => s.src)
             .filter((src: string) => src.includes('/_next/static/'));
@@ -138,6 +143,13 @@ export default function PwaRegister() {
               if (res.status === 200) cache.put(url, res);
             }).catch(() => {});
           });
+        }).catch(() => {});
+
+        // Keep cached home/page shell up to date with newest UI
+        caches.open('musebuzz-pages-v2').then((cache) => {
+          fetch(window.location.pathname).then((res) => {
+            if (res.status === 200) cache.put(window.location.pathname, res);
+          }).catch(() => {});
         }).catch(() => {});
       }
     };

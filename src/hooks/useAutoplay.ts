@@ -186,7 +186,7 @@ const useAutoplay = () => {
            }
 
         } catch (error: any) {
-          console.error("Autoplay Error:", error.message);
+          console.warn("Autoplay notice:", error?.message || error);
         } finally {
           isFetching.current = false;
         }

@@ -159,8 +159,14 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
               {isSaved ? <AiOutlineCheck size={20} /> : <AiOutlinePlus size={20} />}
             </button>
 
-            {/* DOWNLOAD BUTTON */}
-            <DownloadButton id={album.id} type="album" title={album.title} />
+            {/* DOWNLOAD BUTTON (Requires album to be added to library first) */}
+            <DownloadButton 
+              id={album.id} 
+              type="album" 
+              title={album.title} 
+              disabled={!isSaved}
+              disabledTooltip={!user ? "Log in and save album to library before downloading" : "Add album to library before downloading"}
+            />
           </div>
         </div>
       </div>

@@ -53,6 +53,7 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
   }, [imageUrl, fallbackImageUrl]);
 
   const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isOffline = mounted && (!isOnline || isOfflineMode);
 
   // --- SAVE LOGIC ---
   const handleSave = async () => {
@@ -280,16 +281,16 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
                         }
                         setIsEditing(true);
                       }}
-                      disabled={!isOnline || isOfflineMode}
+                      disabled={isOffline}
                       className={`
                         p-2.5 rounded-full transition
                         ${
-                          !isOnline || isOfflineMode
+                          isOffline
                             ? 'bg-neutral-800/30 text-neutral-600 cursor-not-allowed'
                             : 'bg-neutral-800/60 hover:bg-neutral-700 text-neutral-400 hover:text-white cursor-pointer hover:scale-105 active:scale-95'
                         }
                       `}
-                      title={!isOnline || isOfflineMode ? "Editing unavailable offline" : "Edit Details"}
+                      title={isOffline ? "Editing unavailable offline" : "Edit Details"}
                     >
                       <FiEdit2 size={19} />
                     </button>
@@ -301,16 +302,16 @@ const PlaylistHeader: React.FC<PlaylistHeaderProps> = ({
                         }
                         setShowDeleteModal(true);
                       }}
-                      disabled={!isOnline || isOfflineMode}
+                      disabled={isOffline}
                       className={`
                         p-2.5 rounded-full transition
                         ${
-                          !isOnline || isOfflineMode
+                          isOffline
                             ? 'bg-neutral-800/30 text-neutral-600 cursor-not-allowed'
                             : 'bg-neutral-800/60 hover:bg-neutral-700 text-neutral-400 hover:text-red-500 cursor-pointer hover:scale-105 active:scale-95'
                         }
                       `}
-                      title={!isOnline || isOfflineMode ? "Deleting unavailable offline" : "Delete Playlist"}
+                      title={isOffline ? "Deleting unavailable offline" : "Delete Playlist"}
                     >
                       <FiTrash size={19} />
                     </button>

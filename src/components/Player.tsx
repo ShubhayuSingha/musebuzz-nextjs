@@ -5,9 +5,12 @@ import usePlayerStore from "@/stores/usePlayerStore";
 import useSongById from "@/hooks/useSongById";
 import useTracker from "@/hooks/useTracker";
 import useAutoplay from "@/hooks/useAutoplay"; // 🟢 1. Import the Autoplay Hook
+import { useUser } from "@supabase/auth-helpers-react";
 import PlayerContent from "./PlayerContent";
 
 const Player = () => {
+  const user = useUser();
+
   // 🟢 2. Activate the Autoplay Brain
   // This will quietly watch your queue and fetch new songs when you have 2 left.
   useAutoplay();
@@ -18,8 +21,8 @@ const Player = () => {
   const { activeId } = usePlayerStore();
   const { song, songPath } = useSongById(activeId);
 
-  // No active song at all — nothing to show
-  if (!activeId) {
+  // If user is logged out or no active song at all — nothing to show
+  if (!user || !activeId) {
     return null;
   }
 

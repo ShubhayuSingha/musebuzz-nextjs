@@ -11,10 +11,11 @@ export default async function Library() {
     cookies: () => cookieStore as any,
   });
 
+  (supabase.auth as any).suppressGetSessionWarning = true;
   let user: any = null;
   try {
-    const userRes = await withTimeout(supabase.auth.getUser(), 2500);
-    user = userRes?.data?.user;
+    const sessionRes = await supabase.auth.getSession();
+    user = sessionRes?.data?.session?.user || null;
   } catch {
     user = null;
   }

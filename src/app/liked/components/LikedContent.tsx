@@ -13,6 +13,7 @@ import { motion, Variants, AnimatePresence, PanInfo } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu';
+import useAuthModalStore from '@/stores/useAuthModalStore';
 
 /* =======================
    HELPERS
@@ -79,12 +80,16 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   const router = useRouter();
   const user = useUser();
   const player = usePlayerStore();
+  const authModal = useAuthModalStore();
 
   useEffect(() => {
     if (!user) router.replace('/');
   }, [user, router]);
 
   const onPlay = (id: string) => {
+    if (!user) {
+      return authModal.onOpen('sign_in');
+    }
     const context = { type: 'liked' as const, title: 'Liked Songs', id: 'liked-songs' };
 
     const isCurrentContextActive = 

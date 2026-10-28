@@ -4,6 +4,9 @@ import { useSupabaseClient, useUser } from "@supabase/auth-helpers-react";
 import { toast } from "react-hot-toast";
 import { useCallback } from "react"; 
 
+import { offlineDb } from "@/lib/offlineDb";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
+
 const useLibrary = () => {
     const supabase = useSupabaseClient();
     const user = useUser();
@@ -54,13 +57,44 @@ const useLibrary = () => {
 
     const checkIsSaved = useCallback(async (albumId: string) => {
         if (!user) return false;
-        const { data } = await supabase
-            .from('saved_albums')
-            .select('album_id')
-            .eq('user_id', user.id)
-            .eq('album_id', albumId)
-            .maybeSingle(); 
-        return !!data;
+
+        const isOffline = !useOfflineModeStore.getState().isOnline || 
+                          useOfflineModeStore.getState().isOfflineMode || 
+                          (typeof navigator !== 'undefined' && !navigator.onLine);
+
+        if (isOffline) {
+            try {
+                if (offlineDb.saved_albums) {
+                    const saved = await offlineDb.saved_albums.get([user.id, albumId]);
+                    return !!saved;
+                }
+                const alb = await offlineDb.albums.get(albumId);
+                return !!alb;
+            } catch {
+                return false;
+            }
+        }
+
+        try {
+            const { data } = await supabase
+                .from('saved_albums')
+                .select('album_id')
+                .eq('user_id', user.id)
+                .eq('album_id', albumId)
+                .maybeSingle(); 
+            return !!data;
+        } catch {
+            try {
+                if (offlineDb.saved_albums) {
+                    const saved = await offlineDb.saved_albums.get([user.id, albumId]);
+                    return !!saved;
+                }
+                const alb = await offlineDb.albums.get(albumId);
+                return !!alb;
+            } catch {
+                return false;
+            }
+        }
     }, [user, supabase]);
 
     /* =========================

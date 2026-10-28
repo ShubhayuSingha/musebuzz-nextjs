@@ -12,6 +12,7 @@ import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import useAuthModalStore from '@/stores/useAuthModalStore';
 
 // 🟢 FIX: Added local helper function
 const formatTime = (seconds: number) => {
@@ -42,8 +43,12 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
   const player = usePlayerStore();
   const user = useUser();
   const supabase = useSupabaseClient();
+  const authModal = useAuthModalStore();
 
   const onPlay = async (id: string) => {
+    if (!user) {
+      return authModal.onOpen('sign_in');
+    }
     const context = { type: 'album' as const, title: albumName, id: albumId };
 
     const isCurrentContextActive = 

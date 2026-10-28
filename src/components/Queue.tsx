@@ -15,7 +15,11 @@ import usePlayerStore from "@/stores/usePlayerStore";
 import useQueueStore from "@/stores/useQueueStore";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import { supabase } from "@/lib/supabaseClient";
+import { offlineDb } from "@/lib/offlineDb";
+import { withTimeout } from "@/lib/helpers";
 import LikeButton from "@/components/LikeButton";
+import { useUser } from "@supabase/auth-helpers-react";
+import useAuthModalStore from "@/stores/useAuthModalStore";
 import {
   motion,
   AnimatePresence,
@@ -77,7 +81,7 @@ const QueueItemContent = ({
   const imageUrl = (song as any)?.imageUrl || (song?.albums as any)?.image_url || (song?.albums?.image_path
     ? supabase.storage.from("images").getPublicUrl(song.albums.image_path).data.publicUrl
     : "/images/album-placeholder.png");
-  const artistName = song?.albums?.artists?.name || "Unknown";
+  const artistName = (song as any)?.artists?.name || song?.albums?.artists?.name || (song as any)?.author || "Unknown";
 
   return (
     <div
@@ -310,6 +314,8 @@ export default function Queue() {
   const { isOpen, onClose, width, setWidth, activeView, toggle } =
     useQueueStore();
   const player = usePlayerStore();
+  const user = useUser();
+  const authModal = useAuthModalStore();
 
   const [songsCache, setSongsCache] = useState<Record<string, SongData>>({});
   const fetchedIds = useRef<Set<string>>(new Set());
@@ -383,27 +389,107 @@ export default function Queue() {
       autoplayItems.slice(0, 20).forEach((i) => ids.add(i.id));
     }
 
-    const toFetch = Array.from(ids).filter((id) => !fetchedIds.current.has(id));
+    const toFetch = Array.from(ids).filter((id) => !songsCache[id]);
     if (!toFetch.length) return;
 
     const fetchBatch = async () => {
-      const { data } = await supabase
-        .from("songs")
-        .select(
-          "id, title, duration_seconds, albums(title, image_path, artists(name))",
-        )
-        .in("id", toFetch);
-      if (data) {
-        setSongsCache((prev) => {
-          const copy = { ...prev };
-          data.forEach((s: any) => (copy[s.id] = s));
-          return copy;
-        });
-        data.forEach((s: any) => fetchedIds.current.add(s.id));
+      // 1. FAST-PATH: Load locally downloaded songs from IndexedDB immediately (<5ms, works 100% offline)
+      try {
+        const localSongs = await offlineDb.songs.where('id').anyOf(toFetch).toArray();
+        const foundIds = new Set(localSongs.map(s => s.id));
+
+        // Also check if any missing song is inside offlineDb.playlists (e.g. Liked Songs)
+        const missingIds = toFetch.filter(id => !foundIds.has(id));
+        if (missingIds.length > 0) {
+          const offlinePlaylists = await offlineDb.playlists.toArray();
+          for (const pl of offlinePlaylists) {
+            for (const ps of (pl.playlist_songs || [])) {
+              if (ps.songs && missingIds.includes(ps.songs.id) && !foundIds.has(ps.songs.id)) {
+                localSongs.push(ps.songs);
+                foundIds.add(ps.songs.id);
+              }
+            }
+          }
+        }
+
+        // Also check offlineDb.albums (e.g. Bohemian Rhapsody, etc.)
+        const stillMissing = toFetch.filter(id => !foundIds.has(id));
+        if (stillMissing.length > 0) {
+          const offlineAlbums = await offlineDb.albums.toArray();
+          for (const alb of offlineAlbums) {
+            for (const s of (alb.songs || [])) {
+              if (s && stillMissing.includes(s.id) && !foundIds.has(s.id)) {
+                localSongs.push({
+                  ...s,
+                  albums: {
+                    id: alb.id,
+                    title: alb.title,
+                    image_path: alb.image_path || '',
+                    image_url: alb.image_url,
+                    artists: alb.artists
+                  }
+                });
+                foundIds.add(s.id);
+              }
+            }
+          }
+        }
+
+        if (localSongs.length > 0) {
+          setSongsCache((prev) => {
+            const copy = { ...prev };
+            localSongs.forEach((s: any) => {
+              copy[s.id] = {
+                id: s.id,
+                title: s.title,
+                duration_seconds: s.duration_seconds || 0,
+                // @ts-ignore
+                imageUrl: s.imageUrl || s.albums?.image_url,
+                albums: s.albums ? {
+                  title: s.albums.title,
+                  image_path: s.albums.image_path || '',
+                  // @ts-ignore
+                  image_url: s.albums.image_url || s.imageUrl,
+                  artists: s.albums.artists ? { name: s.albums.artists.name } : null
+                } : null
+              };
+            });
+            return copy;
+          });
+        }
+      } catch (e) {
+        console.warn("[Queue] Error reading offlineDb:", e);
+      }
+
+      // If effectively offline, we don't attempt remote network fetch
+      if (isEffectivelyOffline) return;
+
+      const remainingToFetch = toFetch.filter((id) => !songsCache[id]);
+      if (!remainingToFetch.length) return;
+
+      try {
+        const { data, error } = await withTimeout(
+          supabase
+            .from("songs")
+            .select(
+              "id, title, duration_seconds, albums(title, image_path, artists(name))",
+            )
+            .in("id", remainingToFetch),
+          3000
+        );
+        if (!error && data) {
+          setSongsCache((prev) => {
+            const copy = { ...prev };
+            data.forEach((s: any) => (copy[s.id] = s));
+            return copy;
+          });
+        }
+      } catch (err) {
+        console.warn("[Queue] Network fetch failed for queue songs:", err);
       }
     };
     fetchBatch();
-  }, [isOpen, player.activeId, priorityList, contextItems, autoplayItems]);
+  }, [isOpen, player.activeId, priorityList, contextItems, autoplayItems, isEffectivelyOffline, songsCache]);
 
   const handlePriorityReorder = useCallback(
     (items: typeof priorityList) => player.setBucketB(items),
@@ -522,17 +608,24 @@ export default function Queue() {
                         <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
                           Now Playing
                         </h3>
-                        {player.activeId && songsCache[player.activeId] ? (
-                          <QueueItemContent
-                            song={songsCache[player.activeId]}
-                            idx={1}
-                            source="active"
-                            isPlaying={player.isPlaying}
-                            isActive
-                            onPlay={() =>
-                              player.setIsPlaying(!player.isPlaying)
-                            }
-                          />
+                        {player.activeId ? (
+                          songsCache[player.activeId] ? (
+                            <QueueItemContent
+                              song={songsCache[player.activeId]}
+                              idx={1}
+                              source="active"
+                              isPlaying={player.isPlaying}
+                              isActive
+                              onPlay={() => {
+                                if (!user) return authModal.onOpen('sign_in');
+                                player.setIsPlaying(!player.isPlaying);
+                              }}
+                            />
+                          ) : (
+                            <div className="h-[56px] w-full bg-neutral-800/20 rounded-md animate-pulse px-3 flex items-center">
+                              <span className="text-xs text-neutral-400">Loading current track...</span>
+                            </div>
+                          )
                         ) : (
                           <p className="text-neutral-400 text-sm px-2">
                             Nothing playing
@@ -571,6 +664,7 @@ export default function Queue() {
                                 source="priority"
                                 isMobile={isMobile}
                                 onPlay={() => {
+                                  if (!user) return authModal.onOpen('sign_in');
                                   const realIdx = priorityList.findIndex(
                                     (b) => b.uid === item.uid,
                                   );
@@ -608,7 +702,10 @@ export default function Queue() {
                                 idx={i + 1}
                                 source="context"
                                 isMobile={isMobile}
-                                onPlay={() => player.setId(item.id)}
+                                onPlay={() => {
+                                  if (!user) return authModal.onOpen('sign_in');
+                                  player.setId(item.id);
+                                }}
                                 onRemove={() =>
                                   player.removeFromContext(item.id)
                                 }
@@ -643,7 +740,10 @@ export default function Queue() {
                                 idx={i + 1}
                                 source="autoplay"
                                 isMobile={isMobile}
-                                onPlay={() => player.playAutoplayItem(item.id)}
+                                onPlay={() => {
+                                  if (!user) return authModal.onOpen('sign_in');
+                                  player.playAutoplayItem(item.id);
+                                }}
                                 onRemove={() =>
                                   handleRemoveFromAutoplay(item.uid)
                                 }

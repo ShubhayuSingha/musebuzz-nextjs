@@ -16,6 +16,7 @@ import LikeButton from "@/components/LikeButton";
 import AddToQueueButton from "@/components/AddToQueueButton"; 
 import PlayingAnimation from "@/components/PlayingAnimation";
 import useLibrary from "@/hooks/useLibrary"; 
+import useAuthModalStore from "@/stores/useAuthModalStore"; 
 
 // ANIMATION VARIANTS
 const rowVariants: Variants = {
@@ -52,6 +53,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
   const { refreshPlaylists } = usePlaylistStore(); 
   const user = useUser();
   const library = useLibrary(); 
+  const authModal = useAuthModalStore();
 
   const [isFollowing, setIsFollowing] = useState(false); 
   
@@ -124,6 +126,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
 
   // PLAY ALL SONGS 
   const onPlayArtist = () => {
+     if (!user) return authModal.onOpen('sign_in');
      if (!songs.length) return;
      
      library.updateArtistAccess(artistId);
@@ -150,6 +153,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
 
   // PLAY SINGLE SONG 
   const onPlaySong = (id: string) => {
+     if (!user) return authModal.onOpen('sign_in');
      library.updateArtistAccess(artistId);
      refreshPlaylists();
 

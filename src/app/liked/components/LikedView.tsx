@@ -34,7 +34,13 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
     if (isDeviceOffline) {
       const loadOfflineLiked = async () => {
         try {
-          const offlinePlaylist = await offlineDb.playlists.get('liked');
+          let offlinePlaylist = user?.id ? await offlineDb.playlists.get(`liked_${user.id}`) : undefined;
+          if (!offlinePlaylist) {
+            const fallback = await offlineDb.playlists.get('liked');
+            if (fallback && (!fallback.user_id || fallback.user_id === user?.id)) {
+              offlinePlaylist = fallback;
+            }
+          }
           if (offlinePlaylist) {
             const mapped = (offlinePlaylist.playlist_songs || [])
               .sort((a, b) => a.song_order - b.song_order)

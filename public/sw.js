@@ -1,8 +1,8 @@
 // public/sw.js
 // MuseBuzz Service Worker - Version 1.2.0
 
-const CACHE_STATIC_NAME = 'musebuzz-static-v4';
-const CACHE_PAGES_NAME = 'musebuzz-pages-v1';
+const CACHE_STATIC_NAME = 'musebuzz-static-v5';
+const CACHE_PAGES_NAME = 'musebuzz-pages-v2';
 const CACHE_AUDIO_NAME = 'musebuzz-audio-v1';
 const CACHE_MEDIA_IMAGES_NAME = 'musebuzz-media-images-v1';
 
@@ -20,6 +20,13 @@ const PRECACHE_ASSETS = [
   '/images/artist-placeholder.png',
   '/images/placeholder.svg'
 ];
+
+// Message Event: Allow client to force skipWaiting
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // 1. Install Event: Precache app shell
 self.addEventListener('install', (event) => {

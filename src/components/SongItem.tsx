@@ -4,6 +4,8 @@
 import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
 import usePlayerStore from '@/stores/usePlayerStore'; 
+import useAuthModalStore from '@/stores/useAuthModalStore';
+import { useUser } from '@supabase/auth-helpers-react';
 
 interface SongItemProps {
   song: any;
@@ -11,12 +13,17 @@ interface SongItemProps {
 
 const SongItem: React.FC<SongItemProps> = ({ song }) => {
   const { setId } = usePlayerStore(); 
+  const user = useUser();
+  const authModal = useAuthModalStore();
 
   const { data: imageData } = supabase.storage
     .from('images')
     .getPublicUrl(song.albums.image_path);
 
   const handlePlay = () => {
+    if (!user) {
+      return authModal.onOpen('sign_in');
+    }
     setId(song.id);
   };
 

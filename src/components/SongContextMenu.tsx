@@ -166,6 +166,10 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
   };
 
   const handleAddToQueue = () => {
+    if (!user) {
+      setOpenId(null);
+      return onOpen('sign_in');
+    }
     player.addToQueue(songId);
     toast.success('Added to Queue');
     setOpenId(null);

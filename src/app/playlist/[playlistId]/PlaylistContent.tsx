@@ -13,6 +13,7 @@ import { motion, Variants, AnimatePresence, PanInfo } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu'; 
+import useAuthModalStore from '@/stores/useAuthModalStore'; 
 
 // Helpers
 const formatTime = (seconds: number) => {
@@ -66,8 +67,12 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
   const router = useRouter();
   const player = usePlayerStore();
   const user = useUser();
+  const authModal = useAuthModalStore();
 
   const onPlay = (id: string) => {
+    if (!user) {
+      return authModal.onOpen('sign_in');
+    }
     const context = { type: 'playlist' as const, title: playlistTitle, id: playlistId };
 
     const isCurrentContextActive = 

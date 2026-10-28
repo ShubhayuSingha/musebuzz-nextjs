@@ -11,6 +11,7 @@ import MediaContextMenu from "@/components/MediaContextMenu";
 import { motion, AnimatePresence } from "framer-motion"; 
 import useDownloadStore from "@/stores/useDownloadStore";
 import { offlineDb } from "@/lib/offlineDb"; 
+import { useUser } from "@supabase/auth-helpers-react"; 
 
 export interface LibraryItem {
     id: string;
@@ -98,6 +99,7 @@ const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void
 // --- MAIN COMPONENT ---
 const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) => {
     const router = useRouter();
+    const user = useUser();
     const { downloadedIds } = useDownloadStore();
     const [filter, setFilter] = useState<'all' | 'playlist' | 'album' | 'artist' | 'downloaded'>('all');
     const [offlineItems, setOfflineItems] = useState<LibraryItem[]>([]);
@@ -109,6 +111,11 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
     // Merge any offline downloaded items if they aren't already in items
     useEffect(() => {
         const loadOfflineItems = async () => {
+            if (!user) {
+                setOfflineItems([]);
+                return;
+            }
+
             try {
                 const [offlinePlaylists, offlineAlbums, offlineLiked] = await Promise.all([
                     offlineDb.playlists.toArray(),
@@ -157,7 +164,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
         };
 
         loadOfflineItems();
-    }, [items, downloadedIds]);
+    }, [items, downloadedIds, user]);
 
     const combinedItems = [...items, ...offlineItems];
 

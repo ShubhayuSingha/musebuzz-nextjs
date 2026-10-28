@@ -1,8 +1,9 @@
-// src/hooks/useSearch.ts
 import { useEffect, useState, useMemo } from "react";
 import Fuse from "fuse.js";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@supabase/auth-helpers-react";
+import { offlineDb } from "@/lib/offlineDb";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 
 export const useSearch = () => {
   const user = useUser();
@@ -15,6 +16,40 @@ export const useSearch = () => {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
+
+      const isOffline = !useOfflineModeStore.getState().isOnline || 
+                        useOfflineModeStore.getState().isOfflineMode || 
+                        (typeof navigator !== 'undefined' && !navigator.onLine);
+
+      if (isOffline) {
+        try {
+          const offlineSongs = await offlineDb.songs.toArray();
+          const offlineAlbums = await offlineDb.albums.toArray();
+          const offlinePlaylists = user?.id 
+            ? await offlineDb.playlists.where('user_id').equals(user.id).toArray()
+            : [];
+
+          const processed = offlineSongs.map((s) => ({
+            ...s,
+            _searchableLyrics: s.lyrics_snippet ? String(s.lyrics_snippet) : ''
+          }));
+          setSongs(processed);
+          setAlbums(offlineAlbums);
+          setArtists([]);
+          setPlaylists(offlinePlaylists
+            .filter((p) => p.id !== 'liked' && !p.id.startsWith('liked_'))
+            .map((p) => ({
+              ...p,
+              _unified_image: p.image_path || p.image_url,
+              _itemType: 'playlist'
+            })));
+        } catch (e) {
+          console.warn("[useSearch] Offline read failed:", e);
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
       
       const queries: any[] = [
         supabase.from('songs').select('*, albums(title, image_path, genre, artists(name))').order('created_at', { ascending: false }),
