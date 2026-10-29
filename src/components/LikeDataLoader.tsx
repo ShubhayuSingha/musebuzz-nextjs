@@ -47,27 +47,47 @@ const LikeDataLoader = () => {
         
         if (userError || !user) return;
 
-        // 2. Fetch Data using the verified User ID
+        // 2. Fetch Data using the verified User ID with exact Supabase created_at & order
         const { data: songsData, error } = await supabaseClient
           .from('liked_songs')
-          .select('song_id')
+          .select('song_id, created_at')
           .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
           .abortSignal(AbortSignal.timeout(10000));
 
         if (songsData) {
           const ids = songsData.map((item: any) => item.song_id);
           setLikedIds(ids);
 
-          // Populate offline liked_songs table for seamless offline hearts
+          // Populate offline liked_songs table preserving the EXACT Supabase dates & order
           if (offlineDb.liked_songs && user?.id) {
             try {
               await offlineDb.liked_songs.bulkPut(
-                ids.map((id: string) => ({
+                songsData.map((item: any, idx: number) => ({
                   user_id: user.id,
-                  song_id: id,
-                  created_at: new Date().toISOString()
+                  song_id: item.song_id,
+                  created_at: item.created_at,
+                  song_order: idx
                 }))
               );
+            } catch {}
+          }
+
+          // Auto-migrate any legacy pseudo-playlist to the pure relational table
+          if (user?.id) {
+            try {
+              const legacyLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
+              if (legacyLiked && legacyLiked.playlist_songs && legacyLiked.playlist_songs.length > 0) {
+                const { saveLikedSongsToDb } = await import('@/lib/offlineManager');
+                await saveLikedSongsToDb(user.id, legacyLiked.playlist_songs.map((ps: any, idx: number) => ({
+                  created_at: ps.created_at,
+                  song_order: ps.song_order ?? idx,
+                  song: ps.songs
+                })));
+              } else if (legacyLiked) {
+                await offlineDb.playlists.delete(`liked_${user.id}`);
+                await offlineDb.playlists.delete('liked');
+              }
             } catch {}
           }
         }
@@ -111,8 +131,28 @@ const LikeDataLoader = () => {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'liked_songs' },
           (payload) => {
-             if (payload.eventType === 'INSERT') addLikedId(payload.new.song_id);
-             if (payload.eventType === 'DELETE') removeLikedId(payload.old.song_id);
+             if (payload.eventType === 'INSERT') {
+               addLikedId(payload.new.song_id);
+               // Auto-sync new song into offline storage if Liked Songs is downloaded
+               import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+                 if (useDownloadStore.getState().downloadedIds.has('liked') && payload.new.user_id) {
+                   import('@/lib/downloadService').then(({ autoSyncLikedSong }) => {
+                     autoSyncLikedSong(supabaseClient, payload.new.user_id, payload.new.song_id, 'add');
+                   });
+                 }
+               });
+             }
+             if (payload.eventType === 'DELETE') {
+               removeLikedId(payload.old.song_id);
+               // Auto-remove unliked song from offline storage if Liked Songs is downloaded
+               import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+                 if (useDownloadStore.getState().downloadedIds.has('liked') && payload.old.user_id) {
+                   import('@/lib/downloadService').then(({ autoSyncLikedSong }) => {
+                     autoSyncLikedSong(supabaseClient, payload.old.user_id, payload.old.song_id, 'remove');
+                   });
+                 }
+               });
+             }
           }
         )
         .subscribe();

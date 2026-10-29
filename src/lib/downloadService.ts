@@ -4,6 +4,7 @@ import useDownloadStore from '@/stores/useDownloadStore';
 import { 
   saveAlbumToDb, 
   savePlaylistToDb, 
+  saveLikedSongsToDb,
   removeAlbumFromDb, 
   removePlaylistFromDb,
   pruneSongIfUnreferenced
@@ -178,20 +179,22 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
 /**
  * Downloads all Liked Songs for the current user, caches all audio & images, and stores metadata in IndexedDB
  */
-export async function downloadLikedSongs(supabase: SupabaseClient): Promise<boolean> {
+export async function downloadLikedSongs(supabase: SupabaseClient, silent = false): Promise<boolean> {
   const store = useDownloadStore.getState();
   const likedPlaylistId = 'liked';
 
   try {
-    store.setProgress(likedPlaylistId, {
-      id: likedPlaylistId,
-      type: 'playlist',
-      title: 'Liked Songs',
-      current: 0,
-      total: 0,
-      percent: 0,
-      status: 'fetching'
-    });
+    if (!silent) {
+      store.setProgress(likedPlaylistId, {
+        id: likedPlaylistId,
+        type: 'playlist',
+        title: 'Liked Songs',
+        current: 0,
+        total: 0,
+        percent: 0,
+        status: 'fetching'
+      });
+    }
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -224,13 +227,15 @@ export async function downloadLikedSongs(supabase: SupabaseClient): Promise<bool
 
     const totalSongs = likedItems.length;
 
-    store.setProgress(likedPlaylistId, {
-      title: 'Liked Songs',
-      current: 0,
-      total: totalSongs,
-      percent: 0,
-      status: 'downloading'
-    });
+    if (!silent) {
+      store.setProgress(likedPlaylistId, {
+        title: 'Liked Songs',
+        current: 0,
+        total: totalSongs,
+        percent: 0,
+        status: 'downloading'
+      });
+    }
 
     // 2. Prepare songs with resolved audio URLs & download audio files sequentially
     const preparedPlaylistSongs = [];
@@ -271,7 +276,7 @@ export async function downloadLikedSongs(supabase: SupabaseClient): Promise<bool
           }
         }
 
-        const resolvedSongImage = songDataUrl || songImageUrl;
+        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
 
         preparedPlaylistSongs.push({
           created_at: item.created_at,
@@ -292,46 +297,43 @@ export async function downloadLikedSongs(supabase: SupabaseClient): Promise<bool
       // Update progress
       const current = i + 1;
       const percent = Math.round((current / Math.max(totalSongs, 1)) * 100);
-      store.setProgress(likedPlaylistId, {
-        current,
-        percent
-      });
+      if (!silent) {
+        store.setProgress(likedPlaylistId, {
+          current,
+          percent
+        });
+      }
     }
 
-    // 3. Save full liked songs playlist to IndexedDB (scoped to current user)
-    const userLikedKey = `liked_${user.id}`;
-    const offlinePlaylist: OfflinePlaylist = {
-      id: userLikedKey,
-      title: 'Liked Songs',
-      image_path: null,
-      image_url: null,
-      user_id: user.id,
-      created_at: new Date().toISOString(),
-      downloaded_at: Date.now(),
-      last_accessed_at: new Date().toISOString(),
-      playlist_songs: preparedPlaylistSongs
-    };
+    // 3. Save liked songs strictly to offlineDb.liked_songs & offlineDb.songs (mirroring Supabase)
+    await saveLikedSongsToDb(user.id, preparedPlaylistSongs.map(p => ({
+      created_at: p.created_at,
+      song_order: p.song_order,
+      song: p.songs
+    })));
 
-    await savePlaylistToDb(offlinePlaylist, user.id);
+    if (!silent) {
+      store.setProgress(likedPlaylistId, {
+        status: 'completed',
+        percent: 100
+      });
 
-    store.setProgress(likedPlaylistId, {
-      status: 'completed',
-      percent: 100
-    });
+      setTimeout(() => {
+        store.clearProgress(likedPlaylistId);
+      }, 2000);
+    }
 
     await store.refreshDownloadedStatus(user.id);
-
-    setTimeout(() => {
-      store.clearProgress(likedPlaylistId);
-    }, 2000);
 
     return true;
   } catch (error: any) {
     console.error(`[Download Service] Failed to download liked songs:`, error);
-    store.setProgress(likedPlaylistId, {
-      status: 'error',
-      errorMessage: error.message || 'Download failed'
-    });
+    if (!silent) {
+      store.setProgress(likedPlaylistId, {
+        status: 'error',
+        errorMessage: error.message || 'Download failed'
+      });
+    }
     return false;
   }
 }
@@ -450,7 +452,7 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
           }
         }
 
-        const resolvedSongImage = songDataUrl || songImageUrl;
+        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
 
         preparedPlaylistSongs.push({
           created_at: item.created_at,
@@ -521,9 +523,9 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
  * Checks for differences between local offline playlist and Supabase cloud playlist,
  * and syncs newly added or removed songs automatically.
  */
-export async function syncPlaylist(supabase: SupabaseClient, playlistId: string): Promise<boolean> {
+export async function syncPlaylist(supabase: SupabaseClient, playlistId: string, silent = false): Promise<boolean> {
   if (playlistId === 'liked') {
-    return downloadLikedSongs(supabase);
+    return downloadLikedSongs(supabase, silent);
   }
 
   const store = useDownloadStore.getState();
@@ -538,13 +540,15 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
   if (!localPlaylist) return false;
 
   try {
-    store.setProgress(playlistId, {
-      id: playlistId,
-      type: 'playlist',
-      title: localPlaylist.title,
-      status: 'syncing',
-      percent: 0
-    });
+    if (!silent) {
+      store.setProgress(playlistId, {
+        id: playlistId,
+        type: 'playlist',
+        title: localPlaylist.title,
+        status: 'syncing',
+        percent: 0
+      });
+    }
 
     // Fetch fresh cloud playlist
     const { data: cloudPlaylist, error } = await supabase
@@ -571,7 +575,7 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
       .single();
 
     if (error || !cloudPlaylist) {
-      store.clearProgress(playlistId);
+      if (!silent) store.clearProgress(playlistId);
       return false;
     }
 
@@ -591,11 +595,11 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
 
     // If no changes, complete immediately
     if (newItems.length === 0 && removedIds.length === 0) {
-      store.clearProgress(playlistId);
+      if (!silent) store.clearProgress(playlistId);
       return true;
     }
 
-    console.log(`[Sync Engine] Syncing playlist "${localPlaylist.title}": +${newItems.length} added, -${removedIds.length} removed.`);
+    console.log(`[Sync Engine] Auto-syncing playlist "${localPlaylist.title}": +${newItems.length} added, -${removedIds.length} removed.`);
 
     // 3. Download newly added songs
     for (const item of newItems) {
@@ -606,6 +610,12 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
         if (audioUrl) {
           await saveAudioToCache(audioUrl);
           song.audio_url = audioUrl;
+        }
+      }
+      if (song?.albums?.image_path) {
+        const { data: imgData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
+        if (imgData?.publicUrl) {
+          await saveImageToCache(imgData.publicUrl);
         }
       }
     }
@@ -619,24 +629,27 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
       await pruneSongIfUnreferenced(songId);
     }
 
-    // 5. Update local playlist document with fresh songs
-    const updatedPlaylistSongs = cloudSongs.map((item: any) => {
-      const song = item.songs;
-      let audioUrl = song?.audio_url;
-      if (!audioUrl && song?.song_path) {
-        const { data } = supabase.storage.from('songs').getPublicUrl(song.song_path);
-        audioUrl = data?.publicUrl;
-      }
-      return {
-        created_at: item.created_at,
-        song_order: item.song_order,
-        songs: {
-          ...song,
-          audio_url: audioUrl,
-          downloaded_at: Date.now()
+    // 5. Update local playlist document with fresh songs, preserving exact Supabase order and dates
+    const updatedPlaylistSongs = cloudSongs
+      .slice()
+      .sort((a: any, b: any) => (a.song_order ?? 0) - (b.song_order ?? 0))
+      .map((item: any) => {
+        const song = item.songs;
+        let audioUrl = song?.audio_url;
+        if (!audioUrl && song?.song_path) {
+          const { data } = supabase.storage.from('songs').getPublicUrl(song.song_path);
+          audioUrl = data?.publicUrl;
         }
-      };
-    });
+        return {
+          created_at: item.created_at,
+          song_order: item.song_order,
+          songs: {
+            ...song,
+            audio_url: audioUrl,
+            downloaded_at: Date.now()
+          }
+        };
+      });
 
     await savePlaylistToDb({
       ...localPlaylist,
@@ -645,20 +658,135 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string)
       downloaded_at: Date.now()
     });
 
-    store.setProgress(playlistId, {
-      status: 'completed',
-      percent: 100
-    });
+    if (!silent) {
+      store.setProgress(playlistId, {
+        status: 'completed',
+        percent: 100
+      });
 
-    setTimeout(() => {
-      store.clearProgress(playlistId);
-    }, 2000);
+      setTimeout(() => {
+        store.clearProgress(playlistId);
+      }, 2000);
+    }
 
     return true;
   } catch (error) {
     console.error(`[Sync Engine] Error syncing playlist ${playlistId}:`, error);
-    store.clearProgress(playlistId);
+    if (!silent) store.clearProgress(playlistId);
     return false;
+  }
+}
+
+/**
+ * Automatically syncs a single liked song (add or remove) to offline storage
+ * preserving the exact Supabase created_at timestamp and song ordering.
+ */
+export async function autoSyncLikedSong(
+  supabase: SupabaseClient,
+  userId: string,
+  songId: string,
+  action: 'add' | 'remove'
+): Promise<void> {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+  try {
+    if (action === 'remove') {
+      await offlineDb.liked_songs.delete([userId, songId]);
+      await offlineDb.song_references.where('id').equals(`${songId}_liked_${userId}`).delete();
+      await pruneSongIfUnreferenced(songId);
+      useDownloadStore.getState().refreshDownloadedStatus(userId);
+      return;
+    }
+
+    // Action === 'add'
+    const { data: songData } = await supabase
+      .from('songs')
+      .select(`
+        *,
+        albums(
+          id,
+          title,
+          image_path,
+          genre,
+          release_type,
+          artists(id, name, image_path)
+        )
+      `)
+      .eq('id', songId)
+      .single();
+
+    if (!songData) return;
+
+    // Fetch the exact created_at timestamp from Supabase liked_songs
+    const { data: likedRow } = await supabase
+      .from('liked_songs')
+      .select('created_at')
+      .eq('user_id', userId)
+      .eq('song_id', songId)
+      .single();
+
+    // Cache audio
+    let audioUrl: string | undefined = undefined;
+    if (songData.song_path) {
+      const { data } = supabase.storage.from('songs').getPublicUrl(songData.song_path);
+      audioUrl = data?.publicUrl;
+      if (audioUrl) {
+        await saveAudioToCache(audioUrl);
+      }
+    }
+
+    // Cache image
+    let resolvedImage: string = '/images/album-placeholder.png';
+    if (songData.albums?.image_path) {
+      const { data } = supabase.storage.from('images').getPublicUrl(songData.albums.image_path);
+      if (data?.publicUrl) {
+        await saveImageToCache(data.publicUrl);
+        resolvedImage = (await fetchImageAsDataUrl(data.publicUrl)) || data.publicUrl || '/images/album-placeholder.png';
+      }
+    }
+
+    // Save song to offlineDb.songs
+    await offlineDb.songs.put({
+      ...songData,
+      audio_url: audioUrl,
+      imageUrl: resolvedImage,
+      albums: {
+        ...songData.albums,
+        image_url: resolvedImage
+      },
+      downloaded_at: Date.now()
+    });
+
+    // Save reference
+    await offlineDb.song_references.put({
+      id: `${songId}_liked_${userId}`,
+      song_id: songId,
+      parent_type: 'liked',
+      parent_id: userId,
+      created_at: Date.now()
+    });
+
+    // Shift existing liked songs order by 1 so the newly liked song takes index 0
+    const existingLiked = await offlineDb.liked_songs.where('user_id').equals(userId).toArray();
+    for (const item of existingLiked) {
+      if (item.song_id !== songId) {
+        await offlineDb.liked_songs.update([userId, item.song_id], {
+          song_order: (item.song_order ?? 0) + 1
+        });
+      }
+    }
+
+    // Save with the actual Supabase created_at timestamp
+    await offlineDb.liked_songs.put({
+      user_id: userId,
+      song_id: songId,
+      created_at: likedRow?.created_at || new Date().toISOString(),
+      song_order: 0
+    });
+
+    useDownloadStore.getState().refreshDownloadedStatus(userId);
+  } catch (err) {
+    console.warn('[Download Service] Auto-sync liked song failed:', err);
   }
 }
 

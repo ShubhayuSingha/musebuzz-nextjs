@@ -100,9 +100,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bypass dev HMR / hot-reload / chrome extensions / analytics
+  // Bypass dev HMR / hot-reload / turbopack / chrome extensions / analytics
   if (
     url.pathname.includes('_next/webpack-hmr') ||
+    url.pathname.includes('_next/turbopack-hmr') ||
+    url.pathname.includes('turbopack') ||
+    url.pathname.includes('__nextjs') ||
     url.pathname.includes('hot-update') ||
     url.protocol.startsWith('chrome-extension')
   ) {
@@ -198,7 +201,8 @@ self.addEventListener('fetch', (event) => {
         // In dev and online mode, try network first to receive fresh updates, then cache
         try {
           const networkResponse = await fetch(request);
-          if (networkResponse.status === 200) {
+          const isDevChunk = (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.pathname.includes('/_next/static/chunks/');
+          if (networkResponse.status === 200 && !isDevChunk) {
             staticCache.put(request, networkResponse.clone());
           }
           return networkResponse;
@@ -296,16 +300,19 @@ self.addEventListener('fetch', (event) => {
       (async () => {
         const targetUrl = url.searchParams.get('url');
         const staticCache = await caches.open(CACHE_STATIC_NAME);
+        const mediaImgCache = await caches.open(CACHE_MEDIA_IMAGES_NAME);
 
         // 1. If targetUrl is in cache (saved during download or prior fetch), return it directly
         if (targetUrl) {
-          const cachedTarget = await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true });
+          const cachedTarget = (await mediaImgCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true })) ||
+                               (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
           if (cachedTarget) {
             return cachedTarget;
           }
         }
 
-        const cachedReq = await staticCache.match(request, { ignoreSearch: true, ignoreVary: true });
+        const cachedReq = (await mediaImgCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+                          (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true }));
         if (cachedReq) return cachedReq;
 
         // 2. Not cached: try network
@@ -318,10 +325,13 @@ self.addEventListener('fetch', (event) => {
         } catch {
           // 3. Network failed / offline: check targetUrl again or serve clean fallback
           if (targetUrl) {
-            const cachedTarget = await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true });
+            const cachedTarget = (await mediaImgCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true })) ||
+                                 (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
             if (cachedTarget) return cachedTarget;
           }
-          const fallback = await staticCache.match('/images/placeholder.svg');
+          const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
+                           (await staticCache.match('/images/album-placeholder.png')) ||
+                           (await staticCache.match('/images/placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {
@@ -338,11 +348,15 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname.includes('supabase.co') && url.pathname.includes('/object/public/')) {
     event.respondWith(
       (async () => {
+        const mediaImgCache = await caches.open(CACHE_MEDIA_IMAGES_NAME);
         const staticCache = await caches.open(CACHE_STATIC_NAME);
 
-        // 1. Check cache first with ignoreVary: true
-        const cached = (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+        // 1. Check media images cache first, then static cache with ignoreVary: true
+        const cached = (await mediaImgCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+                       (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+                       (await mediaImgCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
                        (await staticCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
+                       (await mediaImgCache.match(url.href, { ignoreSearch: true, ignoreVary: true })) ||
                        (await staticCache.match(url.href, { ignoreSearch: true, ignoreVary: true }));
 
         if (cached) {
@@ -353,12 +367,14 @@ self.addEventListener('fetch', (event) => {
         try {
           const networkResponse = await fetch(request);
           if (networkResponse.status === 200) {
-            staticCache.put(request, networkResponse.clone());
+            mediaImgCache.put(request, networkResponse.clone());
           }
           return networkResponse;
         } catch {
-          // Offline and not cached: return clean SVG placeholder instead of broken icon
-          const fallback = await staticCache.match('/images/placeholder.svg');
+          // Offline and not cached: return clean album placeholder instead of broken icon
+          const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
+                           (await staticCache.match('/images/album-placeholder.png')) ||
+                           (await staticCache.match('/images/placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {

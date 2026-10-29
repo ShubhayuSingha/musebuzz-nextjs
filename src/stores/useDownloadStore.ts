@@ -75,7 +75,16 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
           .where('user_id')
           .equals(uid)
           .primaryKeys();
-        playlistKeys = userPlaylists as string[];
+        
+        let rawPlaylists = userPlaylists as string[];
+        if (rawPlaylists.length === 0) {
+          rawPlaylists = (await offlineDb.playlists.toCollection().primaryKeys()) as string[];
+        }
+
+        // Never count user-scoped or raw liked song playlist IDs as generic playlists
+        playlistKeys = rawPlaylists.filter(
+          (k) => k !== 'liked' && !k.startsWith('liked_')
+        );
 
         // User only sees albums saved by them in saved_albums
         if (offlineDb.saved_albums) {
@@ -94,9 +103,32 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
           albumKeys = (await offlineDb.albums.toCollection().primaryKeys()) as string[];
         }
 
-        // Check if user has liked songs downloaded
-        const userLiked = (await offlineDb.playlists.get(`liked_${uid}`)) || (await offlineDb.playlists.get('liked'));
-        if (userLiked && (!userLiked.user_id || userLiked.user_id === uid)) {
+        // Check if user has liked songs actually downloaded via song_references (not just cached like-state in liked_songs)
+        let hasLikedSongs = false;
+        if (offlineDb.song_references) {
+          const userLikedRefs = await offlineDb.song_references
+            .where('parent_type')
+            .equals('liked')
+            .filter((r) => r.parent_id === uid)
+            .count();
+          if (userLikedRefs > 0) {
+            hasLikedSongs = true;
+          } else {
+            // General check across all liked references if user id was not recorded
+            const totalLikedRefs = await offlineDb.song_references
+              .where('parent_type')
+              .equals('liked')
+              .count();
+            if (totalLikedRefs > 0) hasLikedSongs = true;
+          }
+        }
+        if (!hasLikedSongs) {
+          const userLiked = (await offlineDb.playlists.get(`liked_${uid}`)) || (await offlineDb.playlists.get('liked'));
+          if (userLiked && (!userLiked.user_id || userLiked.user_id === uid) && userLiked.playlist_songs?.length > 0) {
+            hasLikedSongs = true;
+          }
+        }
+        if (hasLikedSongs) {
           playlistKeys.push('liked');
         }
       } else {
@@ -105,7 +137,21 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
           offlineDb.playlists.toCollection().primaryKeys(),
           offlineDb.albums.toCollection().primaryKeys()
         ]);
-        playlistKeys = allPlaylists as string[];
+        
+        const filteredPlaylists = (allPlaylists as string[]).filter(
+          (k) => k !== 'liked' && !k.startsWith('liked_')
+        );
+        let hasLiked = (allPlaylists as string[]).some(
+          (k) => k === 'liked' || k.startsWith('liked_')
+        );
+        if (!hasLiked && offlineDb.song_references) {
+          const c = await offlineDb.song_references.where('parent_type').equals('liked').count();
+          if (c > 0) hasLiked = true;
+        }
+        if (hasLiked) {
+          filteredPlaylists.push('liked');
+        }
+        playlistKeys = filteredPlaylists;
         albumKeys = allAlbums as string[];
       }
 

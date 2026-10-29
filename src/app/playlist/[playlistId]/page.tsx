@@ -16,13 +16,14 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
   const params = await props.params;
   const { playlistId } = params;
 
-  if (playlistId === 'liked') {
+  if (playlistId === 'liked' || playlistId.startsWith('liked_')) {
     redirect('/liked');
   }
 
   let playlist: any = null;
   let songs: any[] = [];
   let imageUrl = '/images/playlist-placeholder.jpg';
+  let shouldRedirectToMix = false;
 
   try {
     const cookieStore = await cookies();
@@ -86,9 +87,24 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
           .getPublicUrl(playlist.image_path);
         imageUrl = imageData?.publicUrl || imageUrl;
       }
+    } else {
+      // Defensive fallback: check if this is actually a generated mix
+      const { data: mixData } = await supabase
+        .from('generated_playlists')
+        .select('id')
+        .eq('id', playlistId)
+        .maybeSingle();
+
+      if (mixData) {
+        shouldRedirectToMix = true;
+      }
     }
   } catch (e) {
     // Server fetch error or offline: PlaylistView will hydrate from IndexedDB
+  }
+
+  if (shouldRedirectToMix) {
+    redirect(`/mix/${playlistId}`);
   }
 
   return (

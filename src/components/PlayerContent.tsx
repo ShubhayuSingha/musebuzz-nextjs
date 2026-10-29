@@ -60,6 +60,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const isSongEndedRef = useRef(false);
   const prevIsPlayingRef = useRef(isPlaying);
   const prevActiveIdRef = useRef(activeId);
+  const lastMediaPositionSyncRef = useRef<number>(0);
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
@@ -160,6 +161,124 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     } else { playPrevious(); }
   };
 
+  // 🟢 MEDIA SESSION API: Spotify-grade Lockscreen & System Media Notification (Title, Artist, Album, Art, Controls)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('mediaSession' in navigator) || !song) return;
+
+    const title = song.title || 'Unknown Title';
+    const artist = song.author || song.albums?.artists?.name || song.artists?.name || 'MuseBuzz';
+    const album = song.album_title || song.albums?.title || 'Single';
+
+    // Absolute artwork URL for OS-level media integration (Android/iOS lockscreens require absolute URLs)
+    let artworkSrc = imageUrl;
+    if (!artworkSrc) {
+      artworkSrc = `${window.location.origin}/icons/icon-512.png`;
+    } else if (!artworkSrc.startsWith('http') && !artworkSrc.startsWith('data:')) {
+      artworkSrc = `${window.location.origin}${artworkSrc.startsWith('/') ? '' : '/'}${artworkSrc}`;
+    }
+
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist,
+        album,
+        artwork: [
+          { src: artworkSrc, sizes: '96x96' },
+          { src: artworkSrc, sizes: '128x128' },
+          { src: artworkSrc, sizes: '192x192' },
+          { src: artworkSrc, sizes: '256x256' },
+          { src: artworkSrc, sizes: '384x384' },
+          { src: artworkSrc, sizes: '512x512' },
+        ],
+      });
+    } catch (e) {
+      console.warn('[MediaSession] Metadata assignment error:', e);
+    }
+
+    // Dynamic document title for browser tab & OS fallback
+    document.title = `${title} • ${artist} | MuseBuzz`;
+
+    // Lockscreen, Headphone & System Key Handlers
+    const handlers: Record<string, ((details?: any) => void) | null> = {
+      play: () => {
+        setIsPlaying(true);
+        if (soundRef.current && !soundRef.current.playing()) soundRef.current.play();
+      },
+      pause: () => {
+        setIsPlaying(false);
+        if (soundRef.current && soundRef.current.playing()) soundRef.current.pause();
+      },
+      previoustrack: () => {
+        handlePrevious();
+      },
+      nexttrack: () => {
+        playNext();
+      },
+      seekto: (details: any) => {
+        if (details?.seekTime !== undefined && details?.seekTime !== null && soundRef.current) {
+          soundRef.current.seek(details.seekTime);
+          setCurrentTime(details.seekTime);
+          (window as any).__musebuzzCurrentTime = details.seekTime;
+          if ('setPositionState' in navigator.mediaSession && duration > 0) {
+            try {
+              navigator.mediaSession.setPositionState({
+                duration: Math.max(0, duration),
+                playbackRate: 1,
+                position: Math.min(Math.max(0, details.seekTime), duration),
+              });
+            } catch {}
+          }
+        }
+      },
+      seekforward: (details: any) => {
+        if (soundRef.current) {
+          const skip = details?.seekOffset || 10;
+          const current = (soundRef.current.seek() as number) || 0;
+          const newTime = Math.min(current + skip, duration || 9999);
+          soundRef.current.seek(newTime);
+          setCurrentTime(newTime);
+          (window as any).__musebuzzCurrentTime = newTime;
+        }
+      },
+      seekbackward: (details: any) => {
+        if (soundRef.current) {
+          const skip = details?.seekOffset || 10;
+          const current = (soundRef.current.seek() as number) || 0;
+          const newTime = Math.max(current - skip, 0);
+          soundRef.current.seek(newTime);
+          setCurrentTime(newTime);
+          (window as any).__musebuzzCurrentTime = newTime;
+        }
+      },
+      stop: () => {
+        setIsPlaying(false);
+        stopSound();
+      },
+    };
+
+    Object.entries(handlers).forEach(([action, handler]) => {
+      try {
+        navigator.mediaSession.setActionHandler(action as any, handler);
+      } catch {}
+    });
+
+    return () => {
+      document.title = 'MuseBuzz';
+      Object.keys(handlers).forEach((action) => {
+        try {
+          navigator.mediaSession.setActionHandler(action as any, null);
+        } catch {}
+      });
+    };
+  }, [song, imageUrl, duration, setIsPlaying, playNext]);
+
+  // Sync playbackState (playing / paused) with lockscreen
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
   useEffect(() => {
     if (soundRef.current) soundRef.current.volume(volume);
   }, [volume]);
@@ -254,6 +373,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
     setCurrentTime(0);
     (window as any).__musebuzzCurrentTime = 0;
+    window.dispatchEvent(new CustomEvent('lyrics-time-update', { detail: 0 }));
     setDuration(0);
     isSongEndedRef.current = false;
 
@@ -305,7 +425,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     });
 
     const handleLoad = () => {
-      setDuration(newSound.duration());
+      const dur = newSound.duration();
+      setDuration(dur);
+      if (
+        typeof window !== 'undefined' &&
+        'mediaSession' in navigator &&
+        'setPositionState' in navigator.mediaSession &&
+        dur > 0
+      ) {
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: Math.max(0, dur),
+            playbackRate: 1,
+            position: Math.min(Math.max(0, targetSeek), dur),
+          });
+        } catch {}
+      }
       if (targetSeek > 0) {
         sessionStorage.removeItem("restore_seek");
         newSound.seek(targetSeek);
@@ -351,6 +486,26 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           setCurrentTime(seekVal);
           (window as any).__musebuzzCurrentTime = seekVal;
           window.dispatchEvent(new CustomEvent('lyrics-time-update', { detail: seekVal }));
+
+          // Throttled sync with lockscreen scrubber (every 1s)
+          if (
+            typeof window !== 'undefined' &&
+            'mediaSession' in navigator &&
+            'setPositionState' in navigator.mediaSession &&
+            duration > 0
+          ) {
+            const now = performance.now();
+            if (now - lastMediaPositionSyncRef.current > 1000) {
+              lastMediaPositionSyncRef.current = now;
+              try {
+                navigator.mediaSession.setPositionState({
+                  duration: Math.max(0, duration),
+                  playbackRate: 1,
+                  position: Math.min(Math.max(0, seekVal), duration),
+                });
+              } catch {}
+            }
+          }
         }
       }
       animationFrameId = requestAnimationFrame(animate);

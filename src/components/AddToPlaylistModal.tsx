@@ -97,6 +97,15 @@ const AddToPlaylistModal = () => {
       // 🟢 SMART QUEUE: Add to active queue if playing this playlist
       player.syncPlaylistQueue(songId, playlistId, 'add');
 
+      // 🟢 AUTO-SYNC: If playlist is downloaded, sync immediately in background!
+      import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+        if (useDownloadStore.getState().downloadedIds.has(playlistId)) {
+          import('@/lib/downloadService').then(({ syncPlaylist }) => {
+            syncPlaylist(supabaseClient, playlistId, true);
+          });
+        }
+      });
+
       toast.success('Added to playlist');
       onClose();
       router.refresh(); 

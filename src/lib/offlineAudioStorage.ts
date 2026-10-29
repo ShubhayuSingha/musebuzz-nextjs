@@ -3,7 +3,7 @@ import { offlineDb } from './offlineDb';
 
 const CACHE_AUDIO_NAME = 'musebuzz-audio-v1';
 const CACHE_MEDIA_IMAGES_NAME = 'musebuzz-media-images-v1';
-const CACHE_STATIC_NAME = 'musebuzz-static-v3';
+const CACHE_STATIC_NAME = 'musebuzz-static-v5';
 
 /**
  * Downloads and caches an audio MP3 into the Cache API

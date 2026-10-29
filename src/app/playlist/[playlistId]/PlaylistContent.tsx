@@ -206,9 +206,12 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                               unoptimized
                               fill
                               sizes="40px"
-                              src={song.imageUrl}
+                              src={song.imageUrl || '/images/album-placeholder.png'}
                               alt={song.title}
                               className="object-cover"
+                              onError={(e) => {
+                                e.currentTarget.src = '/images/album-placeholder.png';
+                              }}
                           />
                       </div>
 
@@ -256,7 +259,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                                <PlayingAnimation />
                             )}
                             <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
-                                <Image unoptimized fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
+                                <Image unoptimized fill sizes="40px" src={song.imageUrl || "/images/album-placeholder.png"} alt={song.title} className="object-cover" onError={(e) => { e.currentTarget.src = "/images/album-placeholder.png"; }} />
                             </div>
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">

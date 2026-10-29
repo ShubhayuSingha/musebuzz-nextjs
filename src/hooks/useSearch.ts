@@ -145,5 +145,5 @@ export const useSearch = () => {
     };
   };
 
-  return { searchAll, isLoading };
+  return { searchAll, isLoading, songs, playlists };
 };

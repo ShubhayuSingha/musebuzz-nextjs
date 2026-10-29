@@ -17,7 +17,6 @@ import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import { 
   downloadAlbum, 
   downloadPlaylist, 
-  syncPlaylist, 
   deleteAlbumDownload, 
   deletePlaylistDownload 
 } from '@/lib/downloadService';
@@ -117,25 +116,6 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
     }
   };
 
-  const handleSync = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setMenuOpen(false);
-
-    if (!isOnline || isOfflineMode) {
-      toast.error('Syncing requires an active internet connection');
-      return;
-    }
-
-    try {
-      const ok = await syncPlaylist(supabase, id);
-      if (ok) toast.success('Playlist sync complete');
-      else toast.error('Sync failed');
-      refreshDownloadedStatus();
-    } catch (err: any) {
-      toast.error('Sync failed');
-    }
-  };
-
   // State 1: Active downloading
   if (isDownloading) {
     const percent = Math.round(activeProgress?.percent || 0);
@@ -179,19 +159,9 @@ const DownloadButton: React.FC<DownloadButtonProps> = ({
 
         {menuOpen && (
           <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
-            {type === 'playlist' && (
-              <button
-                onClick={handleSync}
-                className="w-full text-left px-3 py-2 text-xs font-medium text-zinc-200 hover:text-white hover:bg-zinc-800 flex items-center gap-2 transition"
-              >
-                <HiArrowPath className="w-4 h-4 text-zinc-400" />
-                Sync / Update
-              </button>
-            )}
-
             <button
               onClick={handleDelete}
-              className="w-full text-left px-3 py-2 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 flex items-center gap-2 transition"
+              className="w-full text-left px-3 py-2 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 flex items-center gap-2 transition cursor-pointer"
             >
               <HiTrash className="w-4 h-4 text-red-400" />
               Remove Download

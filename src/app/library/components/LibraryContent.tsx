@@ -117,21 +117,32 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
             }
 
             try {
-                const [offlinePlaylists, offlineAlbums, offlineLiked] = await Promise.all([
-                    offlineDb.playlists.toArray(),
-                    offlineDb.albums.toArray(),
-                    offlineDb.playlists.get('liked')
-                ]);
-
-                if (offlineLiked) {
-                    setOfflineLikedCount(offlineLiked.playlist_songs?.length || 0);
+                let userPlaylists = await offlineDb.playlists
+                    .where('user_id')
+                    .equals(user.id)
+                    .toArray();
+                if (userPlaylists.length === 0) {
+                    userPlaylists = await offlineDb.playlists.toArray();
                 }
 
+                // Get offline liked count from offlineDb.liked_songs (relational) or legacy fallback
+                let count = 0;
+                if (offlineDb.liked_songs) {
+                    count = await offlineDb.liked_songs.where('user_id').equals(user.id).count();
+                }
+                if (count === 0) {
+                    const fallbackLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
+                    count = fallbackLiked?.playlist_songs?.length || 0;
+                }
+                setOfflineLikedCount(count);
+
+                const offlineAlbums = await offlineDb.albums.toArray();
                 const existingIds = new Set(items.map(it => it.id));
                 const extraItems: LibraryItem[] = [];
 
-                for (const pl of offlinePlaylists) {
-                    if (pl.id !== 'liked' && !existingIds.has(pl.id)) {
+                for (const pl of userPlaylists) {
+                    const isLegacyLiked = pl.id === 'liked' || pl.id.startsWith('liked_');
+                    if (!isLegacyLiked && !existingIds.has(pl.id)) {
                         extraItems.push({
                             id: pl.id,
                             type: 'playlist',
@@ -164,7 +175,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
         };
 
         loadOfflineItems();
-    }, [items, downloadedIds, user]);
+    }, [items, user]);
 
     const combinedItems = [...items, ...offlineItems];
 
@@ -216,7 +227,8 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
     const isLikedDownloaded = downloadedIds.has('liked');
 
     const filteredItems = combinedItems.filter((item) => {
-        if (item.id === 'liked') return false;
+        const isLikedItem = item.id === 'liked' || item.id.startsWith('liked_');
+        if (isLikedItem) return false;
         if (filter === 'all') return true;
         if (filter === 'downloaded') return downloadedIds.has(item.id);
         return item.type === filter;

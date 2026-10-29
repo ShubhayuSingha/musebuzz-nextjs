@@ -39,6 +39,9 @@ export default function Home() {
 
   // Global Loading State
   const [isLoading, setIsLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
+  const lastFetchedTimeRef = useRef<number>(0);
+  const userId = user?.id;
 
   // Online Data States
   const [jumpBackIn, setJumpBackIn] = useState<any[]>([]);
@@ -100,27 +103,33 @@ export default function Home() {
      ======================= */
 
   const loadOfflineHomeData = useCallback(async () => {
-    setIsLoading(true);
-    if (!user) {
+    if (!hasLoadedOnceRef.current) {
+      setIsLoading(true);
+    }
+    if (!userId) {
       setOfflinePlaylists([]);
       setOfflineAlbums([]);
       setIsLoading(false);
+      hasLoadedOnceRef.current = true;
       return;
     }
 
     try {
       // 1. Only load playlists belonging strictly to THIS user
-      const userPlaylists = await offlineDb.playlists
+      const rawPlaylists = await offlineDb.playlists
         .where('user_id')
-        .equals(user.id)
+        .equals(userId)
         .toArray();
+      const userPlaylists = rawPlaylists.filter(p => p.id !== 'liked' && !p.id.startsWith('liked_'));
 
-      // Check for user-scoped or matching liked playlist
-      const userLiked = (await offlineDb.playlists.get(`liked_${user.id}`)) || (await offlineDb.playlists.get('liked'));
-      if (userLiked && (!userLiked.user_id || userLiked.user_id === user.id)) {
-        if (!userPlaylists.some(p => p.id === userLiked.id)) {
-          userPlaylists.push(userLiked);
-        }
+      // Check for relational liked songs
+      let offlineLikedCount = 0;
+      if (offlineDb.liked_songs) {
+        offlineLikedCount = await offlineDb.liked_songs.where('user_id').equals(userId).count();
+      }
+      if (offlineLikedCount === 0) {
+        const legacyLiked = (await offlineDb.playlists.get(`liked_${userId}`)) || (await offlineDb.playlists.get('liked'));
+        offlineLikedCount = legacyLiked?.playlist_songs?.length || 0;
       }
 
       // 2. Only load albums saved by THIS user in saved_albums
@@ -128,7 +137,7 @@ export default function Home() {
       if (offlineDb.saved_albums) {
         const userSaved = await offlineDb.saved_albums
           .where('user_id')
-          .equals(user.id)
+          .equals(userId)
           .toArray();
         let savedAlbumIds = userSaved.map(s => s.album_id);
         if (savedAlbumIds.length === 0) {
@@ -145,26 +154,32 @@ export default function Home() {
         userAlbums = await offlineDb.albums.toArray();
       }
 
-      // Format playlists. If 'liked' exists, sort it to the top!
+      // Format playlists. If offline liked songs exist, prepend Liked Songs card to the top!
       const formattedPlaylists = userPlaylists
-        .map((p) => {
-          const isLiked = p.id === 'liked' || p.id === `liked_${user.id}`;
-          return {
-            id: isLiked ? 'liked' : p.id,
-            title: isLiked ? 'Liked Songs' : (p.title || 'Playlist'),
-            image_path: p.image_path || null,
-            image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
-            user_id: p.user_id,
-            type: 'playlist',
-            downloaded_at: p.downloaded_at,
-            songsCount: p.playlist_songs?.length || 0
-          };
-        })
-        .sort((a, b) => {
-          if (a.id === 'liked') return -1;
-          if (b.id === 'liked') return 1;
-          return (b.downloaded_at || 0) - (a.downloaded_at || 0);
+        .map((p) => ({
+          id: p.id,
+          title: p.title || 'Playlist',
+          image_path: p.image_path || null,
+          image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
+          user_id: p.user_id,
+          type: 'playlist',
+          downloaded_at: p.downloaded_at,
+          songsCount: p.playlist_songs?.length || 0
+        }))
+        .sort((a, b) => (b.downloaded_at || 0) - (a.downloaded_at || 0));
+
+      if (offlineLikedCount > 0) {
+        formattedPlaylists.unshift({
+          id: 'liked',
+          title: 'Liked Songs',
+          image_path: null,
+          image_url: '/images/liked.png',
+          user_id: userId,
+          type: 'playlist',
+          downloaded_at: Date.now(),
+          songsCount: offlineLikedCount
         });
+      }
 
       // Format albums
       const formattedAlbums = userAlbums
@@ -186,15 +201,16 @@ export default function Home() {
     } catch (err) {
       console.warn("[Home] Failed to load offline items:", err);
     } finally {
+      hasLoadedOnceRef.current = true;
       setIsLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     if (isEffectivelyOffline) {
       loadOfflineHomeData();
     }
-  }, [isEffectivelyOffline, downloadedIds, loadOfflineHomeData, user]);
+  }, [isEffectivelyOffline, loadOfflineHomeData]);
 
   /* =======================
         ONLINE DATA FETCH
@@ -203,8 +219,17 @@ export default function Home() {
   useEffect(() => {
     if (isEffectivelyOffline) return;
 
+    const now = Date.now();
+    // Prevent refetching when switching back and forth between browser tabs (< 60s)
+    if (hasLoadedOnceRef.current && now - lastFetchedTimeRef.current < 60000) {
+      return;
+    }
+
     const fetchDashboard = async () => {
-      setIsLoading(true);
+      // Only show full-page spinner on initial load; background updates keep existing UI visible
+      if (!hasLoadedOnceRef.current) {
+        setIsLoading(true);
+      }
       try {
         // 1. PUBLIC DATA (Fetch this for EVERYONE) with timeout protection
         const { data: newAlbums, error: newAlbumsErr } = await withTimeout(
@@ -351,12 +376,14 @@ export default function Home() {
         useOfflineModeStore.getState().setIsOnline(false);
         await loadOfflineHomeData();
       } finally {
+        hasLoadedOnceRef.current = true;
+        lastFetchedTimeRef.current = Date.now();
         setIsLoading(false);
       }
     };
 
     fetchDashboard();
-  }, [version, user, isEffectivelyOffline, loadOfflineHomeData]);
+  }, [version, userId, isEffectivelyOffline, loadOfflineHomeData]);
 
   /* =======================
         SCROLL HELPERS

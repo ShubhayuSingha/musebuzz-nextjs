@@ -7,7 +7,7 @@ export interface SearchHistoryItem {
   id: string;
   user_id: string;
   item_id: string;
-  item_type: 'song' | 'album' | 'artist' | 'playlist';
+  item_type: 'song' | 'album' | 'artist' | 'playlist' | 'mix';
   title: string;
   subtitle: string | null;
   image_path: string | null;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import useQueueStore from '@/stores/useQueueStore';
 import { supabase } from '@/lib/supabaseClient';
@@ -28,6 +28,10 @@ export default function LyricsPlayer() {
   const activeLineIndexRef = useRef(-1);
 
   const [isAutoSyncing, setIsAutoSyncing] = useState(true);
+  const isAutoSyncingRef = useRef(true);
+  useEffect(() => {
+    isAutoSyncingRef.current = isAutoSyncing;
+  }, [isAutoSyncing]);
 
   const [scriptMode, setScriptMode] = useState<'native' | 'romanized'>('romanized');
   const [showTranslation, setShowTranslation] = useState(false);
@@ -47,12 +51,21 @@ export default function LyricsPlayer() {
 
   const isProgrammaticScrollRef = useRef(false);
   const unlockTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isResizingRef = useRef(false);
+  const isUserInteractingRef = useRef(false);
+  const interactionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const hasNative = useMemo(() => lyrics.some(l => l.text_native), [lyrics]);
   const hasTranslation = useMemo(() => lyrics.some(l => l.text_translation), [lyrics]);
 
-  // 🟢 Helper: Find the most recent line that has started
+  // 🟢 Helper: Find the most recent line that has started.
+  // Returns -1 if time is before the first line starts (intro music).
   const getActiveLineIndex = (time: number, lyricsData: LyricLine[]) => {
+    if (!lyricsData || lyricsData.length === 0) return -1;
+    // Before the first line begins (Intro music / instrumental start)
+    if (lyricsData[0]?.start !== null && time < lyricsData[0].start!) {
+      return -1;
+    }
     for (let i = lyricsData.length - 1; i >= 0; i--) {
       if (lyricsData[i].start !== null && time >= lyricsData[i].start!) {
         return i;
@@ -60,6 +73,30 @@ export default function LyricsPlayer() {
     }
     return -1;
   };
+
+  // 🟢 Unified Smooth Scroll: Centers the active line or scrolls to top if intro (-1)
+  const scrollToLine = useCallback((index: number, behavior: ScrollBehavior = 'smooth') => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    isProgrammaticScrollRef.current = true;
+    if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+
+    if (index === -1) {
+      container.scrollTo({ top: 0, behavior });
+    } else {
+      const el = lineRefs.current[index];
+      if (el) {
+        const offsetTarget = container.clientHeight * 0.35;
+        const targetTop = el.offsetTop + (el.clientHeight / 2) - offsetTarget;
+        container.scrollTo({ top: Math.max(0, targetTop), behavior });
+      }
+    }
+
+    unlockTimeoutRef.current = setTimeout(() => {
+      isProgrammaticScrollRef.current = false;
+    }, behavior === 'smooth' ? 600 : 100);
+  }, []);
 
   useEffect(() => {
     if (!activeId) {
@@ -69,9 +106,15 @@ export default function LyricsPlayer() {
       return;
     }
 
-    // 🟢 FIX: Reset instantly on song change to clear the old active line!
+    // 🟢 FIX: Reset instantly on song change to clear the old active line & scroll to top!
     setActiveLineIndex(-1);
     activeLineIndexRef.current = -1;
+    setIsAutoSyncing(true);
+    isAutoSyncingRef.current = true;
+    (window as any).__musebuzzCurrentTime = 0;
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: 0, behavior: 'auto' });
+    }
     setIsLoading(true);
 
     const fetchLyrics = async () => {
@@ -106,46 +149,36 @@ export default function LyricsPlayer() {
           const parsedLyrics = JSON.parse(lyricsSnippet);
           setLyrics(parsedLyrics);
 
+          // Get initial playback position for this song (defaults to 0 for new track)
           const initialTime = (window as any).__musebuzzCurrentTime || 0;
           const initialIndex = getActiveLineIndex(initialTime, parsedLyrics);
 
-          if (initialIndex !== -1) {
-            activeLineIndexRef.current = initialIndex;
-            setActiveLineIndex(initialIndex);
+          activeLineIndexRef.current = initialIndex;
+          setActiveLineIndex(initialIndex);
 
-            setTimeout(() => {
-              const el = lineRefs.current[initialIndex];
-              const container = containerRef.current;
-              if (el && container) {
-                isProgrammaticScrollRef.current = true;
-                if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-
-                container.scrollTo({
-                  top: el.offsetTop + (el.clientHeight / 2) - (container.clientHeight * 0.3),
-                  behavior: 'auto'
-                });
-
-                unlockTimeoutRef.current = setTimeout(() => {
-                  isProgrammaticScrollRef.current = false;
-                }, 200);
-              }
-            }, 100);
-          }
-
-        } catch { setLyrics([]); }
-      } else { setLyrics([]); }
+          setTimeout(() => {
+            scrollToLine(initialIndex, 'auto');
+          }, 80);
+        } catch {
+          setLyrics([]);
+        }
+      } else {
+        setLyrics([]);
+      }
 
       setIsLoading(false);
     };
     fetchLyrics();
-  }, [activeId]);
+  }, [activeId, scrollToLine]);
 
+  // 🟢 Real-time audio sync: updates activeLineIndex including -1 during intro music
   useEffect(() => {
     const handleTimeUpdate = (e: any) => {
       const time = e.detail;
       const newIndex = getActiveLineIndex(time, lyrics);
 
-      if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
+      // Now allows transitioning to -1 (intro music / rewind before first line)
+      if (newIndex !== activeLineIndexRef.current) {
         activeLineIndexRef.current = newIndex;
         setActiveLineIndex(newIndex);
       }
@@ -154,6 +187,7 @@ export default function LyricsPlayer() {
     return () => window.removeEventListener('lyrics-time-update', handleTimeUpdate);
   }, [lyrics]);
 
+  // 🟢 Periodic fallback check (500ms) to ensure state stays in sync
   useEffect(() => {
     if (!isOpen || activeView !== 'lyrics' || lyrics.length === 0) return;
 
@@ -161,62 +195,80 @@ export default function LyricsPlayer() {
       const time = (window as any).__musebuzzCurrentTime || 0;
       const newIndex = getActiveLineIndex(time, lyrics);
 
-      if (newIndex !== activeLineIndexRef.current && newIndex !== -1) {
+      if (newIndex !== activeLineIndexRef.current) {
         activeLineIndexRef.current = newIndex;
         setActiveLineIndex(newIndex);
-
-        const activeEl = lineRefs.current[newIndex];
-        const container = containerRef.current;
-        if (activeEl && container) {
-          isProgrammaticScrollRef.current = true;
-          if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-
-          container.scrollTo({
-            top: activeEl.offsetTop + (activeEl.clientHeight / 2) - (container.clientHeight * 0.4),
-            behavior: 'smooth'
-          });
-
-          unlockTimeoutRef.current = setTimeout(() => {
-            isProgrammaticScrollRef.current = false;
-          }, 800);
-        }
       }
     };
 
-    checkTime();
     const interval = setInterval(checkTime, 500);
     return () => clearInterval(interval);
   }, [lyrics, isOpen, activeView]);
 
+  // 🟢 Smooth Auto-Scroll to active line (or top if intro) whenever activeLineIndex changes
   useEffect(() => {
-    if (!isAutoSyncing || activeLineIndex === -1) return;
-    if (!isOpen || activeView !== 'lyrics') return;
+    if (!isAutoSyncing || !isOpen || activeView !== 'lyrics') return;
+    scrollToLine(activeLineIndex, 'smooth');
+  }, [activeLineIndex, isAutoSyncing, scriptMode, showTranslation, isOpen, activeView, scrollToLine]);
 
-    const activeEl = lineRefs.current[activeLineIndex];
+  // 🟢 Window / Panel Resize Observer: Re-centers active line without breaking auto-sync
+  useEffect(() => {
     const container = containerRef.current;
+    if (!container || !isOpen || activeView !== 'lyrics') return;
 
-    if (activeEl && container) {
-      const scrollTimeout = setTimeout(() => {
-        const offsetTarget = container.clientHeight * 0.4;
-        const elTop = activeEl.offsetTop;
-        const elHalfHeight = activeEl.clientHeight / 2;
+    let resizeTimer: NodeJS.Timeout | null = null;
+    const observer = new ResizeObserver(() => {
+      isResizingRef.current = true;
+      if (resizeTimer) clearTimeout(resizeTimer);
 
-        isProgrammaticScrollRef.current = true;
-        if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
+      // When resized, keep the currently active line centered if auto-sync is active
+      if (isAutoSyncingRef.current) {
+        scrollToLine(activeLineIndexRef.current, 'auto');
+      }
 
-        container.scrollTo({
-          top: elTop + elHalfHeight - offsetTarget,
-          behavior: 'smooth'
-        });
+      resizeTimer = setTimeout(() => {
+        isResizingRef.current = false;
+      }, 300);
+    });
 
-        unlockTimeoutRef.current = setTimeout(() => {
-          isProgrammaticScrollRef.current = false;
-        }, 800);
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+      if (resizeTimer) clearTimeout(resizeTimer);
+    };
+  }, [isOpen, activeView, lyrics.length, scrollToLine]);
 
-      }, 50);
-      return () => clearTimeout(scrollTimeout);
+  const handlePointerDown = () => {
+    if (interactionTimeoutRef.current) clearTimeout(interactionTimeoutRef.current);
+    isUserInteractingRef.current = true;
+  };
+
+  const handlePointerUp = () => {
+    if (interactionTimeoutRef.current) clearTimeout(interactionTimeoutRef.current);
+    interactionTimeoutRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 400);
+  };
+
+  const handleWheel = () => {
+    isUserInteractingRef.current = true;
+    if (interactionTimeoutRef.current) clearTimeout(interactionTimeoutRef.current);
+    interactionTimeoutRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 400);
+  };
+
+  // 🟢 Detect genuine manual user scrolling (ignoring layout reflows or programmatic scrolls)
+  const handleScroll = () => {
+    if (!isOpen || activeView !== 'lyrics') return;
+    if (isProgrammaticScrollRef.current || isResizingRef.current) return;
+
+    // Only pause auto-sync if the scroll was actively initiated by a user touch/wheel gesture
+    if (isUserInteractingRef.current && isAutoSyncing) {
+      setIsAutoSyncing(false);
+      isAutoSyncingRef.current = false;
     }
-  }, [activeLineIndex, isAutoSyncing, scriptMode, showTranslation, isOpen, activeView]);
+  };
 
   const handleScriptToggle = (mode: 'native' | 'romanized') => {
     isProgrammaticScrollRef.current = true;
@@ -237,13 +289,6 @@ export default function LyricsPlayer() {
     localStorage.setItem('musebuzz-show-translation', String(nextState));
 
     unlockTimeoutRef.current = setTimeout(() => { isProgrammaticScrollRef.current = false; }, 800);
-  };
-
-  const handleUserInteraction = () => {
-    if (!isOpen || activeView !== 'lyrics') return;
-    if (!isProgrammaticScrollRef.current && isAutoSyncing) {
-      setIsAutoSyncing(false);
-    }
   };
 
   const getDisplayText = (line: LyricLine) => {
@@ -297,7 +342,12 @@ export default function LyricsPlayer() {
 
       <div
         ref={containerRef}
-        onScroll={handleUserInteraction}
+        onScroll={handleScroll}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onTouchStart={handlePointerDown}
+        onTouchEnd={handlePointerUp}
+        onWheel={handleWheel}
         className="flex-1 overflow-y-auto scrollbar-hide relative"
         style={{
           maskImage: 'linear-gradient(to bottom, transparent 2%, black 10%, black 90%, transparent 98%)',
@@ -331,6 +381,10 @@ export default function LyricsPlayer() {
                     if (line.start !== null) {
                       setSeekRequest(line.start);
                       setIsAutoSyncing(true);
+                      isAutoSyncingRef.current = true;
+                      activeLineIndexRef.current = lineIdx;
+                      setActiveLineIndex(lineIdx);
+                      scrollToLine(lineIdx, 'smooth');
                     }
                   }}
                 >
@@ -362,21 +416,8 @@ export default function LyricsPlayer() {
             <button
               onClick={() => {
                 setIsAutoSyncing(true);
-                const activeEl = lineRefs.current[activeLineIndexRef.current];
-                if (activeEl && containerRef.current) {
-                  isProgrammaticScrollRef.current = true;
-                  if (unlockTimeoutRef.current) clearTimeout(unlockTimeoutRef.current);
-
-                  const offsetTarget = containerRef.current.clientHeight * 0.3;
-                  containerRef.current.scrollTo({
-                    top: activeEl.offsetTop + (activeEl.clientHeight / 2) - offsetTarget,
-                    behavior: 'smooth'
-                  });
-
-                  unlockTimeoutRef.current = setTimeout(() => {
-                    isProgrammaticScrollRef.current = false;
-                  }, 600);
-                }
+                isAutoSyncingRef.current = true;
+                scrollToLine(activeLineIndexRef.current, 'smooth');
               }}
               className="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-full border border-neutral-700 shadow-xl text-sm font-bold flex items-center gap-2 transition"
             >

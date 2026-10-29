@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import DownloadButton from '@/components/DownloadButton';
 import LikedContent from './LikedContent';
 import { offlineDb } from '@/lib/offlineDb';
@@ -13,12 +13,13 @@ interface LikedViewProps {
   initialSongs: any[];
 }
 
+const autoSyncedUsers = new Set<string>();
+
 export default function LikedView({ initialSongs }: LikedViewProps) {
   const [songs, setSongs] = useState<any[]>(initialSongs);
   const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { isOnline, isOfflineMode } = useOfflineModeStore();
-  const { downloadedIds } = useDownloadStore();
   const supabase = useSupabaseClient();
   const user = useUser();
 
@@ -34,6 +35,47 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
     if (isDeviceOffline) {
       const loadOfflineLiked = async () => {
         try {
+          if (user?.id && offlineDb.liked_songs) {
+            // 1. Relational join matching Supabase: query offlineDb.liked_songs
+            const likedRows = await offlineDb.liked_songs
+              .where('user_id')
+              .equals(user.id)
+              .toArray();
+
+            if (likedRows.length > 0) {
+              likedRows.sort((a, b) => {
+                if (a.song_order !== undefined && b.song_order !== undefined && a.song_order !== b.song_order) {
+                  return a.song_order - b.song_order;
+                }
+                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+              });
+
+              const resolvedSongs = await Promise.all(
+                likedRows.map(async (row) => {
+                  const song = await offlineDb.songs.get(row.song_id);
+                  if (!song) return null;
+                  const albumData = song.albums;
+                  return {
+                    ...song,
+                    author: albumData?.artists?.name || "Unknown Artist",
+                    album_title: albumData?.title || "Unknown Album",
+                    liked_created_at: row.created_at,
+                    imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+                    audio_url: song.audio_url,
+                    albums: albumData
+                  };
+                })
+              );
+
+              const validSongs = resolvedSongs.filter(Boolean);
+              if (validSongs.length > 0) {
+                setSongs(validSongs);
+                return;
+              }
+            }
+          }
+
+          // Fallback: check legacy offlineDb.playlists in case user hasn't synced yet
           let offlinePlaylist = user?.id ? await offlineDb.playlists.get(`liked_${user.id}`) : undefined;
           if (!offlinePlaylist) {
             const fallback = await offlineDb.playlists.get('liked');
@@ -72,6 +114,14 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
     // Online mode: if initialSongs were provided, keep them
     if (initialSongs && initialSongs.length > 0) {
       setSongs(initialSongs);
+      // 🟢 AUTO-SYNC: If Liked Songs is downloaded and online, silently ensure all songs are cached (run at most once per session)
+      const syncKey = user?.id || 'default';
+      if (!autoSyncedUsers.has(syncKey) && useDownloadStore.getState().downloadedIds.has('liked')) {
+        autoSyncedUsers.add(syncKey);
+        import('@/lib/downloadService').then(({ downloadLikedSongs }) => {
+          downloadLikedSongs(supabase, true);
+        });
+      }
       return;
     }
 
@@ -114,6 +164,15 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
               };
             }).filter((s: any) => s.id);
             setSongs(mapped);
+
+            // Auto-sync client-fetched songs if already marked downloaded (at most once per session)
+            const syncKey = user.id;
+            if (!autoSyncedUsers.has(syncKey) && useDownloadStore.getState().downloadedIds.has('liked')) {
+              autoSyncedUsers.add(syncKey);
+              import('@/lib/downloadService').then(({ downloadLikedSongs }) => {
+                downloadLikedSongs(supabase, true);
+              });
+            }
           }
         } catch (e) {
           console.warn('[LikedView] Client fetch failed:', e);
@@ -123,7 +182,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
       };
       fetchClientLiked();
     }
-  }, [isDeviceOffline, downloadedIds, initialSongs, user, mounted]);
+  }, [isDeviceOffline, initialSongs, user, mounted]);
 
   return (
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">

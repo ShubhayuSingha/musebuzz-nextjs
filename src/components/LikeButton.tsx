@@ -70,6 +70,15 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
 
         if (error) throw error;
         
+        // 🟢 AUTO-SYNC: If Liked Songs is downloaded, immediately remove from offline storage
+        import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+          if (useDownloadStore.getState().downloadedIds.has('liked')) {
+            import('@/lib/downloadService').then(({ autoSyncLikedSong }) => {
+              autoSyncLikedSong(supabase, user.id, songId, 'remove');
+            });
+          }
+        });
+
         // 3. Background Refresh
         router.refresh();
 
@@ -107,6 +116,15 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
           );
 
         if (error) throw error;
+
+        // 🟢 AUTO-SYNC: If Liked Songs is downloaded, immediately fetch and save audio & metadata
+        import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+          if (useDownloadStore.getState().downloadedIds.has('liked')) {
+            import('@/lib/downloadService').then(({ autoSyncLikedSong }) => {
+              autoSyncLikedSong(supabase, user.id, songId, 'add');
+            });
+          }
+        });
 
         // 3. Background Refresh
         router.refresh();

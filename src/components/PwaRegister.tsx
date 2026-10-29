@@ -127,8 +127,12 @@ export default function PwaRegister() {
       window.addEventListener('load', registerSW);
     }
 
-    // Proactively cache all currently loaded script chunks & active HTML shell when online
+    // Proactively cache all currently loaded script chunks & active HTML shell when online (production only)
     const cacheLoadedAssets = () => {
+      // In development, Next.js handles live code replacement (Fast Refresh).
+      // Proactively fetching window.location.pathname in dev mode triggers an infinite SSR compilation loop.
+      if (process.env.NODE_ENV === 'development') return;
+
       if (typeof window !== 'undefined' && 'caches' in window && navigator.onLine) {
         caches.open('musebuzz-static-v5').then((cache) => {
           const scripts = Array.from(document.querySelectorAll('script[src]'))

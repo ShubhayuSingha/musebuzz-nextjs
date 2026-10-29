@@ -14,14 +14,9 @@ const nextConfig: NextConfig = {
     ],
   },
   
-  /* 2. IGNORE ALL BUILD ERRORS (The Nuclear Option) */
+  /* 2. IGNORE ALL BUILD ERRORS */
   typescript: {
     ignoreBuildErrors: true,
-  },
-  
-  // @ts-ignore
-  eslint: {
-    ignoreDuringBuilds: true,
   },
 
   /* 3. Automatic Versioning (Vercel Git SHA) */

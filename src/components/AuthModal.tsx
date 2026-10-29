@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react'; // 🟢 1. Import useEffect
-import { useRouter } from 'next/navigation'; // 🟢 2. Import useRouter
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
@@ -10,10 +10,9 @@ import useAuthModalStore from '@/stores/useAuthModalStore';
 
 const AuthModal = () => {
   const supabaseClient = useSupabaseClient();
-  const router = useRouter(); // 🟢 3. Initialize router
+  const router = useRouter();
   const { isOpen, onClose, view } = useAuthModalStore();
 
-  // 🟢 4. ADD THIS: The Auth Event Listener
   useEffect(() => {
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
@@ -22,7 +21,6 @@ const AuthModal = () => {
       }
     });
 
-    // Cleanup the listener when the component unmounts
     return () => subscription.unsubscribe();
   }, [supabaseClient, onClose, router]);
 
@@ -45,6 +43,7 @@ const AuthModal = () => {
         magicLink={false}
         showLinks={true}
         providers={['google']}
+        redirectTo={typeof window !== 'undefined' ? `${window.location.origin}/auth/callback` : undefined}
         supabaseClient={supabaseClient}
         appearance={{
           theme: ThemeSupa,

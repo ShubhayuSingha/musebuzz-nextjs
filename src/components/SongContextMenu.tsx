@@ -204,6 +204,15 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
     if (error) {
       toast.error(error.message);
     } else {
+      // 🟢 AUTO-SYNC: If playlist is downloaded, sync immediately in background!
+      import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+        if (useDownloadStore.getState().downloadedIds.has(playlistId)) {
+          import('@/lib/downloadService').then(({ syncPlaylist }) => {
+            syncPlaylist(supabaseClient, playlistId, true);
+          });
+        }
+      });
+
       toast.success('Removed from playlist');
       router.refresh(); 
     }

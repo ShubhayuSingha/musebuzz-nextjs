@@ -20,7 +20,6 @@ import usePlaylistStore from '@/stores/usePlaylistStore';
 import usePlaybackSync from "@/hooks/usePlaybackSync"; 
 import MediaContextMenu from "@/components/MediaContextMenu";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
-import useDownloadStore from "@/stores/useDownloadStore";
 import usePlayerStore from "@/stores/usePlayerStore";
 import { offlineDb } from "@/lib/offlineDb";
 
@@ -53,7 +52,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   const [libraryItems, setLibraryItems] = useState<SidebarItem[]>([]);
   
   const { isOnline, isOfflineMode } = useOfflineModeStore();
-  const { downloadedIds } = useDownloadStore();
 
   const loadOfflineDownloads = async () => {
     if (!user?.id) return [];
@@ -271,7 +269,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
 
   useEffect(() => {
     fetchLibrary();
-  }, [user, supabase, version, isOnline, isOfflineMode, downloadedIds, activeContext?.id]); 
+  }, [user, supabase, version, isOnline, isOfflineMode, activeContext?.id]); 
 
   useEffect(() => {
     const handleNetworkChange = () => {

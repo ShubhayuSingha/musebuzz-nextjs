@@ -65,7 +65,7 @@ export interface OfflineAlbum {
 export interface OfflineSongReference {
   id: string; // `${song_id}_${parent_type}_${parent_id}`
   song_id: string;
-  parent_type: 'playlist' | 'album';
+  parent_type: 'playlist' | 'album' | 'liked';
   parent_id: string;
   created_at: number;
 }

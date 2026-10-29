@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { HiMusicalNote, HiSignalSlash } from 'react-icons/hi2';
@@ -16,6 +16,8 @@ interface PlaylistViewProps {
   initialImageUrl: string;
   playlistId: string;
 }
+
+const autoSyncedPlaylists = new Set<string>();
 
 export default function PlaylistView({
   initialPlaylist,
@@ -35,7 +37,7 @@ export default function PlaylistView({
   const { isOnline, isOfflineMode } = useOfflineModeStore();
 
   useEffect(() => {
-    if (playlistId === 'liked') {
+    if (playlistId === 'liked' || playlistId.startsWith('liked_')) {
       router.replace('/liked');
       return;
     }
@@ -48,6 +50,18 @@ export default function PlaylistView({
       setSongs(initialSongs);
       setImageUrl(initialImageUrl);
       setIsLoading(false);
+
+      // 🟢 AUTO-SYNC: If this playlist is downloaded, silently sync any changes in background (at most once per session)!
+      if (!autoSyncedPlaylists.has(playlistId)) {
+        import('@/stores/useDownloadStore').then(({ default: useDownloadStore }) => {
+          if (useDownloadStore.getState().downloadedIds.has(playlistId)) {
+            autoSyncedPlaylists.add(playlistId);
+            import('@/lib/downloadService').then(({ syncPlaylist }) => {
+              syncPlaylist(supabase, playlistId, true);
+            });
+          }
+        });
+      }
       return;
     }
 
@@ -73,7 +87,7 @@ export default function PlaylistView({
                 album_title: albumData?.title || "Unknown Album",
                 album_id: albumData?.id,
                 added_at: item.created_at,
-                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || offlinePlaylist.image_url || '/images/album-placeholder.png',
+                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
                 audio_url: song.audio_url
               };
             });

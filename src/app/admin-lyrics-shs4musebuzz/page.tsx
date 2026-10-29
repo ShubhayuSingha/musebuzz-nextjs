@@ -305,9 +305,9 @@ export default function AdminLyricsSyncPage() {
                 const isFuture = idx > currentLineIndex;
 
                 let stateClass = "";
-                if (isPast) stateClass = "opacity-30";
-                if (isActive) stateClass = "bg-neutral-900 border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.2)] scale-[1.02] z-10";
-                if (isFuture) stateClass = "opacity-50 border-neutral-800";
+                if (isPast) stateClass = "bg-neutral-900/60 border-neutral-800";
+                if (isActive) stateClass = "bg-neutral-900 border-2 border-purple-500 shadow-[0_0_25px_rgba(168,85,247,0.35)] scale-[1.02] z-10";
+                if (isFuture) stateClass = "bg-neutral-950/80 border-neutral-800";
 
                 return (
                   <div 
@@ -316,29 +316,29 @@ export default function AdminLyricsSyncPage() {
                     className={`p-6 rounded-xl border transition-all duration-300 ${stateClass}`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                       <span className={`text-xs font-bold uppercase tracking-wider ${isActive ? 'text-purple-400' : 'text-neutral-600'}`}>
+                       <span className={`text-xs font-bold uppercase tracking-wider ${isActive ? 'text-purple-400' : 'text-neutral-400'}`}>
                          Line {idx + 1}
                        </span>
                        {line.start !== null && (
-                         <span className="text-xs text-green-500 font-mono bg-green-500/10 px-2 py-1 rounded">
-                           {line.start.toFixed(2)}s
+                         <span className="text-xs text-green-400 font-mono bg-green-500/20 border border-green-500/30 px-2 py-0.5 rounded font-bold">
+                           ✓ {line.start.toFixed(2)}s
                          </span>
                        )}
                     </div>
                     
                     <div className="flex flex-col gap-1">
                       {line.text_native && (
-                        <p className={`text-2xl font-bold ${isActive ? 'text-white' : 'text-neutral-300'}`}>
+                        <p className="text-2xl font-bold text-white">
                           {line.text_native}
                         </p>
                       )}
                       
-                      <p className={`text-lg ${isActive ? 'text-purple-300' : 'text-neutral-500'} ${line.text_native ? 'mt-1' : 'font-bold text-2xl text-white'}`}>
+                      <p className={`text-lg ${isActive ? 'text-purple-300 font-bold' : 'text-white font-medium'} ${line.text_native ? 'mt-1' : 'font-bold text-2xl text-white'}`}>
                         {line.text_romanized}
                       </p>
                       
                       {line.text_translation && (
-                        <p className={`text-sm italic mt-2 ${isActive ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                        <p className={`text-sm italic mt-2 ${isActive ? 'text-purple-200/90' : 'text-neutral-300'}`}>
                           "{line.text_translation}"
                         </p>
                       )}
