@@ -9,22 +9,38 @@ export interface DownloadProgress {
   current: number;
   total: number;
   percent: number;
-  status: 'idle' | 'fetching' | 'downloading' | 'completed' | 'error' | 'syncing';
+  status: 'idle' | 'fetching' | 'downloading' | 'paused' | 'completed' | 'error' | 'syncing';
   errorMessage?: string;
 }
 
 interface DownloadStore {
   downloading: Record<string, DownloadProgress>;
   downloadedIds: Set<string>;
+  downloadedSongIds: Set<string>;
+  pausedIds: Set<string>;
+  cancelledIds: Set<string>;
+  
   setProgress: (id: string, progress: Partial<DownloadProgress>) => void;
   clearProgress: (id: string) => void;
   refreshDownloadedStatus: (userId?: string) => Promise<void>;
   isDownloaded: (id: string) => boolean;
+  isSongDownloaded: (songId: string) => boolean;
+
+  addDownloadedSongId: (songId: string) => void;
+  removeDownloadedSongId: (songId: string) => void;
+  pauseDownload: (id: string) => void;
+  resumeDownload: (id: string) => void;
+  cancelDownload: (id: string) => void;
+  isPaused: (id: string) => boolean;
+  isCancelled: (id: string) => boolean;
 }
 
 const useDownloadStore = create<DownloadStore>((set, get) => ({
   downloading: {},
   downloadedIds: new Set(),
+  downloadedSongIds: new Set(),
+  pausedIds: new Set(),
+  cancelledIds: new Set(),
 
   setProgress: (id, progress) => {
     set((state) => {
@@ -51,8 +67,85 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
     set((state) => {
       const next = { ...state.downloading };
       delete next[id];
-      return { downloading: next };
+      const nextPaused = new Set(state.pausedIds);
+      nextPaused.delete(id);
+      const nextCancelled = new Set(state.cancelledIds);
+      nextCancelled.delete(id);
+      return { downloading: next, pausedIds: nextPaused, cancelledIds: nextCancelled };
     });
+  },
+
+  addDownloadedSongId: (songId: string) => {
+    set((state) => {
+      if (state.downloadedSongIds.has(songId)) return state;
+      const next = new Set(state.downloadedSongIds);
+      next.add(songId);
+      return { downloadedSongIds: next };
+    });
+  },
+
+  removeDownloadedSongId: (songId: string) => {
+    set((state) => {
+      if (!state.downloadedSongIds.has(songId)) return state;
+      const next = new Set(state.downloadedSongIds);
+      next.delete(songId);
+      return { downloadedSongIds: next };
+    });
+  },
+
+  pauseDownload: (id: string) => {
+    set((state) => {
+      const nextPaused = new Set(state.pausedIds);
+      nextPaused.add(id);
+      const existing = state.downloading[id];
+      return {
+        pausedIds: nextPaused,
+        downloading: existing
+          ? { ...state.downloading, [id]: { ...existing, status: 'paused' } }
+          : state.downloading
+      };
+    });
+  },
+
+  resumeDownload: (id: string) => {
+    set((state) => {
+      const nextPaused = new Set(state.pausedIds);
+      nextPaused.delete(id);
+      const nextCancelled = new Set(state.cancelledIds);
+      nextCancelled.delete(id);
+      const existing = state.downloading[id];
+      return {
+        pausedIds: nextPaused,
+        cancelledIds: nextCancelled,
+        downloading: existing
+          ? { ...state.downloading, [id]: { ...existing, status: 'downloading' } }
+          : state.downloading
+      };
+    });
+  },
+
+  cancelDownload: (id: string) => {
+    set((state) => {
+      const nextCancelled = new Set(state.cancelledIds);
+      nextCancelled.add(id);
+      const nextPaused = new Set(state.pausedIds);
+      nextPaused.delete(id);
+      const nextDownloading = { ...state.downloading };
+      delete nextDownloading[id];
+      return {
+        cancelledIds: nextCancelled,
+        pausedIds: nextPaused,
+        downloading: nextDownloading
+      };
+    });
+  },
+
+  isPaused: (id: string) => {
+    return get().pausedIds.has(id);
+  },
+
+  isCancelled: (id: string) => {
+    return get().cancelledIds.has(id);
   },
 
   refreshDownloadedStatus: async (userId?: string) => {
@@ -155,8 +248,13 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
         albumKeys = allAlbums as string[];
       }
 
+      const [allSongKeys] = await Promise.all([
+        offlineDb.songs.toCollection().primaryKeys()
+      ]);
+
       const ids = new Set<string>([...playlistKeys, ...albumKeys]);
-      set({ downloadedIds: ids });
+      const songIds = new Set<string>(allSongKeys as string[]);
+      set({ downloadedIds: ids, downloadedSongIds: songIds });
     } catch (e) {
       console.warn('[Download Store] Could not refresh downloaded status:', e);
     }
@@ -164,6 +262,10 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
 
   isDownloaded: (id) => {
     return get().downloadedIds.has(id);
+  },
+
+  isSongDownloaded: (songId) => {
+    return get().downloadedSongIds.has(songId);
   }
 }));
 

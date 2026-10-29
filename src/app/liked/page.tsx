@@ -21,6 +21,11 @@ export default async function Liked() {
     user = null;
   }
 
+  // If user is not authenticated on the server, return empty initial songs immediately (0ms delay)
+  if (!user?.id) {
+    return <LikedView initialSongs={[]} />;
+  }
+
   const { data } = await withTimeout(
     supabase
       .from("liked_songs")
@@ -36,7 +41,7 @@ export default async function Liked() {
           )
         )
       `)
-      .eq("user_id", user?.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false }),
     3000
   ).catch(() => ({ data: [] }));

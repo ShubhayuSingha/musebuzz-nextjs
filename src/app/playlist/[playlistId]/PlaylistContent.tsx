@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image'; 
 import usePlayerStore from '@/stores/usePlayerStore';
@@ -14,6 +14,9 @@ import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu'; 
 import useAuthModalStore from '@/stores/useAuthModalStore'; 
+import ViewSearchBar from '@/components/ViewSearchBar'; 
+import useFuzzyFilter from '@/hooks/useFuzzyFilter'; 
+import DownloadedBadge from '@/components/DownloadedBadge'; 
 
 // Helpers
 const formatTime = (seconds: number) => {
@@ -63,11 +66,22 @@ interface PlaylistContentProps {
   playlistTitle: string;
 }
 
+const SEARCH_KEYS = [
+  { name: 'title', weight: 0.6 },
+  { name: 'author', weight: 0.25 },
+  { name: 'albums.artists.name', weight: 0.25 },
+  { name: 'album_title', weight: 0.15 },
+  { name: 'albums.title', weight: 0.15 },
+];
+
 const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, playlistTitle }) => {
   const router = useRouter();
   const player = usePlayerStore();
   const user = useUser();
   const authModal = useAuthModalStore();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSongs = useFuzzyFilter(songs, searchQuery, SEARCH_KEYS);
 
   const onPlay = (id: string) => {
     if (!user) {
@@ -84,7 +98,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
           player.setIsPlaying(!player.isPlaying);
           return;
       }
-      player.playFromContext(id, context);
+      player.playFromContext(id, context, songs.map((song) => song.id));
     } else {
       player.setIds(
         songs.map((song) => song.id),
@@ -106,7 +120,20 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
   return (
     <div className="flex flex-col gap-y-2 w-full">
-      
+      {/* Search & Filter Bar */}
+      <div className="flex items-center justify-between px-1 mb-2">
+        <ViewSearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={`Search in ${playlistTitle}...`}
+        />
+        {searchQuery && (
+          <span className="text-xs text-neutral-400">
+            {filteredSongs.length} of {songs.length} song{songs.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
       {/* HEADER */}
       <div className="
         hidden md:grid 
@@ -136,9 +163,20 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
         </div>
       </div>
 
-      <motion.ol className="flex flex-col gap-y-1 w-full">
-        <AnimatePresence mode='popLayout'>
-          {songs.map((song, index) => {
+      {filteredSongs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+          <p className="text-sm">No songs found matching &ldquo;{searchQuery}&rdquo;</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="mt-2 text-xs text-purple-400 hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : (
+        <motion.ol className="flex flex-col gap-y-1 w-full">
+          <AnimatePresence mode='popLayout'>
+            {filteredSongs.map((song, index) => {
             const isActive = 
               player.activeId === song.id && 
               !player.isPlayingPriority && 
@@ -217,12 +255,16 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
 
                       {/* TITLE */}
                       <div className="min-w-0 pr-4">
-                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                        <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                          <DownloadedBadge songId={song.id} />
+                        </div>
+                        <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                       </div>
 
                       {/* ALBUM */}
                       <p 
+                        title={song.album_title}
                         onClick={(e) => {
                             e.stopPropagation();
                             if (song.album_id) router.push(`/album/${song.album_id}`);
@@ -233,7 +275,10 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                       </p>
 
                       {/* DATE ADDED */}
-                      <p className="text-sm text-neutral-400">
+                      <p 
+                        title={song.added_at ? new Date(song.added_at).toLocaleString() : undefined}
+                        className="text-sm text-neutral-400"
+                      >
                           {formatAddedDate(song.added_at)}
                       </p>
 
@@ -263,8 +308,11 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                             </div>
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">
-                            <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                            <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                              <DownloadedBadge songId={song.id} />
+                            </div>
+                            <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                           </div>
                       </div>
                       <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
@@ -278,6 +326,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
           })}
         </AnimatePresence>
       </motion.ol>
+      )}
     </div>
   );
 };

@@ -61,6 +61,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const prevIsPlayingRef = useRef(isPlaying);
   const prevActiveIdRef = useRef(activeId);
   const lastMediaPositionSyncRef = useRef<number>(0);
+  const attemptedSkipsRef = useRef<Set<string>>(new Set());
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
@@ -137,13 +138,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         .then(({ error }) => {
           if (error) {
             console.warn("Playback sync warning:", error.message);
-            useOfflineModeStore.getState().setIsOnline(false);
           }
         })
         .catch((err) => {
-          // Network failed (e.g. Failed to fetch when offline) - handled cleanly without error overlay
           console.warn("Playback sync offline:", err?.message || err);
-          useOfflineModeStore.getState().setIsOnline(false);
         });
     }
   }, [user, activeId, volume, isPlaying, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId, supabase]);
@@ -351,6 +349,24 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [saveProgress, song?.id]);
 
+  // Offline safety: If device is offline and current active track has no playable local path,
+  // automatically advance to the next downloaded song once instead of freezing or loop-skipping.
+  useEffect(() => {
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+    if (isOffline && activeId && !songPath) {
+      if (attemptedSkipsRef.current.has(activeId)) {
+        return; // Prevent infinite re-skipping of the same track
+      }
+      attemptedSkipsRef.current.add(activeId);
+      const timer = setTimeout(() => {
+        usePlayerStore.getState().playNext();
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [activeId, songPath]);
+
   // LOAD LOGIC
   useEffect(() => {
     if (song.id !== activeId) {
@@ -422,6 +438,16 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       isSongEndedRef.current = true;
       if (repeatModeRef.current === "one") { newSound.play(); isSongEndedRef.current = false; }
       else { playNext(); }
+    });
+
+    newSound.once("loaderror", (_id: any, err: any) => {
+      console.warn("[PlayerContent] Failed to load audio stream:", err);
+      const isOffline = !useOfflineModeStore.getState().isOnline || 
+                        useOfflineModeStore.getState().isOfflineMode || 
+                        (typeof navigator !== 'undefined' && !navigator.onLine);
+      if (isOffline) {
+        setTimeout(() => playNext(), 200);
+      }
     });
 
     const handleLoad = () => {
@@ -844,12 +870,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 {shouldMarquee ? (
                   <div className="absolute inset-0 w-full h-full flex items-center overflow-hidden">
                     <div className="animate-marquee pause-marquee flex items-center">
-                      <p className="text-white font-medium cursor-default mr-12 whitespace-nowrap">{song.title}</p>
-                      <p className="text-white font-medium cursor-default mr-12 whitespace-nowrap">{song.title}</p>
+                      <p title={song.title} className="text-white font-medium cursor-default mr-12 whitespace-nowrap">{song.title}</p>
+                      <p title={song.title} className="text-white font-medium cursor-default mr-12 whitespace-nowrap">{song.title}</p>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-white font-medium cursor-default truncate absolute inset-0 flex items-center">{song.title}</p>
+                  <p title={song.title} className="text-white font-medium cursor-default truncate absolute inset-0 flex items-center">{song.title}</p>
                 )}
               </div>
 

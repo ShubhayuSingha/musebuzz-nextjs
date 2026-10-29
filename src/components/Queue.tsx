@@ -14,6 +14,7 @@ import PlayingAnimation from "@/components/PlayingAnimation";
 import usePlayerStore from "@/stores/usePlayerStore";
 import useQueueStore from "@/stores/useQueueStore";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import useDownloadStore from "@/stores/useDownloadStore";
 import { supabase } from "@/lib/supabaseClient";
 import { offlineDb } from "@/lib/offlineDb";
 import { withTimeout } from "@/lib/helpers";
@@ -32,6 +33,7 @@ import {
 } from "framer-motion";
 
 import LyricsPlayer from "@/components/LyricsPlayer";
+import DownloadedBadge from "@/components/DownloadedBadge";
 
 const MIN_WIDTH = 300;
 const MAX_WIDTH = 500;
@@ -139,12 +141,16 @@ const QueueItemContent = ({
       </div>
 
       <div className="flex flex-col min-w-0 overflow-hidden">
-        <p
-          className={`truncate text-sm font-medium ${isActive ? "text-green-500" : source === "autoplay" ? "text-emerald-100" : "text-white"}`}
-        >
-          {song?.title || "Loading..."}
-        </p>
-        <p className="truncate text-xs text-neutral-400">{artistName}</p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p
+            title={song?.title}
+            className={`truncate text-sm font-medium ${isActive ? "text-green-500" : source === "autoplay" ? "text-emerald-100" : "text-white"}`}
+          >
+            {song?.title || "Loading..."}
+          </p>
+          {song?.id && <DownloadedBadge songId={song.id} size={11} />}
+        </div>
+        <p title={artistName} className="truncate text-xs text-neutral-400">{artistName}</p>
       </div>
 
       <div
@@ -252,10 +258,14 @@ const DraggableQueueItem = ({
 
   useEffect(() => () => clearPressTimer(), [clearPressTimer]);
 
-  if (!song)
+  if (!song) {
+    const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+                      (typeof window !== 'undefined' && (window as any).__musebuzzIsOffline);
+    if (isOffline) return null;
     return (
       <div className="h-[56px] w-full bg-neutral-800/10 rounded-md animate-pulse my-1" />
     );
+  }
 
   const handleDragEnd = (
     _event: MouseEvent | TouchEvent | PointerEvent,
@@ -333,6 +343,9 @@ export default function Queue() {
 
   const { isOnline, isOfflineMode } = useOfflineModeStore();
   const isEffectivelyOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+  const { downloadedSongIds } = useDownloadStore();
+
+  const fetchedIdsRef = useRef<Set<string>>(new Set());
 
   const priorityList = player.bucketB;
   const fullContextList = useMemo(
@@ -355,16 +368,25 @@ export default function Queue() {
 
   const contextItems = useMemo<ContextItem[]>(() => {
     if (player.isPlayingAutoplay) return [];
-    if (currentIndex === -1 && fullContextList.length > 0) return [];
 
-    const slice = fullContextList.slice(currentIndex + 1);
+    let slice: string[] = [];
+    if (currentIndex !== -1) {
+      slice = fullContextList.slice(currentIndex + 1);
+    } else if (fullContextList.length > 0) {
+      // Fallback: If current playing song is somehow not found in context list, don't show an empty void!
+      slice = fullContextList.filter((id) => id !== player.activeId);
+    }
+
+    if (isEffectivelyOffline && downloadedSongIds.size > 0) {
+      slice = slice.filter((id) => downloadedSongIds.has(id));
+    }
     const counts: Record<string, number> = {};
     return slice.map((id) => {
       const n = counts[id] || 0;
       counts[id] = n + 1;
       return { id, uid: `${id}-${n}` };
     });
-  }, [fullContextList, currentIndex, player.isPlayingAutoplay]);
+  }, [fullContextList, currentIndex, player.isPlayingAutoplay, player.activeId, isEffectivelyOffline, downloadedSongIds]);
 
   const autoplayItems = useMemo<ContextItem[]>(() => {
     if (isEffectivelyOffline) return [];
@@ -389,8 +411,11 @@ export default function Queue() {
       autoplayItems.slice(0, 20).forEach((i) => ids.add(i.id));
     }
 
-    const toFetch = Array.from(ids).filter((id) => !songsCache[id]);
+    const toFetch = Array.from(ids).filter((id) => !fetchedIdsRef.current.has(id));
     if (!toFetch.length) return;
+
+    // Immediately mark as in-flight/fetched to prevent duplicate loops
+    toFetch.forEach((id) => fetchedIdsRef.current.add(id));
 
     const fetchBatch = async () => {
       // 1. FAST-PATH: Load locally downloaded songs from IndexedDB immediately (<5ms, works 100% offline)
@@ -489,7 +514,7 @@ export default function Queue() {
       }
     };
     fetchBatch();
-  }, [isOpen, player.activeId, priorityList, contextItems, autoplayItems, isEffectivelyOffline, songsCache]);
+  }, [isOpen, player.activeId, priorityList, contextItems, autoplayItems, isEffectivelyOffline]);
 
   const handlePriorityReorder = useCallback(
     (items: typeof priorityList) => player.setBucketB(items),
@@ -603,7 +628,7 @@ export default function Queue() {
                     transition={{ duration: 0.2 }}
                     className="w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-800"
                   >
-                    <div className="p-2 pb-10">
+                    <div className="p-2 pb-36 md:pb-40">
                       <div className="mb-6 mt-2">
                         <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
                           Now Playing
@@ -623,7 +648,9 @@ export default function Queue() {
                             />
                           ) : (
                             <div className="h-[56px] w-full bg-neutral-800/20 rounded-md animate-pulse px-3 flex items-center">
-                              <span className="text-xs text-neutral-400">Loading current track...</span>
+                              <span className="text-xs text-neutral-400">
+                                {isEffectivelyOffline ? "Track unavailable offline..." : "Loading current track..."}
+                              </span>
                             </div>
                           )
                         ) : (
@@ -704,7 +731,7 @@ export default function Queue() {
                                 isMobile={isMobile}
                                 onPlay={() => {
                                   if (!user) return authModal.onOpen('sign_in');
-                                  player.setId(item.id);
+                                  player.setId(item.id, player.activeContext);
                                 }}
                                 onRemove={() =>
                                   player.removeFromContext(item.id)
@@ -753,6 +780,12 @@ export default function Queue() {
                               />
                             ))}
                           </Reorder.Group>
+                        </div>
+                      )}
+
+                      {priorityList.length === 0 && contextItems.length === 0 && autoplayItems.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-16 text-neutral-500 text-xs">
+                          <p>Queue is empty</p>
                         </div>
                       )}
                     </div>

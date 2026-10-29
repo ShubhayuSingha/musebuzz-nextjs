@@ -167,7 +167,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
             player.setIsPlaying(!player.isPlaying);
             return;
         }
-        player.playFromContext(id, context);
+        player.playFromContext(id, context, songs.map(s => s.id));
      } else {
         player.setIds(songs.map(s => s.id), context, user?.id);
         player.setId(id, context);

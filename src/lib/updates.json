@@ -1,8 +1,31 @@
 [
   {
+    "versionName": "v2.3",
+    "date": "30 Oct 2026",
+    "time": "03:35 AM IST",
+    "title": "⚡Download Controls & Queue Polish⚡",
+    "description": "Added pause/resume download controls, in-view fuzzy search, offline search fallback, and comprehensive queue fixes.",
+    "changes": [
+      "Added pause, resume, and cancel controls for playlist and album downloads",
+      "Preserved partially downloaded songs in offline database for immediate playback",
+      "Implemented real-time green checkmark badge for downloaded songs across views and queue",
+      "Added in-view fuzzy search bar for playlists, albums, and liked songs",
+      "Fixed search bar recent searches displaying default vinyl icon instead of album art",
+      "Added IndexedDB fallback for search suggestions when launched offline from taskbar",
+      "Fixed ML playlist search navigation causing unexpected offline screen",
+      "Fixed queue bottom padding to prevent the last song hiding behind the bottom player",
+      "Fixed blank black space in queue when playing newly added tracks from context",
+      "Fixed unliked songs lingering in liked songs queue by synchronizing context IDs",
+      "Resolved Next.js dev infinite compiling loop on /liked during hydration",
+      "Added hover tooltips for truncated song, artist, and album titles",
+      "Fixed remove download menu positioning behind sidebar with z-index elevation",
+      "Improved contrast of inactive lyric lines in lyrics sync admin tool"
+    ]
+  },
+  {
     "versionName": "v2.2",
     "date": "29 Oct 2026",
-    "time": "7:30 PM IST",
+    "time": "8:10 PM IST",
     "title": "⚡Revamped Playback⚡",
     "description": "Extended library with newer songs.",
     "changes": [

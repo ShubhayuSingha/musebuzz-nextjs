@@ -5,7 +5,6 @@ import DownloadButton from '@/components/DownloadButton';
 import LikedContent from './LikedContent';
 import { offlineDb } from '@/lib/offlineDb';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
-import useDownloadStore from '@/stores/useDownloadStore';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { RiWifiOffLine } from 'react-icons/ri';
 
@@ -13,15 +12,14 @@ interface LikedViewProps {
   initialSongs: any[];
 }
 
-const autoSyncedUsers = new Set<string>();
-
 export default function LikedView({ initialSongs }: LikedViewProps) {
   const [songs, setSongs] = useState<any[]>(initialSongs);
-  const [isLoading, setIsLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { isOnline, isOfflineMode } = useOfflineModeStore();
   const supabase = useSupabaseClient();
   const user = useUser();
+  const userId = user?.id;
+  const lastFetchedUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -29,18 +27,31 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
 
   const isDeviceOffline = mounted && (!isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine));
 
+  // Sync state if initialSongs prop updates with server data
+  useEffect(() => {
+    if (initialSongs && initialSongs.length > 0) {
+      setSongs(initialSongs);
+      lastFetchedUserIdRef.current = userId || 'server';
+    }
+  }, [initialSongs, userId]);
+
   useEffect(() => {
     if (!mounted) return;
-    // If device is offline, load from offlineDb
+
+    // Offline mode: load directly from IndexedDB
     if (isDeviceOffline) {
       const loadOfflineLiked = async () => {
         try {
-          if (user?.id && offlineDb.liked_songs) {
-            // 1. Relational join matching Supabase: query offlineDb.liked_songs
-            const likedRows = await offlineDb.liked_songs
-              .where('user_id')
-              .equals(user.id)
-              .toArray();
+          let targetUserId = userId;
+          if (!targetUserId && offlineDb.liked_songs) {
+            const firstRow = await offlineDb.liked_songs.toCollection().first();
+            targetUserId = firstRow?.user_id;
+          }
+
+          if (offlineDb.liked_songs) {
+            const likedRows = targetUserId 
+              ? await offlineDb.liked_songs.where('user_id').equals(targetUserId).toArray()
+              : await offlineDb.liked_songs.toArray();
 
             if (likedRows.length > 0) {
               likedRows.sort((a, b) => {
@@ -76,10 +87,10 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
           }
 
           // Fallback: check legacy offlineDb.playlists in case user hasn't synced yet
-          let offlinePlaylist = user?.id ? await offlineDb.playlists.get(`liked_${user.id}`) : undefined;
+          let offlinePlaylist = userId ? await offlineDb.playlists.get(`liked_${userId}`) : undefined;
           if (!offlinePlaylist) {
             const fallback = await offlineDb.playlists.get('liked');
-            if (fallback && (!fallback.user_id || fallback.user_id === user?.id)) {
+            if (fallback && (!fallback.user_id || fallback.user_id === userId)) {
               offlinePlaylist = fallback;
             }
           }
@@ -111,24 +122,15 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
       return;
     }
 
-    // Online mode: if initialSongs were provided, keep them
+    // Online mode: if initialSongs were already provided, don't re-fetch
     if (initialSongs && initialSongs.length > 0) {
-      setSongs(initialSongs);
-      // 🟢 AUTO-SYNC: If Liked Songs is downloaded and online, silently ensure all songs are cached (run at most once per session)
-      const syncKey = user?.id || 'default';
-      if (!autoSyncedUsers.has(syncKey) && useDownloadStore.getState().downloadedIds.has('liked')) {
-        autoSyncedUsers.add(syncKey);
-        import('@/lib/downloadService').then(({ downloadLikedSongs }) => {
-          downloadLikedSongs(supabase, true);
-        });
-      }
       return;
     }
 
-    // If online but initialSongs was empty, re-fetch on client if user exists
-    if (user) {
+    // If online but initialSongs was empty, re-fetch exactly once for this authenticated user
+    if (userId && lastFetchedUserIdRef.current !== userId) {
+      lastFetchedUserIdRef.current = userId;
       const fetchClientLiked = async () => {
-        setIsLoading(true);
         try {
           const { data } = await supabase
             .from('liked_songs')
@@ -144,7 +146,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
                 )
               )
             `)
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
           if (data) {
@@ -164,25 +166,14 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
               };
             }).filter((s: any) => s.id);
             setSongs(mapped);
-
-            // Auto-sync client-fetched songs if already marked downloaded (at most once per session)
-            const syncKey = user.id;
-            if (!autoSyncedUsers.has(syncKey) && useDownloadStore.getState().downloadedIds.has('liked')) {
-              autoSyncedUsers.add(syncKey);
-              import('@/lib/downloadService').then(({ downloadLikedSongs }) => {
-                downloadLikedSongs(supabase, true);
-              });
-            }
           }
         } catch (e) {
           console.warn('[LikedView] Client fetch failed:', e);
-        } finally {
-          setIsLoading(false);
         }
       };
       fetchClientLiked();
     }
-  }, [isDeviceOffline, initialSongs, user, mounted]);
+  }, [isDeviceOffline, userId, mounted, initialSongs?.length, supabase]);
 
   return (
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">

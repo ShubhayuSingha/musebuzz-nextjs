@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Image from 'next/image'; 
 import { useUser } from '@supabase/auth-helpers-react';
 import usePlayerStore from '@/stores/usePlayerStore';
@@ -14,6 +14,9 @@ import { toast } from 'react-hot-toast';
 
 import SongContextMenu from '@/components/SongContextMenu';
 import useAuthModalStore from '@/stores/useAuthModalStore';
+import ViewSearchBar from '@/components/ViewSearchBar';
+import useFuzzyFilter from '@/hooks/useFuzzyFilter';
+import DownloadedBadge from '@/components/DownloadedBadge';
 
 /* =======================
    HELPERS
@@ -76,15 +79,22 @@ interface LikedContentProps {
   songs: any[];
 }
 
+const SEARCH_KEYS = [
+  { name: 'title', weight: 0.6 },
+  { name: 'author', weight: 0.25 },
+  { name: 'albums.artists.name', weight: 0.25 },
+  { name: 'album_title', weight: 0.15 },
+  { name: 'albums.title', weight: 0.15 },
+];
+
 const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
   const router = useRouter();
   const user = useUser();
   const player = usePlayerStore();
   const authModal = useAuthModalStore();
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    if (!user) router.replace('/');
-  }, [user, router]);
+  const filteredSongs = useFuzzyFilter(songs, searchQuery, SEARCH_KEYS);
 
   const onPlay = (id: string) => {
     if (!user) {
@@ -94,14 +104,14 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
     const isCurrentContextActive = 
       player.activeContext?.type === 'liked' && 
-      player.activeContext?.id === 'liked-songs';
+      (player.activeContext?.id === 'liked-songs' || player.activeContext?.id === 'liked');
 
     if (isCurrentContextActive) {
       if (player.activeId === id && !player.isPlayingPriority) {
           player.setIsPlaying(!player.isPlaying);
           return;
       }
-      player.playFromContext(id, context); 
+      player.playFromContext(id, context, songs.map((song) => song.id)); 
     } else {
       player.setIds(
         songs.map((song) => song.id),
@@ -111,6 +121,21 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
       player.setId(id, context);
     }
   };
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-neutral-400">
+        <p className="text-white font-semibold text-lg mb-2">Sign in to view your Liked Songs</p>
+        <p className="text-sm text-neutral-400 mb-5">Save songs to your library by clicking the heart icon.</p>
+        <button
+          onClick={() => authModal.onOpen('sign_in')}
+          className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-full font-semibold text-sm transition shadow-lg shadow-purple-600/30 active:scale-95"
+        >
+          Sign In
+        </button>
+      </div>
+    );
+  }
 
   if (songs.length === 0) {
     return (
@@ -122,6 +147,20 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
   return (
     <div className="flex flex-col gap-y-2 w-full">
+      {/* Search & Filter Bar */}
+      <div className="flex items-center justify-between px-1 mb-2">
+        <ViewSearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search in Liked Songs..."
+        />
+        {searchQuery && (
+          <span className="text-xs text-neutral-400">
+            {filteredSongs.length} of {songs.length} song{songs.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
       {/* HEADER */}
       <div className="
         hidden md:grid 
@@ -151,14 +190,25 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
         </div>
       </div>
 
-      <motion.ol className="flex flex-col gap-y-1 w-full">
-        <AnimatePresence mode='popLayout'>
-          {songs.map((song, index) => {
+      {filteredSongs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+          <p className="text-sm">No songs found matching &ldquo;{searchQuery}&rdquo;</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="mt-2 text-xs text-purple-400 hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : (
+        <motion.ol className="flex flex-col gap-y-1 w-full">
+          <AnimatePresence mode='popLayout'>
+            {filteredSongs.map((song, index) => {
             const isActive = 
               player.activeId === song.id && 
               !player.isPlayingPriority && 
               player.activeContext?.type === 'liked' && 
-              player.activeContext?.id === 'liked-songs';
+              (player.activeContext?.id === 'liked-songs' || player.activeContext?.id === 'liked');
 
             const isPlaying = player.isPlaying;
 
@@ -241,16 +291,23 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
 
                       {/* TITLE */}
                       <div className="min-w-0 pr-4">
-                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>
-                          {song.title}
-                        </p>
-                        <p className="text-sm text-neutral-400 truncate">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p 
+                            title={song.title} 
+                            className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}
+                          >
+                            {song.title}
+                          </p>
+                          <DownloadedBadge songId={song.id} />
+                        </div>
+                        <p title={song.author} className="text-sm text-neutral-400 truncate">
                           {song.author}
                         </p>
                       </div>
 
                       {/* ALBUM */}
                       <p 
+                        title={song.album_title}
                         onClick={(e) => {
                           e.stopPropagation();
                           if (song.albums?.id) router.push(`/album/${song.albums.id}`);
@@ -261,7 +318,10 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                       </p>
 
                       {/* DATE */}
-                      <p className="text-sm text-neutral-400">
+                      <p 
+                        title={song.liked_created_at ? new Date(song.liked_created_at).toLocaleString() : undefined}
+                        className="text-sm text-neutral-400"
+                      >
                         {formatAddedDate(song.liked_created_at)}
                       </p>
 
@@ -291,8 +351,11 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                             </div>
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">
-                            <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                            <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                              <DownloadedBadge songId={song.id} />
+                            </div>
+                            <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                           </div>
                       </div>
                       <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
@@ -306,6 +369,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
           })}
         </AnimatePresence>
       </motion.ol>
+      )}
     </div>
   );
 };

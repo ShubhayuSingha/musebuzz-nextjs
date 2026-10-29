@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { saveContextSettings, loadContextSettings } from '@/lib/playerContextSettings';
 import usePlaylistStore from '@/stores/usePlaylistStore'; 
 import { offlineDb } from '@/lib/offlineDb'; 
+import useDownloadStore from '@/stores/useDownloadStore'; 
 
 /* =========================
    TYPES
@@ -58,7 +59,7 @@ interface PlayerStore {
   /* Core Actions */
   setId: (id: string, context?: PlayerContext) => void;
   setIds: (ids: string[], context?: PlayerContext, userId?: string) => void;
-  playFromContext: (id: string, context: PlayerContext) => void; 
+  playFromContext: (id: string, context: PlayerContext, currentSongIds?: string[]) => void; 
   playAutoplayItem: (id: string) => void; 
   
   /* Restore Action */
@@ -281,42 +282,69 @@ const usePlayerStore = create<PlayerStore>()(
          });
       },
 
-      playFromContext: (id, context) => {
+      playFromContext: (id, context, currentSongIds) => {
         const state = get();
         updateLastAccessed(context);
 
         const { isShuffled, bucketA, activeId, isPlayingPriority, lastActiveContextId } = state;
-        const isSameContext = (state.activeContext?.id === context?.id) && !state.isPlayingAutoplay;
+        const isSameContext =
+          (state.activeContext?.id === context?.id ||
+            (state.activeContext?.type === 'liked' && context?.type === 'liked')) &&
+          !state.isPlayingAutoplay;
+
+        // Base context IDs: if caller passed currentSongIds, use them to synchronize context state
+        const effectiveBaseIds =
+          currentSongIds && currentSongIds.length > 0
+            ? currentSongIds
+            : bucketA.includes(id)
+            ? bucketA
+            : [...bucketA, id];
 
         if (!isShuffled) {
-            state.setId(id, context);
-            return;
-        }
-
-        const anchorId = isPlayingPriority ? lastActiveContextId : activeId;
-
-        if (!anchorId || !bucketA.includes(anchorId) || !isSameContext) {
-            state.setId(id, context);
-            return;
-        }
-
-        const list = [...bucketA];
-        const listWithoutTarget = list.filter(itemId => itemId !== id);
-        const anchorIndex = listWithoutTarget.indexOf(anchorId);
-        
-        listWithoutTarget.splice(anchorIndex + 1, 0, id);
-
-        set({
-            bucketA: listWithoutTarget,
-            shuffledOrder: listWithoutTarget, 
+          set({
+            ids: effectiveBaseIds,
+            sourceContextIds: effectiveBaseIds,
+            bucketA: effectiveBaseIds,
+            shuffledOrder: [],
             activeId: id,
             activeIdSignature: state.activeIdSignature + 1,
             isPlaying: true,
-            isPlayingPriority: false, 
-            isPlayingAutoplay: false, 
+            isPlayingPriority: false,
+            isPlayingAutoplay: false,
             autoplay: isSameContext ? state.autoplay : [],
             lastActiveContextId: id,
-            activeContext: context 
+            activeContext: context,
+          });
+          return;
+        }
+
+        // Shuffle Mode:
+        // Filter out any songs no longer present in effectiveBaseIds (e.g. unliked songs)
+        const validShuffled = state.shuffledOrder.filter((itemId) => effectiveBaseIds.includes(itemId));
+        // Add any missing songs from effectiveBaseIds
+        for (const sId of effectiveBaseIds) {
+          if (!validShuffled.includes(sId)) {
+            validShuffled.push(sId);
+          }
+        }
+
+        // Place the clicked song at the active position so playback starts immediately and remaining tracks follow
+        const listWithoutTarget = validShuffled.filter((itemId) => itemId !== id);
+        const newShuffledOrder = [id, ...listWithoutTarget];
+
+        set({
+          ids: effectiveBaseIds,
+          sourceContextIds: effectiveBaseIds,
+          bucketA: newShuffledOrder,
+          shuffledOrder: newShuffledOrder,
+          activeId: id,
+          activeIdSignature: state.activeIdSignature + 1,
+          isPlaying: true,
+          isPlayingPriority: false,
+          isPlayingAutoplay: false,
+          autoplay: isSameContext ? state.autoplay : [],
+          lastActiveContextId: id,
+          activeContext: context,
         });
       },
 
@@ -396,14 +424,19 @@ const usePlayerStore = create<PlayerStore>()(
 
       syncLikedSongs: (songId, action) => {
         const state = get();
-        if (state.activeContext?.id !== 'liked-songs') return;
-        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
+        const isLikedContext =
+          state.activeContext?.type === 'liked' ||
+          state.activeContext?.id === 'liked-songs' ||
+          state.activeContext?.id === 'liked';
+        if (!isLikedContext) return;
+        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds, ids } = state;
         const currentList = [...bucketA]; 
         if (action === 'remove') {
             const newList = currentList.filter(id => id !== songId);
             set({ 
+                ids: (ids || []).filter(id => id !== songId),
                 bucketA: newList,
-                shuffledOrder: isShuffled ? newList : [],
+                shuffledOrder: isShuffled ? (shuffledOrder || []).filter(id => id !== songId) : [],
                 sourceContextIds: sourceContextIds.filter(id => id !== songId) 
             });
             return;
@@ -417,6 +450,7 @@ const usePlayerStore = create<PlayerStore>()(
             const randomIndex = Math.floor(Math.random() * (max - min + 1)) + min;
             currentList.splice(randomIndex, 0, songId);
             set({
+                ids: [songId, ...(ids || [])],
                 bucketA: currentList,
                 shuffledOrder: isShuffled ? currentList : [],
                 sourceContextIds: newSource
@@ -426,13 +460,14 @@ const usePlayerStore = create<PlayerStore>()(
       syncPlaylistQueue: (songId, playlistId, action) => {
         const state = get();
         if (state.activeContext?.id !== playlistId) return;
-        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds } = state;
+        const { bucketA, activeId, isShuffled, shuffledOrder, sourceContextIds, ids } = state;
         const currentList = [...bucketA]; 
         if (action === 'remove') {
             const newList = currentList.filter(id => id !== songId);
             set({ 
+                ids: (ids || []).filter(id => id !== songId),
                 bucketA: newList,
-                shuffledOrder: isShuffled ? newList : [],
+                shuffledOrder: isShuffled ? (shuffledOrder || []).filter(id => id !== songId) : [],
                 sourceContextIds: sourceContextIds.filter(id => id !== songId) 
             });
             return;
@@ -450,6 +485,7 @@ const usePlayerStore = create<PlayerStore>()(
                 currentList.push(songId);
             }
             set({
+                ids: [...(ids || []), songId],
                 bucketA: currentList,
                 shuffledOrder: isShuffled ? currentList : [],
                 sourceContextIds: newSource
@@ -540,136 +576,179 @@ const usePlayerStore = create<PlayerStore>()(
 playNext: () => {
         const { bucketA, bucketB, autoplay, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, isPlayingAutoplay, repeatMode } = get();
 
-        // 1. 🟢 IMMEDIATELY STOP
-        // This forces the current PlayerContent to call sound.pause() via its useEffect
-        
+        const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+                          (typeof window !== 'undefined' && (window as any).__musebuzzIsOffline);
+        const downloadedSongIds = useDownloadStore.getState().downloadedSongIds;
+        const isOfflineWithDownloads = isOffline && downloadedSongIds.size > 0;
 
-        // 2. 🟢 THE gap is removed
-        
-          const state = get(); // Get fresh state after delay
+        // 1. Priority Queue
+        if (bucketB.length > 0) {
+            let nextIndex = 0;
+            if (isOfflineWithDownloads) {
+                nextIndex = bucketB.findIndex((item) => downloadedSongIds.has(item.id));
+            }
 
-          // --- YOUR ORIGINAL LOGIC STARTS HERE ---
-          
-          // 1. Priority
-          if (bucketB.length > 0) {
-              const [next, ...rest] = bucketB;
-              set({
-                  activeId: next.id,
-                  activeIdSignature: activeIdSignature + 1,
-                  bucketB: rest, 
-                  isPlayingPriority: true,
-                  isPlayingAutoplay: false, 
-                  isPlaying: true
-              });
-              return;
-          }
+            if (nextIndex !== -1) {
+                const next = bucketB[nextIndex];
+                const rest = bucketB.filter((_, idx) => idx !== nextIndex);
+                set({
+                    activeId: next.id,
+                    activeIdSignature: activeIdSignature + 1,
+                    bucketB: rest, 
+                    isPlayingPriority: true,
+                    isPlayingAutoplay: false, 
+                    isPlaying: true
+                });
+                return;
+            }
+        }
 
-          // 2. Autoplay
-          if (isPlayingAutoplay) {
-               const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
-               const nextIdx = currentIdx + 1;
-               if (nextIdx < autoplay.length) {
-                   set({
-                       activeId: autoplay[nextIdx],
-                       activeIdSignature: activeIdSignature + 1,
-                       isPlaying: true
-                   });
-               }
-               return; 
-          }
+        // 2. Autoplay (never active when offline)
+        if (isPlayingAutoplay && !isOffline) {
+             const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
+             const nextIdx = currentIdx + 1;
+             if (nextIdx < autoplay.length) {
+                 set({
+                     activeId: autoplay[nextIdx],
+                     activeIdSignature: activeIdSignature + 1,
+                     isPlaying: true
+                 });
+             }
+             return; 
+        }
 
-          // 3. Context
-          if (bucketA.length > 0) {
-               const refId = isPlayingPriority ? lastActiveContextId : activeId;
-               const currentIdx = refId ? bucketA.indexOf(refId) : -1;
-               let nextIdx = currentIdx + 1;
+        // 3. Context
+        if (bucketA.length > 0) {
+             const refId = isPlayingPriority ? lastActiveContextId : activeId;
+             const currentIdx = refId ? bucketA.indexOf(refId) : -1;
+             let nextIdx = -1;
 
-               if (nextIdx >= bucketA.length) {
-                   if (repeatMode === 'off') {
-                       if (autoplay.length > 0) {
-                           set({
-                               activeId: autoplay[0],
-                               activeIdSignature: activeIdSignature + 1,
-                               isPlayingPriority: false,
-                               isPlayingAutoplay: true, 
-                               isPlaying: true
-                           });
-                           return;
-                       } else {
-                           set({ isPlaying: false, isPlayingPriority: false });
-                           return;
-                       }
-                   }
-                   if (repeatMode === 'context') {
-                       nextIdx = 0; 
-                   }
-               }
-               const nextId = bucketA[nextIdx];
-               set({
-                   activeId: nextId,
-                   activeIdSignature: activeIdSignature + 1,
-                   lastActiveContextId: nextId, 
-                   isPlayingPriority: false, 
-                   isPlayingAutoplay: false,
-                   isPlaying: true
-               });
-          }
-        
+             if (isOfflineWithDownloads) {
+                 // Scan forward for next downloaded track
+                 for (let i = currentIdx + 1; i < bucketA.length; i++) {
+                     if (downloadedSongIds.has(bucketA[i])) {
+                         nextIdx = i;
+                         break;
+                     }
+                 }
+                 // If repeatMode is context and none found after, loop back from beginning
+                 if (nextIdx === -1 && repeatMode === 'context') {
+                     for (let i = 0; i <= currentIdx; i++) {
+                         if (downloadedSongIds.has(bucketA[i])) {
+                             nextIdx = i;
+                             break;
+                         }
+                     }
+                 }
+             } else {
+                 let candidate = currentIdx + 1;
+                 if (candidate >= bucketA.length) {
+                     if (repeatMode === 'off') {
+                         if (autoplay.length > 0 && !isOffline) {
+                             set({
+                                 activeId: autoplay[0],
+                                 activeIdSignature: activeIdSignature + 1,
+                                 isPlayingPriority: false,
+                                 isPlayingAutoplay: true, 
+                                 isPlaying: true
+                             });
+                             return;
+                         } else {
+                             set({ isPlaying: false, isPlayingPriority: false });
+                             return;
+                         }
+                     }
+                     if (repeatMode === 'context') {
+                         candidate = 0; 
+                     }
+                 }
+                 nextIdx = candidate;
+             }
+
+             if (nextIdx !== -1 && nextIdx < bucketA.length) {
+                 const nextId = bucketA[nextIdx];
+                 set({
+                     activeId: nextId,
+                     activeIdSignature: activeIdSignature + 1,
+                     lastActiveContextId: nextId, 
+                     isPlayingPriority: false, 
+                     isPlayingAutoplay: false,
+                     isPlaying: true
+                 });
+             } else {
+                 set({ isPlaying: false, isPlayingPriority: false });
+             }
+        }
       },
 
 playPrevious: () => {
         const { bucketA, autoplay, activeId, activeIdSignature, lastActiveContextId, isPlayingPriority, isPlayingAutoplay } = get();
 
-        // 1. 🟢 IMMEDIATELY STOP        
+        const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+                          (typeof window !== 'undefined' && (window as any).__musebuzzIsOffline);
+        const downloadedSongIds = useDownloadStore.getState().downloadedSongIds;
+        const isOfflineWithDownloads = isOffline && downloadedSongIds.size > 0;
 
-        // 2. 🟢 THE GAP is removed
+        if (isPlayingPriority && lastActiveContextId) {
+            set({
+                activeId: lastActiveContextId,
+                activeIdSignature: activeIdSignature + 1,
+                isPlayingPriority: false, 
+                isPlaying: true
+            });
+            return;
+        }
 
-          if (isPlayingPriority && lastActiveContextId) {
-              set({
-                  activeId: lastActiveContextId,
-                  activeIdSignature: activeIdSignature + 1,
-                  isPlayingPriority: false, 
-                  isPlaying: true
-              });
-              return;
-          }
+        if (isPlayingAutoplay && !isOffline) {
+            const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
+            if (currentIdx > 0) {
+                set({
+                    activeId: autoplay[currentIdx - 1],
+                    activeIdSignature: activeIdSignature + 1,
+                    isPlaying: true
+                });
+            } else {
+                if (bucketA.length > 0) {
+                    const lastContextId = bucketA[bucketA.length - 1];
+                    set({
+                        activeId: lastContextId,
+                        activeIdSignature: activeIdSignature + 1,
+                        lastActiveContextId: lastContextId,
+                        isPlayingAutoplay: false, 
+                        isPlaying: true
+                    });
+                }
+            }
+            return;
+        }
 
-          if (isPlayingAutoplay) {
-              const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
-              if (currentIdx > 0) {
-                  set({
-                      activeId: autoplay[currentIdx - 1],
-                      activeIdSignature: activeIdSignature + 1,
-                      isPlaying: true
-                  });
-              } else {
-                  if (bucketA.length > 0) {
-                      const lastContextId = bucketA[bucketA.length - 1];
-                      set({
-                          activeId: lastContextId,
-                          activeIdSignature: activeIdSignature + 1,
-                          lastActiveContextId: lastContextId,
-                          isPlayingAutoplay: false, 
-                          isPlaying: true
-                      });
-                  }
-              }
-              return;
-          }
+        if (!bucketA.length) return;
+        const currentIdx = activeId ? bucketA.indexOf(activeId) : -1;
+        let prevIdx = -1;
 
-          if (!bucketA.length) return;
-          let idx = activeId ? bucketA.indexOf(activeId) : -1;
-          let prevIdx = idx - 1;
-          if (prevIdx < 0) prevIdx = 0;
-          const prevId = bucketA[prevIdx];
-          set({
-              activeId: prevId,
-              activeIdSignature: activeIdSignature + 1,
-              lastActiveContextId: prevId,
-              isPlayingPriority: false,
-              isPlaying: true
-          });
-        
+        if (isOfflineWithDownloads) {
+            // Scan backwards for previous downloaded track
+            for (let i = currentIdx - 1; i >= 0; i--) {
+                if (downloadedSongIds.has(bucketA[i])) {
+                    prevIdx = i;
+                    break;
+                }
+            }
+        } else {
+            prevIdx = currentIdx > 0 ? currentIdx - 1 : 0;
+        }
+
+        if (prevIdx !== -1) {
+            const prevId = bucketA[prevIdx];
+            set({
+                activeId: prevId,
+                activeIdSignature: activeIdSignature + 1,
+                lastActiveContextId: prevId,
+                isPlayingPriority: false,
+                isPlayingAutoplay: false,
+                isPlaying: true
+            });
+        }
       },
 
       setIsPlaying: (value) => set({ isPlaying: value }),

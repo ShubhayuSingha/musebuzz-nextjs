@@ -1,9 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import usePlayerStore from '@/stores/usePlayerStore';
 import { useUser, useSupabaseClient } from '@supabase/auth-helpers-react';
-import { BsPlayFill, BsPauseFill, BsClock, BsThreeDotsVertical } from 'react-icons/bs'; 
+import { BsPlayFill, BsPauseFill, BsClock, BsThreeDotsVertical } from 'react-icons/bs';
 import LikeButton from '@/components/LikeButton';
 import AddToQueueButton from '@/components/AddToQueueButton';
 import PlayingAnimation from '@/components/PlayingAnimation';
@@ -13,6 +13,9 @@ import { toast } from 'react-hot-toast';
 import SongContextMenu from '@/components/SongContextMenu';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import useAuthModalStore from '@/stores/useAuthModalStore';
+import ViewSearchBar from '@/components/ViewSearchBar';
+import useFuzzyFilter from '@/hooks/useFuzzyFilter';
+import DownloadedBadge from '@/components/DownloadedBadge';
 
 // 🟢 FIX: Added local helper function
 const formatTime = (seconds: number) => {
@@ -26,7 +29,7 @@ interface AlbumContentProps {
   songs: any[];
   albumName: string;
   albumId: string;
-  artistId?: string; 
+  artistId?: string;
 }
 
 const listVariants: Variants = {
@@ -39,11 +42,20 @@ const rowVariants: Variants = {
   show: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 220, damping: 22, mass: 0.7 } },
 };
 
+const SEARCH_KEYS = [
+  { name: 'title', weight: 0.7 },
+  { name: 'author', weight: 0.3 },
+  { name: 'artists.name', weight: 0.3 },
+];
+
 const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, artistId }) => {
   const player = usePlayerStore();
   const user = useUser();
   const supabase = useSupabaseClient();
   const authModal = useAuthModalStore();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSongs = useFuzzyFilter(songs, searchQuery, SEARCH_KEYS);
 
   const onPlay = async (id: string) => {
     if (!user) {
@@ -51,37 +63,37 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
     }
     const context = { type: 'album' as const, title: albumName, id: albumId };
 
-    const isCurrentContextActive = 
-      player.activeContext?.type === 'album' && 
+    const isCurrentContextActive =
+      player.activeContext?.type === 'album' &&
       player.activeContext?.id === albumId;
 
     if (isCurrentContextActive) {
       if (player.activeId === id && !player.isPlayingPriority) {
-          player.setIsPlaying(!player.isPlaying);
-          return;
+        player.setIsPlaying(!player.isPlaying);
+        return;
       }
-      player.playFromContext(id, context);
+      player.playFromContext(id, context, songs.map((song) => song.id));
     } else {
       player.setIds(
         songs.map((song) => song.id),
         context,
-        user?.id 
+        user?.id
       );
       player.setId(id, context);
     }
-    
+
     const isDeviceOnline = typeof navigator !== 'undefined' && navigator.onLine && !useOfflineModeStore.getState().isOfflineMode && useOfflineModeStore.getState().isOnline;
 
     if (user && isDeviceOnline) {
-       try {
-         await supabase
+      try {
+        await supabase
           .from('saved_albums')
           .update({ last_accessed_at: new Date().toISOString() })
           .eq('user_id', user.id)
           .eq('album_id', albumId);
-       } catch {
-         // Silently ignore offline error
-       }
+      } catch {
+        // Silently ignore offline error
+      }
     }
   };
 
@@ -91,7 +103,20 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
 
   return (
     <div className="flex flex-col gap-y-2 w-full">
-      
+      {/* Search & Filter Bar */}
+      <div className="flex items-center justify-between px-1 mb-2">
+        <ViewSearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={`Search in ${albumName}...`}
+        />
+        {searchQuery && (
+          <span className="text-xs text-neutral-400">
+            {filteredSongs.length} of {songs.length} song{songs.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
       {/* Sticky Header Row */}
       <div className="
         hidden md:grid 
@@ -118,28 +143,39 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
         </div>
       </div>
 
-      <motion.ol
-        variants={listVariants}
-        initial="hidden"
-        animate="show"
-        className="flex flex-col gap-y-1"
-      >
-        {songs.map((song, index) => {
-          const isActive = 
-            player.activeId === song.id && 
-            !player.isPlayingPriority && 
-            player.activeContext?.type === 'album' && 
-            player.activeContext?.id === albumId;
-            
-          const isPlaying = player.isPlaying;
+      {filteredSongs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+          <p className="text-sm">No songs found matching &ldquo;{searchQuery}&rdquo;</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="mt-2 text-xs text-purple-400 hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : (
+        <motion.ol
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+          className="flex flex-col gap-y-1"
+        >
+          {filteredSongs.map((song, index) => {
+            const isActive =
+              player.activeId === song.id &&
+              !player.isPlayingPriority &&
+              player.activeContext?.type === 'album' &&
+              player.activeContext?.id === albumId;
 
-          return (
-            <SongContextMenu 
-                key={song.id} 
+            const isPlaying = player.isPlaying;
+
+            return (
+              <SongContextMenu
+                key={song.id}
                 songId={song.id}
-                artistId={artistId} 
-                isReadOnly={true}   
-            >
+                artistId={artistId}
+                isReadOnly={true}
+              >
                 <motion.li
                   variants={rowVariants}
                   whileTap={{ scale: 0.996 }}
@@ -158,7 +194,7 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
                   `}
                 >
                   {/* === DESKTOP LAYOUT === */}
-                  <div 
+                  <div
                     onClick={() => onPlay(song.id)}
                     className="hidden md:grid grid-cols-[40px_1fr_80px_60px] items-center px-3 py-2 w-full"
                   >
@@ -181,8 +217,11 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
 
                     {/* TITLE */}
                     <div className="min-w-0 pr-4">
-                      <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                      <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                        <DownloadedBadge songId={song.id} />
+                      </div>
+                      <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                     </div>
 
                     {/* ACTIONS */}
@@ -196,27 +235,31 @@ const AlbumContent: React.FC<AlbumContentProps> = ({ songs, albumName, albumId, 
                   </div>
 
                   {/* === MOBILE LAYOUT === */}
-                  <div 
+                  <div
                     className="flex md:hidden items-center justify-between px-3 py-2 w-full gap-x-3"
                   >
                     <div className="flex items-center min-w-0 flex-1 gap-x-3" onClick={() => onPlay(song.id)}>
                       {isActive && isPlaying && (
-                         <div className="flex-shrink-0"><PlayingAnimation /></div>
+                        <div className="flex-shrink-0"><PlayingAnimation /></div>
                       )}
                       <div className="flex flex-col min-w-0">
-                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                        <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                          <DownloadedBadge songId={song.id} />
+                        </div>
+                        <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                       </div>
                     </div>
                     <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
-                       <BsThreeDotsVertical size={20} />
+                      <BsThreeDotsVertical size={20} />
                     </button>
                   </div>
                 </motion.li>
-            </SongContextMenu>
-          );
-        })}
-      </motion.ol>
+              </SongContextMenu>
+            );
+          })}
+        </motion.ol>
+      )}
     </div>
   );
 };

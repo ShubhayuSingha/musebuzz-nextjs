@@ -9,7 +9,8 @@ import {
 import { 
   removeAudioFromCache, 
   removeImageFromCache,
-  isAudioCached 
+  isAudioCached,
+  clearAllOfflineStorage 
 } from './offlineAudioStorage';
 
 /**
@@ -194,18 +195,74 @@ export async function saveLikedSongsToDb(
 }
 
 /**
+ * Scans offline database for any orphaned song references, songs with 0 references,
+ * and clears cache when all collections have been removed.
+ */
+export async function cleanupOrphanedOfflineData(): Promise<void> {
+  try {
+    const [albumCount, playlistCount, likedCount] = await Promise.all([
+      offlineDb.albums.count(),
+      offlineDb.playlists.filter(p => p.id !== 'liked' && !p.id.startsWith('liked_')).count(),
+      offlineDb.liked_songs ? offlineDb.liked_songs.count() : 0
+    ]);
+
+    // If NO albums, playlists, or liked songs are saved anymore:
+    // User has deleted all downloads! Reset everything to pristine 0 MB state!
+    if (albumCount === 0 && playlistCount === 0 && likedCount === 0) {
+      await clearAllOfflineStorage();
+      return;
+    }
+
+    // Otherwise, clean up individual orphaned songs with 0 references
+    const allSongs = await offlineDb.songs.toArray();
+    for (const song of allSongs) {
+      await pruneSongIfUnreferenced(song.id);
+    }
+  } catch (err) {
+    console.warn('[OfflineManager] cleanupOrphanedOfflineData error:', err);
+  }
+}
+
+/**
  * Removes all liked songs for a user and cleans up unreferenced audio files
  */
-export async function removeLikedSongsFromDb(userId: string): Promise<void> {
-  const likedRows = await offlineDb.liked_songs.where('user_id').equals(userId).toArray();
-  const songIds = likedRows.map((r) => r.song_id);
+export async function removeLikedSongsFromDb(userId?: string): Promise<void> {
+  let targetUserId = userId;
+  if (!targetUserId && offlineDb.liked_songs) {
+    const firstRow = await offlineDb.liked_songs.toCollection().first();
+    targetUserId = firstRow?.user_id;
+  }
 
-  // Also check if any legacy playlist exists with songs
-  const legacyPlaylist = (await offlineDb.playlists.get(`liked_${userId}`)) || (await offlineDb.playlists.get('liked'));
-  if (legacyPlaylist?.playlist_songs) {
-    for (const ps of legacyPlaylist.playlist_songs) {
+  // 1. Collect all song IDs from liked_songs
+  let songIds: string[] = [];
+  if (offlineDb.liked_songs) {
+    const likedRows = targetUserId
+      ? await offlineDb.liked_songs.where('user_id').equals(targetUserId).toArray()
+      : await offlineDb.liked_songs.toArray();
+    songIds = likedRows.map((r) => r.song_id);
+  }
+
+  // 2. Also check if any legacy playlist exists with songs
+  const legacyPlaylists = await offlineDb.playlists
+    .filter((p) => p.id === 'liked' || p.id.startsWith('liked_'))
+    .toArray();
+  for (const pl of legacyPlaylists) {
+    for (const ps of (pl.playlist_songs || [])) {
       if (ps.songs?.id && !songIds.includes(ps.songs.id)) {
         songIds.push(ps.songs.id);
+      }
+    }
+  }
+
+  // 3. Also check song_references where parent_type is 'liked'
+  if (offlineDb.song_references) {
+    const likedRefs = await offlineDb.song_references
+      .where('parent_type')
+      .equals('liked')
+      .toArray();
+    for (const ref of likedRefs) {
+      if (!songIds.includes(ref.song_id)) {
+        songIds.push(ref.song_id);
       }
     }
   }
@@ -215,16 +272,38 @@ export async function removeLikedSongsFromDb(userId: string): Promise<void> {
     offlineDb.song_references,
     offlineDb.playlists
   ], async () => {
-    await offlineDb.liked_songs.where('user_id').equals(userId).delete();
-    await offlineDb.song_references.where('parent_id').equals(userId).delete();
-    await offlineDb.playlists.delete(`liked_${userId}`);
+    if (offlineDb.liked_songs) {
+      if (targetUserId) {
+        await offlineDb.liked_songs.where('user_id').equals(targetUserId).delete();
+      } else {
+        await offlineDb.liked_songs.clear();
+      }
+    }
+
+    if (offlineDb.song_references) {
+      if (targetUserId) {
+        await offlineDb.song_references.where('parent_id').equals(targetUserId).delete();
+      }
+      await offlineDb.song_references
+        .filter((r) => r.parent_type === 'liked' || r.parent_id === 'liked' || r.parent_id.startsWith('liked_'))
+        .delete();
+    }
+
+    for (const pl of legacyPlaylists) {
+      await offlineDb.playlists.delete(pl.id);
+    }
     await offlineDb.playlists.delete('liked');
+    if (targetUserId) {
+      await offlineDb.playlists.delete(`liked_${targetUserId}`);
+    }
   });
 
   // Prune unreferenced songs and cached audio
   for (const songId of songIds) {
     await pruneSongIfUnreferenced(songId);
   }
+
+  await cleanupOrphanedOfflineData();
 }
 
 /**
@@ -293,6 +372,11 @@ export async function removeAlbumFromDb(albumId: string, userId?: string): Promi
       .where('parent_id')
       .equals(albumId)
       .delete();
+
+    // 3. Clear any saved_albums records for this album
+    if (offlineDb.saved_albums) {
+      await offlineDb.saved_albums.where('album_id').equals(albumId).delete();
+    }
   });
 
   // 3. Prune songs whose reference count reached 0
@@ -304,6 +388,8 @@ export async function removeAlbumFromDb(albumId: string, userId?: string): Promi
   if (album.image_url) {
     await removeImageFromCache(album.image_url);
   }
+
+  await cleanupOrphanedOfflineData();
 }
 
 /**
@@ -312,7 +398,7 @@ export async function removeAlbumFromDb(albumId: string, userId?: string): Promi
 export async function removePlaylistFromDb(playlistId: string, userId?: string): Promise<void> {
   const isLiked = playlistId === 'liked' || playlistId.startsWith('liked_');
   if (isLiked) {
-    await removeLikedSongsFromDb(userId || '');
+    await removeLikedSongsFromDb(userId);
     return;
   }
 
@@ -345,6 +431,8 @@ export async function removePlaylistFromDb(playlistId: string, userId?: string):
   if (playlist.image_url) {
     await removeImageFromCache(playlist.image_url);
   }
+
+  await cleanupOrphanedOfflineData();
 }
 
 /**

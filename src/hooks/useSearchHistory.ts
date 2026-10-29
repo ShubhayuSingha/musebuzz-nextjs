@@ -16,12 +16,13 @@ export interface SearchHistoryItem {
 
 export const useSearchHistory = () => {
   const user = useUser();
+  const userId = user?.id;
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // 1. Fetch the latest 20 items
   const fetchHistory = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setHistory([]);
       setIsLoading(false);
       return;
@@ -30,7 +31,7 @@ export const useSearchHistory = () => {
     const { data, error } = await supabase
       .from('search_history')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('updated_at', { ascending: false })
       .limit(20);
 
@@ -38,7 +39,7 @@ export const useSearchHistory = () => {
       setHistory(data);
     }
     setIsLoading(false);
-  }, [user]);
+  }, [userId]);
 
   useEffect(() => {
     fetchHistory();

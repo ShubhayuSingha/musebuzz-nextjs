@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import usePlayerStore from '@/stores/usePlayerStore';
@@ -13,6 +13,9 @@ import { motion, Variants, AnimatePresence, PanInfo } from 'framer-motion';
 import { toast } from 'react-hot-toast';
 import SongContextMenu from '@/components/SongContextMenu';
 import useAuthModalStore from '@/stores/useAuthModalStore';
+import ViewSearchBar from '@/components/ViewSearchBar';
+import useFuzzyFilter from '@/hooks/useFuzzyFilter';
+import DownloadedBadge from '@/components/DownloadedBadge';
 
 // Helpers
 const formatTime = (seconds: number) => {
@@ -63,11 +66,22 @@ interface MixContentProps {
   playlistCreatedAt: string; // 🟢 ADD THIS
 }
 
+const SEARCH_KEYS = [
+  { name: 'title', weight: 0.6 },
+  { name: 'author', weight: 0.25 },
+  { name: 'albums.artists.name', weight: 0.25 },
+  { name: 'album_title', weight: 0.15 },
+  { name: 'albums.title', weight: 0.15 },
+];
+
 const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitle, playlistCreatedAt }) => {
   const router = useRouter();
   const player = usePlayerStore();
   const user = useUser();
   const authModal = useAuthModalStore();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSongs = useFuzzyFilter(songs, searchQuery, SEARCH_KEYS);
 
   const onPlay = (id: string) => {
     if (!user) {
@@ -75,21 +89,21 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
     }
     const context = { type: 'playlist' as const, title: playlistTitle, id: playlistId };
 
-    const isCurrentContextActive = 
-      player.activeContext?.type === 'playlist' && 
+    const isCurrentContextActive =
+      player.activeContext?.type === 'playlist' &&
       player.activeContext?.id === playlistId;
 
     if (isCurrentContextActive) {
       if (player.activeId === id && !player.isPlayingPriority) {
-          player.setIsPlaying(!player.isPlaying);
-          return;
+        player.setIsPlaying(!player.isPlaying);
+        return;
       }
-      player.playFromContext(id, context);
+      player.playFromContext(id, context, songs.map((song) => song.id));
     } else {
       player.setIds(
         songs.map((song) => song.id),
         context,
-        user?.id 
+        user?.id
       );
       player.setId(id, context);
     }
@@ -97,15 +111,28 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
 
   if (songs.length === 0) {
     return (
-        <div className="flex flex-col items-center justify-center mt-10 text-neutral-400">
-            <p>This mix is empty.</p>
-        </div>
+      <div className="flex flex-col items-center justify-center mt-10 text-neutral-400">
+        <p>This mix is empty.</p>
+      </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-y-2 w-full">
-      
+      {/* Search & Filter Bar */}
+      <div className="flex items-center justify-between px-1 mb-2">
+        <ViewSearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder={`Search in ${playlistTitle}...`}
+        />
+        {searchQuery && (
+          <span className="text-xs text-neutral-400">
+            {filteredSongs.length} of {songs.length} song{songs.length === 1 ? '' : 's'}
+          </span>
+        )}
+      </div>
+
       {/* HEADER ROW */}
       <div className="
         hidden md:grid 
@@ -135,27 +162,38 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
         </div>
       </div>
 
-      <motion.ol className="flex flex-col gap-y-1 w-full">
-        <AnimatePresence mode='popLayout'>
-          {songs.map((song, index) => {
-            const isActive = 
-              player.activeId === song.id && 
-              !player.isPlayingPriority && 
-              player.activeContext?.type === 'playlist' && 
-              player.activeContext?.id === playlistId;
-              
-            const isPlaying = player.isPlaying;
+      {filteredSongs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
+          <p className="text-sm">No songs found matching &ldquo;{searchQuery}&rdquo;</p>
+          <button
+            onClick={() => setSearchQuery('')}
+            className="mt-2 text-xs text-purple-400 hover:underline"
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : (
+        <motion.ol className="flex flex-col gap-y-1 w-full">
+          <AnimatePresence mode='popLayout'>
+            {filteredSongs.map((song, index) => {
+              const isActive =
+                player.activeId === song.id &&
+                !player.isPlayingPriority &&
+                player.activeContext?.type === 'playlist' &&
+                player.activeContext?.id === playlistId;
 
-            return (
-               // 🟢 WRAPPED with Context Menu (Read Only)
-               <SongContextMenu 
-                  key={song.id} 
-                  songId={song.id} 
+              const isPlaying = player.isPlaying;
+
+              return (
+                // 🟢 WRAPPED with Context Menu (Read Only)
+                <SongContextMenu
+                  key={song.id}
+                  songId={song.id}
                   playlistId={playlistId}
                   isReadOnly={true} // 🟢 Hides 'Remove' option
                   artistId={song.albums?.artists?.id} // Navigation
                   albumId={song.album_id} // Navigation
-               >
+                >
                   <motion.li
                     layout
                     custom={index}
@@ -179,7 +217,7 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
                     `}
                   >
                     {/* === DESKTOP LAYOUT === */}
-                    <div 
+                    <div
                       onClick={() => onPlay(song.id)}
                       className="hidden md:grid grid-cols-[40px_50px_4fr_3fr_2fr_80px_50px] items-center px-3 py-2 w-full"
                     >
@@ -202,26 +240,30 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
 
                       {/* IMAGE COLUMN */}
                       <div className="relative h-10 w-10 overflow-hidden rounded-md">
-                          <Image
-                              fill
-                              sizes="40px"
-                              src={song.imageUrl}
-                              alt={song.title}
-                              className="object-cover"
-                          />
+                        <Image
+                          fill
+                          sizes="40px"
+                          src={song.imageUrl}
+                          alt={song.title}
+                          className="object-cover"
+                        />
                       </div>
 
                       {/* TITLE */}
                       <div className="min-w-0 pr-4">
-                        <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                        <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                          <DownloadedBadge songId={song.id} />
+                        </div>
+                        <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
                       </div>
 
                       {/* ALBUM */}
-                      <p 
+                      <p
+                        title={song.album_title}
                         onClick={(e) => {
-                            e.stopPropagation();
-                            if (song.album_id) router.push(`/album/${song.album_id}`);
+                          e.stopPropagation();
+                          if (song.album_id) router.push(`/album/${song.album_id}`);
                         }}
                         className="text-sm text-neutral-400 truncate pr-4 hover:text-white hover:underline cursor-pointer transition"
                       >
@@ -229,8 +271,11 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
                       </p>
 
                       {/* DATE ADDED */}
-                      <p className="text-sm text-neutral-400">
-                          {formatAddedDate(song.added_at || playlistCreatedAt)}
+                      <p 
+                        title={new Date(song.added_at || playlistCreatedAt).toLocaleString()}
+                        className="text-sm text-neutral-400"
+                      >
+                        {formatAddedDate(song.added_at || playlistCreatedAt)}
                       </p>
 
                       {/* ACTIONS */}
@@ -241,37 +286,41 @@ const MixContent: React.FC<MixContentProps> = ({ songs, playlistId, playlistTitl
 
                       {/* DURATION */}
                       <p className="text-sm text-neutral-400 text-right">
-                          {formatTime(song.duration_seconds)}
+                        {formatTime(song.duration_seconds)}
                       </p>
                     </div>
 
                     {/* === MOBILE LAYOUT === */}
                     <div className="flex md:hidden items-center justify-between px-3 py-2 w-full gap-x-3">
                       <div className="flex items-center gap-x-3 flex-1 min-w-0" onClick={() => onPlay(song.id)}>
-                          <div className="flex items-center gap-x-3 flex-shrink-0">
-                            {isActive && isPlaying && (
-                               <PlayingAnimation />
-                            )}
-                            <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
-                                <Image fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
-                            </div>
+                        <div className="flex items-center gap-x-3 flex-shrink-0">
+                          {isActive && isPlaying && (
+                            <PlayingAnimation />
+                          )}
+                          <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md">
+                            <Image fill sizes="40px" src={song.imageUrl} alt={song.title} className="object-cover" />
                           </div>
-                          <div className="flex flex-col min-w-0 flex-1">
-                            <p className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
-                            <p className="text-sm text-neutral-400 truncate">{song.author}</p>
+                        </div>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                            <DownloadedBadge songId={song.id} />
                           </div>
+                          <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
+                        </div>
                       </div>
                       <button data-context-trigger="true" className="text-neutral-400 p-2 -mr-2 active:scale-95 transition">
-                         <BsThreeDotsVertical size={20} />
+                        <BsThreeDotsVertical size={20} />
                       </button>
                     </div>
 
                   </motion.li>
-               </SongContextMenu>
-            );
-          })}
-        </AnimatePresence>
-      </motion.ol>
+                </SongContextMenu>
+              );
+            })}
+          </AnimatePresence>
+        </motion.ol>
+      )}
     </div>
   );
 };

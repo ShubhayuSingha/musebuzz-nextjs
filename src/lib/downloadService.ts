@@ -80,10 +80,43 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
       status: 'downloading'
     });
 
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData?.user?.id;
+
     // 3. Prepare songs with resolved audio URLs & download audio files sequentially
     const preparedSongs: OfflineSong[] = [];
 
     for (let i = 0; i < songsCount; i++) {
+      if (store.isCancelled(albumId)) {
+        return false;
+      }
+
+      if (store.isPaused(albumId)) {
+        if (preparedSongs.length > 0) {
+          const offlineAlbumDraft: OfflineAlbum = {
+            id: album.id,
+            title: album.title,
+            image_path: album.image_path,
+            image_url: resolvedImageUrl,
+            genre: album.genre,
+            release_type: album.release_type,
+            artist_id: album.artist_id,
+            created_at: album.created_at,
+            downloaded_at: Date.now(),
+            last_accessed_at: album.last_accessed_at || new Date().toISOString(),
+            artists: album.artists ? {
+              id: album.artists.id,
+              name: album.artists.name,
+              image_path: album.artists.image_path
+            } : undefined,
+            songs: preparedSongs
+          };
+          await saveAlbumToDb(offlineAlbumDraft, userId);
+          await store.refreshDownloadedStatus(userId);
+        }
+        return false;
+      }
+
       const song = album.songs[i];
       let audioUrl: string | undefined = undefined;
 
@@ -97,7 +130,7 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
         await saveAudioToCache(audioUrl);
       }
 
-      preparedSongs.push({
+      const preparedSong: OfflineSong = {
         id: song.id,
         title: song.title,
         duration_seconds: song.duration_seconds,
@@ -118,7 +151,22 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
             name: album.artists.name
           } : undefined
         }
+      };
+
+      preparedSongs.push(preparedSong);
+
+      // Save song to offlineDb.songs and record reference immediately
+      await offlineDb.songs.put(preparedSong);
+      await offlineDb.song_references.put({
+        id: `${song.id}_album_${album.id}`,
+        song_id: song.id,
+        parent_type: 'album',
+        parent_id: album.id,
+        created_at: Date.now()
       });
+
+      // Real-time green badge
+      store.addDownloadedSongId(song.id);
 
       // Update progress
       const current = i + 1;
@@ -149,8 +197,6 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
       songs: preparedSongs
     };
 
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
     await saveAlbumToDb(offlineAlbum, userId);
 
     store.setProgress(albumId, {
@@ -241,6 +287,22 @@ export async function downloadLikedSongs(supabase: SupabaseClient, silent = fals
     const preparedPlaylistSongs = [];
 
     for (let i = 0; i < totalSongs; i++) {
+      if (store.isCancelled(likedPlaylistId)) {
+        return false;
+      }
+
+      if (store.isPaused(likedPlaylistId)) {
+        if (preparedPlaylistSongs.length > 0) {
+          await saveLikedSongsToDb(user.id, preparedPlaylistSongs.map(p => ({
+            created_at: p.created_at,
+            song_order: p.song_order,
+            song: p.songs
+          })));
+          await store.refreshDownloadedStatus(user.id);
+        }
+        return false;
+      }
+
       const item = likedItems[i];
       const song = item.songs as any;
 
@@ -278,20 +340,43 @@ export async function downloadLikedSongs(supabase: SupabaseClient, silent = fals
 
         const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
 
+        const offlineSongData = {
+          ...song,
+          audio_url: audioUrl,
+          imageUrl: resolvedSongImage,
+          albums: {
+            ...song.albums,
+            image_url: resolvedSongImage
+          },
+          downloaded_at: Date.now()
+        };
+
         preparedPlaylistSongs.push({
           created_at: item.created_at,
           song_order: i,
-          songs: {
-            ...song,
-            audio_url: audioUrl,
-            imageUrl: resolvedSongImage,
-            albums: {
-              ...song.albums,
-              image_url: resolvedSongImage
-            },
-            downloaded_at: Date.now()
-          }
+          songs: offlineSongData
         });
+
+        // Save song to offlineDb.songs & record reference immediately
+        await offlineDb.songs.put(offlineSongData);
+        await offlineDb.song_references.put({
+          id: `${song.id}_liked_${user.id}`,
+          song_id: song.id,
+          parent_type: 'liked',
+          parent_id: user.id,
+          created_at: Date.now()
+        });
+
+        // Save row to offlineDb.liked_songs
+        await offlineDb.liked_songs.put({
+          user_id: user.id,
+          song_id: song.id,
+          created_at: item.created_at,
+          song_order: i
+        });
+
+        // Real-time green badge
+        store.addDownloadedSongId(song.id);
       }
 
       // Update progress
@@ -415,8 +500,33 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
 
     // 3. Download audio files sequentially
     const preparedPlaylistSongs = [];
+    const { data: authUserData } = await supabase.auth.getUser();
+    const currentUserId = authUserData?.user?.id || playlist.user_id;
 
     for (let i = 0; i < totalSongs; i++) {
+      if (store.isCancelled(playlistId)) {
+        return false;
+      }
+
+      if (store.isPaused(playlistId)) {
+        if (preparedPlaylistSongs.length > 0) {
+          const offlinePlaylistDraft: OfflinePlaylist = {
+            id: playlist.id,
+            title: playlist.title,
+            image_path: playlist.image_path || null,
+            image_url: resolvedPlaylistImageUrl || null,
+            user_id: currentUserId,
+            created_at: playlist.created_at,
+            downloaded_at: Date.now(),
+            last_accessed_at: playlist.last_accessed_at || new Date().toISOString(),
+            playlist_songs: preparedPlaylistSongs
+          };
+          await savePlaylistToDb(offlinePlaylistDraft, currentUserId);
+          await store.refreshDownloadedStatus(currentUserId);
+        }
+        return false;
+      }
+
       const item = playlistSongs[i];
       const song = item.songs;
 
@@ -454,20 +564,35 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
 
         const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
 
+        const offlineSongData = {
+          ...song,
+          audio_url: audioUrl,
+          imageUrl: resolvedSongImage,
+          albums: {
+            ...song.albums,
+            image_url: resolvedSongImage
+          },
+          downloaded_at: Date.now()
+        };
+
         preparedPlaylistSongs.push({
           created_at: item.created_at,
           song_order: item.song_order,
-          songs: {
-            ...song,
-            audio_url: audioUrl,
-            imageUrl: resolvedSongImage,
-            albums: {
-              ...song.albums,
-              image_url: resolvedSongImage
-            },
-            downloaded_at: Date.now()
-          }
+          songs: offlineSongData
         });
+
+        // Save immediately into offlineDb & record reference
+        await offlineDb.songs.put(offlineSongData);
+        await offlineDb.song_references.put({
+          id: `${song.id}_playlist_${playlist.id}`,
+          song_id: song.id,
+          parent_type: 'playlist',
+          parent_id: playlist.id,
+          created_at: Date.now()
+        });
+
+        // Real-time green badge
+        store.addDownloadedSongId(song.id);
       }
 
       // Update progress
@@ -480,9 +605,6 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
     }
 
     // 4. Save full playlist to IndexedDB
-    const { data: authUserData } = await supabase.auth.getUser();
-    const currentUserId = authUserData?.user?.id || playlist.user_id;
-
     const offlinePlaylist: OfflinePlaylist = {
       id: playlist.id,
       title: playlist.title,
@@ -618,6 +740,17 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string,
           await saveImageToCache(imgData.publicUrl);
         }
       }
+      if (song) {
+        await offlineDb.songs.put(song);
+        await offlineDb.song_references.put({
+          id: `${song.id}_playlist_${playlistId}`,
+          song_id: song.id,
+          parent_type: 'playlist',
+          parent_id: playlistId,
+          created_at: Date.now()
+        });
+        store.addDownloadedSongId(song.id);
+      }
     }
 
     // 4. Remove references for deleted songs
@@ -626,7 +759,10 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string,
         .where('id')
         .equals(`${songId}_playlist_${playlistId}`)
         .delete();
-      await pruneSongIfUnreferenced(songId);
+      const didPrune = await pruneSongIfUnreferenced(songId);
+      if (didPrune) {
+        store.removeDownloadedSongId(songId);
+      }
     }
 
     // 5. Update local playlist document with fresh songs, preserving exact Supabase order and dates
@@ -693,7 +829,10 @@ export async function autoSyncLikedSong(
     if (action === 'remove') {
       await offlineDb.liked_songs.delete([userId, songId]);
       await offlineDb.song_references.where('id').equals(`${songId}_liked_${userId}`).delete();
-      await pruneSongIfUnreferenced(songId);
+      const didPrune = await pruneSongIfUnreferenced(songId);
+      if (didPrune) {
+        useDownloadStore.getState().removeDownloadedSongId(songId);
+      }
       useDownloadStore.getState().refreshDownloadedStatus(userId);
       return;
     }
@@ -784,6 +923,7 @@ export async function autoSyncLikedSong(
       song_order: 0
     });
 
+    useDownloadStore.getState().addDownloadedSongId(songId);
     useDownloadStore.getState().refreshDownloadedStatus(userId);
   } catch (err) {
     console.warn('[Download Service] Auto-sync liked song failed:', err);
@@ -791,17 +931,36 @@ export async function autoSyncLikedSong(
 }
 
 /**
+ * Safely resolves current user id without making network requests (works 100% offline)
+ */
+async function resolveUserIdForDeletion(supabase?: SupabaseClient): Promise<string | undefined> {
+  if (supabase) {
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data?.session?.user?.id) return data.session.user.id;
+    } catch {}
+  }
+  try {
+    if (offlineDb.liked_songs) {
+      const firstLiked = await offlineDb.liked_songs.toCollection().first();
+      if (firstLiked?.user_id) return firstLiked.user_id;
+    }
+  } catch {}
+  try {
+    if (offlineDb.saved_albums) {
+      const firstSaved = await offlineDb.saved_albums.toCollection().first();
+      if (firstSaved?.user_id) return firstSaved.user_id;
+    }
+  } catch {}
+  return undefined;
+}
+
+/**
  * Removes an album download from device
  */
 export async function deleteAlbumDownload(albumId: string, supabase?: SupabaseClient): Promise<void> {
   const store = useDownloadStore.getState();
-  let userId: string | undefined = undefined;
-  if (supabase) {
-    try {
-      const { data } = await supabase.auth.getUser();
-      userId = data?.user?.id;
-    } catch {}
-  }
+  const userId = await resolveUserIdForDeletion(supabase);
   await removeAlbumFromDb(albumId, userId);
   await store.refreshDownloadedStatus(userId);
 }
@@ -811,13 +970,7 @@ export async function deleteAlbumDownload(albumId: string, supabase?: SupabaseCl
  */
 export async function deletePlaylistDownload(playlistId: string, supabase?: SupabaseClient): Promise<void> {
   const store = useDownloadStore.getState();
-  let userId: string | undefined = undefined;
-  if (supabase) {
-    try {
-      const { data } = await supabase.auth.getUser();
-      userId = data?.user?.id;
-    } catch {}
-  }
+  const userId = await resolveUserIdForDeletion(supabase);
   await removePlaylistFromDb(playlistId, userId);
   await store.refreshDownloadedStatus(userId);
 }

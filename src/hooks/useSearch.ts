@@ -1,9 +1,10 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Fuse from "fuse.js";
 import { supabase } from "@/lib/supabaseClient";
 import { useUser } from "@supabase/auth-helpers-react";
 import { offlineDb } from "@/lib/offlineDb";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import { withTimeout } from "@/lib/helpers";
 
 export const useSearch = () => {
   const user = useUser();
@@ -13,41 +14,118 @@ export const useSearch = () => {
   const [playlists, setPlaylists] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+
+  const userId = user?.id;
+
+  const loadOfflineData = useCallback(async () => {
+    try {
+      const offlineSongs = await offlineDb.songs.toArray();
+      const offlineAlbums = await offlineDb.albums.toArray();
+
+      // Ensure all songs from downloaded albums are in the searchable list
+      const songIdSet = new Set(offlineSongs.map((s) => s.id));
+      for (const alb of offlineAlbums) {
+        for (const s of (alb.songs || [])) {
+          if (s && !songIdSet.has(s.id)) {
+            songIdSet.add(s.id);
+            offlineSongs.push({
+              ...s,
+              album_id: alb.id,
+              albums: {
+                id: alb.id,
+                title: alb.title,
+                image_path: alb.image_path,
+                image_url: alb.image_url,
+                genre: alb.genre,
+                artists: alb.artists ? { id: alb.artists.id, name: alb.artists.name } : undefined
+              }
+            } as any);
+          }
+        }
+      }
+
+      // Extract unique artists from downloaded albums and songs
+      const artistMap = new Map<string, any>();
+      for (const alb of offlineAlbums) {
+        if (alb.artists?.name) {
+          const key = alb.artists.id || alb.artists.name;
+          artistMap.set(key, {
+            id: alb.artists.id || key,
+            name: alb.artists.name,
+            image_path: alb.artists.image_path || alb.image_path || '',
+            image_url: alb.image_url
+          });
+        }
+      }
+      for (const s of offlineSongs) {
+        const art = s.albums?.artists;
+        if (art?.name) {
+          const key = art.id || art.name;
+          if (!artistMap.has(key)) {
+            artistMap.set(key, {
+              id: art.id || key,
+              name: art.name,
+              image_path: s.albums?.image_path || '',
+              image_url: s.imageUrl || s.albums?.image_url
+            });
+          }
+        }
+      }
+
+      let offlinePlaylists = await offlineDb.playlists.toArray();
+      if (userId) {
+        offlinePlaylists = offlinePlaylists.filter((p) => !p.user_id || p.user_id === userId);
+      }
+
+      const mappedPlaylists = offlinePlaylists
+        .filter((p) => p.id !== 'liked' && !p.id.startsWith('liked_'))
+        .map((p) => ({
+          ...p,
+          _unified_image: p.image_path || p.image_url,
+          _itemType: 'playlist'
+        }));
+
+      // Check if Liked Songs has rows saved locally
+      const likedCount = offlineDb.liked_songs ? await offlineDb.liked_songs.count() : 0;
+      if (likedCount > 0) {
+        mappedPlaylists.unshift({
+          id: 'liked',
+          title: 'Liked Songs',
+          description: 'Your favorite tracks',
+          _unified_image: '/images/liked.png',
+          _itemType: 'playlist'
+        } as any);
+      }
+
+      const processed = offlineSongs.map((s) => ({
+        ...s,
+        _searchableLyrics: s.lyrics_snippet ? String(s.lyrics_snippet) : ''
+      }));
+
+      setSongs(processed);
+      setAlbums(offlineAlbums);
+      setArtists(Array.from(artistMap.values()));
+      setPlaylists(mappedPlaylists);
+    } catch (e) {
+      console.warn("[useSearch] Offline read failed:", e);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchData = async () => {
       setIsLoading(true);
 
-      const isOffline = !useOfflineModeStore.getState().isOnline || 
-                        useOfflineModeStore.getState().isOfflineMode || 
-                        (typeof navigator !== 'undefined' && !navigator.onLine);
+      const effectivelyOffline = !isOnline || 
+                                 isOfflineMode || 
+                                 (typeof navigator !== 'undefined' && !navigator.onLine);
 
-      if (isOffline) {
-        try {
-          const offlineSongs = await offlineDb.songs.toArray();
-          const offlineAlbums = await offlineDb.albums.toArray();
-          const offlinePlaylists = user?.id 
-            ? await offlineDb.playlists.where('user_id').equals(user.id).toArray()
-            : [];
-
-          const processed = offlineSongs.map((s) => ({
-            ...s,
-            _searchableLyrics: s.lyrics_snippet ? String(s.lyrics_snippet) : ''
-          }));
-          setSongs(processed);
-          setAlbums(offlineAlbums);
-          setArtists([]);
-          setPlaylists(offlinePlaylists
-            .filter((p) => p.id !== 'liked' && !p.id.startsWith('liked_'))
-            .map((p) => ({
-              ...p,
-              _unified_image: p.image_path || p.image_url,
-              _itemType: 'playlist'
-            })));
-        } catch (e) {
-          console.warn("[useSearch] Offline read failed:", e);
-        } finally {
-          setIsLoading(false);
-        }
+      if (effectivelyOffline) {
+        if (!isCancelled) await loadOfflineData();
         return;
       }
       
@@ -57,60 +135,77 @@ export const useSearch = () => {
         supabase.from('artists').select('*').order('created_at', { ascending: false })
       ];
 
-      if (user?.id) {
+      if (userId) {
         queries.push(
-            supabase.from('playlists').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+            supabase.from('playlists').select('*').eq('user_id', userId).order('created_at', { ascending: false })
         );
-        // 🟢 FIX 1: Added .limit(5) so it only ever fetches the 5 most recent active mixes
         queries.push(
-            supabase.from('generated_playlists').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5)
+            supabase.from('generated_playlists').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(5)
         );
       }
 
-      const results = await Promise.all(queries);
+      try {
+        const results = await withTimeout(Promise.all(queries), 2500);
+        if (isCancelled) return;
 
-      if (results[0].data) {
-        const processedSongs = results[0].data.map((song: any) => {
-          let cleanLyrics = "";
-          if (song.lyrics_snippet) {
-            try {
-              const parsedLyrics = typeof song.lyrics_snippet === 'string' ? JSON.parse(song.lyrics_snippet) : song.lyrics_snippet;
-              if (Array.isArray(parsedLyrics)) {
-                cleanLyrics = parsedLyrics.map((line: any) => 
-                  `${line.text || ''} ${line.text_romanized || ''} ${line.text_native || ''}`
-                ).join(" ");
-              } else {
-                 cleanLyrics = String(song.lyrics_snippet);
+        if (results[0]?.data) {
+          const processedSongs = results[0].data.map((song: any) => {
+            let cleanLyrics = "";
+            if (song.lyrics_snippet) {
+              try {
+                const parsedLyrics = typeof song.lyrics_snippet === 'string' ? JSON.parse(song.lyrics_snippet) : song.lyrics_snippet;
+                if (Array.isArray(parsedLyrics)) {
+                  cleanLyrics = parsedLyrics.map((line: any) => 
+                    `${line.text || ''} ${line.text_romanized || ''} ${line.text_native || ''}`
+                  ).join(" ");
+                } else {
+                   cleanLyrics = String(song.lyrics_snippet);
+                }
+              } catch (e) {
+                cleanLyrics = String(song.lyrics_snippet);
               }
-            } catch (e) {
-              cleanLyrics = String(song.lyrics_snippet);
             }
-          }
-          return { ...song, _searchableLyrics: cleanLyrics };
-        });
+            return { ...song, _searchableLyrics: cleanLyrics };
+          });
 
-        setSongs(processedSongs);
-      }
+          setSongs(processedSongs);
+        }
 
-      if (results[1].data) setAlbums(results[1].data);
-      if (results[2].data) setArtists(results[2].data);
-      
-      if (user?.id) {
-         const standardPlaylists = results[3]?.data || [];
-         const genPlaylists = results[4]?.data || [];
-         const combinedPlaylists = [
-            // 🟢 FIX 2: Tagged each item with its correct type so the UI knows how to route them
-            ...standardPlaylists.map((p: any) => ({ ...p, _unified_image: p.image_path, _itemType: 'playlist' })),
-            ...genPlaylists.map((p: any) => ({ ...p, _unified_image: p.image_url, _itemType: 'mix' })) 
-         ];
-         setPlaylists(combinedPlaylists);
+        if (results[1]?.data) setAlbums(results[1].data);
+        if (results[2]?.data) setArtists(results[2].data);
+        
+        if (userId) {
+           const standardPlaylists = results[3]?.data || [];
+           const genPlaylists = results[4]?.data || [];
+           const combinedPlaylists = [
+              ...standardPlaylists.map((p: any) => ({ ...p, _unified_image: p.image_path, _itemType: 'playlist' })),
+              ...genPlaylists.map((p: any) => ({ ...p, _unified_image: p.image_url, _itemType: 'mix' })) 
+           ];
+           setPlaylists(combinedPlaylists);
+        }
+      } catch (err) {
+        console.warn("[useSearch] Online fetch failed, falling back to offline database:", err);
+        if (!isCancelled) await loadOfflineData();
+      } finally {
+        if (!isCancelled) setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
 
     fetchData();
-  }, [user?.id]); 
+
+    const handleNetworkChange = () => {
+      fetchData();
+    };
+
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+
+    return () => {
+      isCancelled = true;
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+    };
+  }, [userId, isOnline, isOfflineMode, loadOfflineData]); 
 
   const fuseSongs = useMemo(() => new Fuse(songs, {
     keys: [

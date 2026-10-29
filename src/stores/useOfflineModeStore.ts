@@ -13,6 +13,9 @@ interface OfflineModeStore {
 
 // Purge AI autoplay queue immediately when transitioning into offline
 const purgeAutoplayIfOffline = (isOffline: boolean) => {
+  if (typeof window !== 'undefined') {
+    (window as any).__musebuzzIsOffline = isOffline;
+  }
   if (isOffline) {
     const player = usePlayerStore.getState();
     player.setAutoplay([]);
@@ -21,6 +24,10 @@ const purgeAutoplayIfOffline = (isOffline: boolean) => {
     }
   }
 };
+
+if (typeof window !== 'undefined') {
+  (window as any).__musebuzzIsOffline = !navigator.onLine;
+}
 
 export const useOfflineModeStore = create<OfflineModeStore>()(
   persist(
