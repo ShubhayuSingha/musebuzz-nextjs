@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { FaHeart } from 'react-icons/fa';
-import MediaContextMenu from "./MediaContextMenu"; 
+import MediaContextMenu from "./MediaContextMenu";
 
 interface PlaylistItemProps {
   playlist: {
@@ -54,28 +54,18 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
         rounded-xl
         p-3
         cursor-pointer
-        isolate
-        will-change-transform
-        transition-transform
-        duration-300
-        hover:-translate-y-2
+        bg-neutral-900/40
+        hover:bg-neutral-800/80
+        border
+        border-neutral-800/60
+        hover:border-neutral-700
+        transition-all
+        duration-200
+        shadow-sm
+        hover:shadow-md
+        h-full
       "
     >
-      {/* INSET DEPTH SHADOW */}
-      <div
-        className="
-          pointer-events-none
-          absolute
-          inset-0
-          rounded-xl
-          opacity-0
-          group-hover:opacity-100 
-          transition-opacity
-          duration-300
-          shadow-[inset_0_-14px_22px_-18px_rgba(0,0,0,0.55)]
-        "
-      />
-
       {/* IMAGE CONTAINER */}
       <div
         className="
@@ -89,10 +79,9 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
       >
         {isLikedSongs ? (
            <div className="
-              w-full h-full 
-              bg-gradient-to-br from-violet-600 to-blue-600 
+              w-full h-full
+              bg-gradient-to-br from-violet-600 to-blue-600
               flex items-center justify-center
-              transition-transform duration-300 ease-out
            ">
               <FaHeart className="text-white text-4xl drop-shadow-lg" />
            </div>
@@ -103,12 +92,7 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
              src={imageUrl || '/images/playlist-placeholder.jpg'}
              fill
              alt={playlist.title}
-             className="
-               object-cover
-               transition-transform
-               duration-300
-               ease-out
-             "
+             className="object-cover"
              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
              onError={(e) => {
                e.currentTarget.src = '/images/playlist-placeholder.jpg';
@@ -134,11 +118,11 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   }
 
   return (
-    <MediaContextMenu 
-      data={{ 
-        id: playlist.id, 
-        title: playlist.title, 
-        type: 'playlist' 
+    <MediaContextMenu
+      data={{
+        id: playlist.id,
+        title: playlist.title,
+        type: 'playlist'
       }}
     >
       {CardContent}

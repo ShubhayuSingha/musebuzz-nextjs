@@ -254,7 +254,25 @@ const useDownloadStore = create<DownloadStore>((set, get) => ({
 
       const ids = new Set<string>([...playlistKeys, ...albumKeys]);
       const songIds = new Set<string>(allSongKeys as string[]);
-      set({ downloadedIds: ids, downloadedSongIds: songIds });
+
+      const prevIds = get().downloadedIds;
+      const prevSongIds = get().downloadedSongIds;
+
+      const areSetsEqual = (a: Set<string>, b: Set<string>) => {
+        if (a.size !== b.size) return false;
+        for (const item of a) if (!b.has(item)) return false;
+        return true;
+      };
+
+      const idsEqual = areSetsEqual(prevIds, ids);
+      const songIdsEqual = areSetsEqual(prevSongIds, songIds);
+
+      if (!idsEqual || !songIdsEqual) {
+        set({
+          downloadedIds: idsEqual ? prevIds : ids,
+          downloadedSongIds: songIdsEqual ? prevSongIds : songIds
+        });
+      }
     } catch (e) {
       console.warn('[Download Store] Could not refresh downloaded status:', e);
     }

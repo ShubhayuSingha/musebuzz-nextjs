@@ -85,16 +85,20 @@ const QueueItemContent = ({
     : "/images/album-placeholder.png");
   const artistName = (song as any)?.artists?.name || song?.albums?.artists?.name || (song as any)?.author || "Unknown";
 
+  const handleRowClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button') || target?.closest('[data-drag-handle="true"]')) {
+      return;
+    }
+    onPlay();
+  };
+
   return (
     <div
-      className={`group grid grid-cols-[20px_40px_1fr_20px_30px] md:grid-cols-[30px_40px_1fr_30px_30px] gap-x-2 md:gap-x-2 items-center w-full px-2 py-2 rounded-md transition-colors cursor-pointer select-none relative z-10 ${isActive ? "bg-white/10" : "hover:bg-white/5 bg-black"}`}
+      onClick={handleRowClick}
+      className={`group grid grid-cols-[20px_40px_1fr_20px_30px] md:grid-cols-[30px_40px_1fr_30px_30px] gap-x-2 md:gap-x-2 items-center w-full px-2 py-2 rounded-md transition-colors cursor-pointer select-none relative z-10 active:bg-neutral-800/60 ${isActive ? "bg-white/10" : "hover:bg-white/5 bg-black"}`}
     >
       <div
-        onClick={(e) => {
-          e.stopPropagation();
-          onPlay();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
         className="flex justify-center items-center text-neutral-400 hover:text-white hover:scale-110 transition active:scale-95 p-1"
       >
         {isActive && isPlaying ? (
@@ -103,7 +107,7 @@ const QueueItemContent = ({
           </div>
         ) : (
           <span
-            className={`group-hover:hidden ${isActive ? "text-green-500" : ""}`}
+            className={`group-hover:hidden ${isActive ? "text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]" : ""}`}
           >
             {source === "autoplay" ? (
               <BsStars size={12} className="text-emerald-500" />
@@ -140,11 +144,11 @@ const QueueItemContent = ({
         )}
       </div>
 
-      <div className="flex flex-col min-w-0 overflow-hidden">
+      <div className="flex flex-col min-w-0 overflow-hidden pointer-events-none">
         <div className="flex items-center gap-1.5 min-w-0">
           <p
             title={song?.title}
-            className={`truncate text-sm font-medium ${isActive ? "text-green-500" : source === "autoplay" ? "text-emerald-100" : "text-white"}`}
+            className={`truncate text-sm font-medium ${isActive ? "text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]" : source === "autoplay" ? "text-emerald-100" : "text-white"}`}
           >
             {song?.title || "Loading..."}
           </p>
@@ -164,6 +168,7 @@ const QueueItemContent = ({
       <div className="flex justify-center items-center">
         {onHandlePointerDown ? (
           <div
+            data-drag-handle="true"
             onPointerDown={onHandlePointerDown}
             onPointerUp={onHandlePointerUp}
             onPointerLeave={onHandlePointerUp}
@@ -275,6 +280,14 @@ const DraggableQueueItem = ({
     else if (info.offset.x > 80 && onAddToPriority) onAddToPriority();
   };
 
+  const handleItemTap = (e: any) => {
+    const target = e?.target as HTMLElement | null;
+    if (target?.closest?.('button') || target?.closest?.('[data-drag-handle="true"]')) {
+      return;
+    }
+    onPlay();
+  };
+
   return (
     <Reorder.Item
       value={item}
@@ -302,6 +315,7 @@ const DraggableQueueItem = ({
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={0.1}
         onDragEnd={handleDragEnd}
+        onTap={handleItemTap}
         className="relative bg-black z-10 touch-pan-y"
       >
         <QueueItemContent
@@ -628,7 +642,7 @@ export default function Queue() {
                     transition={{ duration: 0.2 }}
                     className="w-full h-full overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-800"
                   >
-                    <div className="p-2 pb-36 md:pb-40">
+                    <div className="p-2 pb-24 md:pb-8">
                       <div className="mb-6 mt-2">
                         <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2 px-2">
                           Now Playing
@@ -746,7 +760,7 @@ export default function Queue() {
                       )}
 
                       {autoplayItems.length > 0 && !isEffectivelyOffline && (
-                        <div className="mt-8 mb-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="mt-8 mb-8 md:mb-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                           <div className="flex items-center gap-2 mb-3 px-2 border-t border-neutral-800 pt-6">
                             <BsStars className="text-emerald-500" size={14} />
                             <h3 className="text-xs font-bold text-emerald-500 uppercase tracking-wider">

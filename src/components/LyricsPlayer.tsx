@@ -6,6 +6,7 @@ import useQueueStore from '@/stores/useQueueStore';
 import { supabase } from '@/lib/supabaseClient';
 import { offlineDb } from '@/lib/offlineDb';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LuMicOff } from 'react-icons/lu';
 
 export interface LyricLine {
   type?: "lyrics" | "music";
@@ -298,11 +299,45 @@ export default function LyricsPlayer() {
   };
 
   if (isLoading) {
-    return <div className="h-full w-full flex items-center justify-center text-neutral-500">Loading...</div>;
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-3 select-none px-6 text-center">
+        <div className="w-7 h-7 border-2 border-purple-500/20 border-t-purple-400 rounded-full animate-spin" />
+        <span className="text-xs text-neutral-400 font-medium tracking-wide">Loading lyrics...</span>
+      </div>
+    );
   }
 
   if (!lyrics.length) {
-    return <div className="h-full w-full flex items-center justify-center text-neutral-500">Looks like we don't have lyrics for this song yet.</div>;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="h-full w-full flex flex-col items-center justify-center p-6 text-center select-none relative overflow-hidden"
+      >
+        {/* Subtle atmospheric ambient glow */}
+        <div className="absolute w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none -top-10" />
+        
+        {/* Sleek glassmorphic icon badge */}
+        <div className="relative mb-5 flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-b from-purple-500/15 to-purple-950/40 border border-purple-500/20 shadow-[0_0_30px_rgba(168,85,247,0.18)] backdrop-blur-md">
+          <LuMicOff className="w-7 h-7 text-purple-300 drop-shadow-[0_0_10px_rgba(216,180,254,0.5)]" />
+        </div>
+
+        {/* Crisp modern typography */}
+        <h3 className="text-white font-semibold text-lg tracking-tight mb-2">
+          No Lyrics Available
+        </h3>
+        <p className="text-neutral-400 text-sm max-w-[260px] leading-relaxed">
+          Looks like we don't have lyrics for this song yet.
+        </p>
+
+        {/* Ambient status pill */}
+        <div className="mt-6 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-950/30 border border-purple-800/40 text-purple-300 text-xs font-medium backdrop-blur-sm shadow-inner">
+          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+          <span>Enjoy the rhythm</span>
+        </div>
+      </motion.div>
+    );
   }
 
   return (
@@ -342,6 +377,7 @@ export default function LyricsPlayer() {
 
       <div
         ref={containerRef}
+        data-lyrics-container="true"
         onScroll={handleScroll}
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
@@ -354,7 +390,7 @@ export default function LyricsPlayer() {
           WebkitMaskImage: 'linear-gradient(to bottom, transparent 2%, black 10%, black 90%, transparent 98%)'
         }}
       >
-        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-24 pb-32 text-left items-start relative">
+        <div className="flex flex-col max-w-4xl mx-auto px-6 pt-24 pb-16 text-left items-start relative">
 
           <div className="flex flex-col w-full gap-8">
             {lyrics.map((line, lineIdx) => {

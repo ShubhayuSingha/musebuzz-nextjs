@@ -14,13 +14,25 @@ export interface SearchHistoryItem {
   updated_at: string;
 }
 
+const getStorageKey = (userId?: string) => `musebuzz_search_history_${userId || 'anonymous'}`;
+
 export const useSearchHistory = () => {
   const user = useUser();
   const userId = user?.id;
-  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+
+  // Initialize from localStorage cache for instant zero-flicker render
+  const [history, setHistory] = useState<SearchHistoryItem[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const cached = localStorage.getItem(getStorageKey(userId));
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isLoading, setIsLoading] = useState(true);
 
-  // 1. Fetch the latest 20 items
+  // 1. Fetch latest items: Supabase when online, localStorage fallback when offline
   const fetchHistory = useCallback(async () => {
     if (!userId) {
       setHistory([]);
@@ -28,28 +40,41 @@ export const useSearchHistory = () => {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('search_history')
-      .select('*')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(20);
+    try {
+      const { data, error } = await supabase
+        .from('search_history')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(20);
 
-    if (!error && data) {
-      setHistory(data);
+      if (!error && data) {
+        setHistory(data);
+        try {
+          localStorage.setItem(getStorageKey(userId), JSON.stringify(data));
+        } catch {}
+      } else {
+        const cached = localStorage.getItem(getStorageKey(userId));
+        if (cached) setHistory(JSON.parse(cached));
+      }
+    } catch {
+      const cached = localStorage.getItem(getStorageKey(userId));
+      if (cached) setHistory(JSON.parse(cached));
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [userId]);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
-  // 2. Add or "Bump" an item to the top
+  // 2. Add or "Bump" an item to the top (works online and offline)
   const addToHistory = async (item: Omit<SearchHistoryItem, 'id' | 'user_id' | 'updated_at'>) => {
     if (!user) return;
 
-    const payload = {
+    const newItem: SearchHistoryItem = {
+      id: `${user.id}_${item.item_id}`,
       user_id: user.id,
       item_id: item.item_id,
       item_type: item.item_type,
@@ -59,13 +84,26 @@ export const useSearchHistory = () => {
       updated_at: new Date().toISOString(),
     };
 
-    // The 'onConflict' uses that UNIQUE rule we made in SQL to trigger an update instead of a crash
-    const { error } = await supabase
-      .from('search_history')
-      .upsert(payload, { onConflict: 'user_id, item_id' });
+    // Optimistically update local state & localStorage for instant UI feedback
+    setHistory((prev) => {
+      const filtered = prev.filter((h) => h.item_id !== item.item_id);
+      const updated = [newItem, ...filtered].slice(0, 20);
+      try {
+        localStorage.setItem(getStorageKey(user.id), JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
-    if (!error) {
-      fetchHistory(); // Refresh the list to show it at the top
+    try {
+      const { error } = await supabase
+        .from('search_history')
+        .upsert(newItem, { onConflict: 'user_id, item_id' });
+
+      if (!error) {
+        fetchHistory();
+      }
+    } catch {
+      // Offline fallback: already stored locally in state and localStorage
     }
   };
 
@@ -73,14 +111,21 @@ export const useSearchHistory = () => {
   const removeFromHistory = async (historyId: string) => {
     if (!user) return;
 
-    // Optimistic UI update for instant feel
-    setHistory((prev) => prev.filter((item) => item.id !== historyId));
+    setHistory((prev) => {
+      const updated = prev.filter((item) => item.id !== historyId);
+      try {
+        localStorage.setItem(getStorageKey(user.id), JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
-    await supabase
-      .from('search_history')
-      .delete()
-      .eq('id', historyId)
-      .eq('user_id', user.id);
+    try {
+      await supabase
+        .from('search_history')
+        .delete()
+        .eq('id', historyId)
+        .eq('user_id', user.id);
+    } catch {}
   };
 
   // 4. Clear all history (The 'Clear recent searches' button)
@@ -88,11 +133,16 @@ export const useSearchHistory = () => {
     if (!user) return;
 
     setHistory([]);
+    try {
+      localStorage.removeItem(getStorageKey(user.id));
+    } catch {}
 
-    await supabase
-      .from('search_history')
-      .delete()
-      .eq('user_id', user.id);
+    try {
+      await supabase
+        .from('search_history')
+        .delete()
+        .eq('user_id', user.id);
+    } catch {}
   };
 
   return {

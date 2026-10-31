@@ -42,7 +42,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
         <ToasterProvider />
         <ModalProvider />
         
-        <div className="flex flex-1 overflow-hidden h-full relative">
+        <div className="flex flex-1 overflow-hidden min-h-0 h-full relative">
             
             {/* Mobile Backdrop Overlay */}
             {mobileMenuOpen && (
@@ -73,7 +73,7 @@ const ClientLayout: React.FC<ClientLayoutProps> = ({
                 
                 {/* 2. Main content and Queue sit side-by-side UNDER the Header */}
                 <div className="flex flex-1 overflow-hidden relative">
-                    <main className="flex-1 overflow-y-auto pb-28 min-w-0">
+                    <main className="flex-1 overflow-y-auto pb-24 md:pb-6 min-w-0">
                         {children}
                     </main>
                     

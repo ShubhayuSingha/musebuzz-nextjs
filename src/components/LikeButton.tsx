@@ -5,7 +5,7 @@
 import { useState, useEffect } from "react";
 import { useUser } from "@supabase/auth-helpers-react";
 import { useRouter } from "next/navigation";
-import { AiFillHeart, AiOutlineHeart } from "react-icons/ai";
+import { IoHeart, IoHeartOutline } from "react-icons/io5";
 import { toast } from "react-hot-toast";
 
 import useAuthModalStore from "@/stores/useAuthModalStore";
@@ -145,16 +145,24 @@ const LikeButton: React.FC<LikeButtonProps> = ({ songId }) => {
     }
   }
 
-  const Icon = isLiked ? AiFillHeart : AiOutlineHeart;
-
   return (
     <button 
+      type="button"
       onClick={handleLike}
       disabled={isOffline}
-      className={`transition ${isOffline ? 'opacity-40 cursor-not-allowed' : 'hover:opacity-75 cursor-pointer active:scale-95'}`}
+      className={`group/heart relative flex items-center justify-center p-1.5 rounded-full transition-all duration-200 ${
+        isOffline 
+          ? 'opacity-40 cursor-not-allowed' 
+          : 'hover:bg-purple-600/10 cursor-pointer active:scale-85'
+      }`}
       title={isOffline ? 'Liking songs is disabled while offline' : isLiked ? 'Unlike' : 'Like'}
+      aria-label={isLiked ? "Unlike" : "Like"}
     >
-      <Icon size={25} color={isLiked ? '#8f04b1ff' : 'white'} />
+      {isLiked ? (
+        <IoHeart size={21} className="text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.75)] transition-transform duration-200 group-hover/heart:scale-110" />
+      ) : (
+        <IoHeartOutline size={21} className="text-neutral-400 group-hover/heart:text-purple-300 transition-all duration-200 group-hover/heart:scale-110" />
+      )}
     </button>
   );
 }

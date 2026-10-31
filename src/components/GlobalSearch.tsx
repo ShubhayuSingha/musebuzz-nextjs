@@ -92,6 +92,8 @@ const SwipeableSongItem = ({ song, onClick, onAddToQueue, getImageUrl, children 
     }
   };
 
+  const songImg = song.albums?.image_url || song.imageUrl || song.albums?.image_path || 'sample.jpg';
+
   return (
     <div className="relative mb-1 overflow-visible rounded-md bg-black">
       {/* Swipe Right Background (Add to Queue) */}
@@ -111,7 +113,7 @@ const SwipeableSongItem = ({ song, onClick, onAddToQueue, getImageUrl, children 
       >
         <div className="flex items-center gap-x-3 overflow-hidden pointer-events-none">
           <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-            <Image fill sizes="48px" src={getImageUrl(song.albums?.image_path || 'sample.jpg')} alt={song.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+            <Image fill sizes="48px" src={getImageUrl(songImg)} alt={song.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
           </div>
           <div className="flex flex-col overflow-hidden">
             <p className="text-[15px] font-medium text-white truncate">{song.title}</p>
@@ -124,14 +126,13 @@ const SwipeableSongItem = ({ song, onClick, onAddToQueue, getImageUrl, children 
   );
 };
 
-
 interface GlobalSearchProps {
   isMobileRightAligned?: boolean;
 }
 
 const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = false }) => {
   const router = useRouter();
-  const { searchAll, songs, playlists } = useSearch();
+  const { searchAll, songs, playlists, ensureLoaded } = useSearch();
   const { history, addToHistory, removeFromHistory, clearAllHistory } = useSearchHistory();
 
   const [query, setQuery] = useState("");
@@ -198,7 +199,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
   const handleSearchResultClick = (item: any, type: 'song' | 'album' | 'artist' | 'playlist' | 'mix') => {
     let title = item.title || item.name;
     let subtitle = '';
-    let image_path = item.image_path || item.albums?.image_path || item._unified_image || item.image_url || null;
+    let image_path = item.image_url || item._unified_image || item.image_path || item.albums?.image_url || item.imageUrl || item.albums?.image_path || null;
 
     if (type === 'song') subtitle = item.albums?.artists?.name || 'Song';
     else if (type === 'album') subtitle = `Album • ${item.artists?.name || 'Unknown'}`;
@@ -206,7 +207,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
     else if (type === 'playlist') subtitle = 'Playlist';
     else if (type === 'mix') subtitle = 'Generated Mix';
 
-    // Push to Database
+    // Push to Database / Local History
     addToHistory({ item_id: item.id, item_type: type, title, subtitle, image_path });
 
     // Execute Action
@@ -225,7 +226,11 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
       router.push(`/artist/${item.id}`);
       setIsOpen(false);
     } else if (type === 'playlist') {
-      router.push(`/playlist/${item.id}`);
+      if (item.id === 'liked') {
+        router.push('/liked');
+      } else {
+        router.push(`/playlist/${item.id}`);
+      }
       setIsOpen(false);
     } else if (type === 'mix') {
       router.push(`/mix/${item.id}`);
@@ -247,12 +252,15 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
       router.push(`/mix/${item.item_id}`);
       setIsOpen(false);
     } else if (item.item_type === 'playlist') {
-      // Defensive check: if item is actually a generated mix in current playlists list
-      const isMix = playlists?.some((p: any) => p.id === item.item_id && p._itemType === 'mix');
-      if (isMix) {
-        router.push(`/mix/${item.item_id}`);
+      if (item.item_id === 'liked') {
+        router.push('/liked');
       } else {
-        router.push(`/playlist/${item.item_id}`);
+        const isMix = playlists?.some((p: any) => p.id === item.item_id && p._itemType === 'mix');
+        if (isMix) {
+          router.push(`/mix/${item.item_id}`);
+        } else {
+          router.push(`/playlist/${item.item_id}`);
+        }
       }
       setIsOpen(false);
     } else {
@@ -267,10 +275,18 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
     inputRef.current?.focus();
   };
 
-  // Helper to fetch public URL from Supabase
-  const getImageUrl = (path: string | null, bucket: string = 'images') => {
+  // Helper to fetch public URL from Supabase or pass-through local/CDN URLs
+  const getImageUrl = (path: string | null | undefined, bucket: string = 'images') => {
     if (!path) return PLACEHOLDER_IMAGE;
-    if (path.startsWith('http')) return path;
+    if (
+      path.startsWith('http://') ||
+      path.startsWith('https://') ||
+      path.startsWith('data:') ||
+      path.startsWith('blob:') ||
+      path.startsWith('/')
+    ) {
+      return path;
+    }
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
   };
@@ -281,7 +297,10 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
       {/* 🟢 MOBILE TRIGGER ICON (visible only on phones) */}
       {isMobileRightAligned && (
         <div
-          onClick={() => setIsMobileOpen(true)}
+          onClick={() => {
+            setIsMobileOpen(true);
+            ensureLoaded?.();
+          }}
           className="flex md:hidden p-2 text-neutral-400 hover:text-white transition cursor-pointer"
         >
           <BiSearch size={24} />
@@ -291,7 +310,10 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
       {/* 🟢 DESKTOP SEARCH BAR */}
       {!isMobileRightAligned && (
         <div
-          onClick={() => inputRef.current?.focus()}
+          onClick={() => {
+            inputRef.current?.focus();
+            ensureLoaded?.();
+          }}
           className="hidden md:flex relative items-center bg-neutral-800 rounded-full px-4 py-3 group focus-within:ring-2 focus-within:ring-white transition cursor-text w-full"
         >
           <BiSearch className="text-neutral-400 group-focus-within:text-white shrink-0" size={24} />
@@ -302,7 +324,10 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
               setQuery(e.target.value);
               setIsOpen(true);
             }}
-            onFocus={() => setIsOpen(true)}
+            onFocus={() => {
+              setIsOpen(true);
+              ensureLoaded?.();
+            }}
             placeholder="Search songs, albums, artists, playlists..."
             className="bg-transparent border-none outline-none text-white ml-2 w-full placeholder:text-neutral-400 text-sm font-medium pr-6"
           />
@@ -329,9 +354,9 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
           <h3 className="text-xs font-bold text-neutral-400 mb-2 mt-2 px-2 uppercase tracking-wider">Recent Searches</h3>
 
           {history.map(item => {
-            // Dynamically determine the bucket and the specific fallback logic based on history type
             const bucket = item.item_type === 'artist' ? 'artist_images' : (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist_images' : 'images';
-            const fallbackSongImage = item.item_type === 'song' ? songsMap.get(item.item_id)?.albums?.image_path : null;
+            const songObj = item.item_type === 'song' ? songsMap.get(item.item_id) : null;
+            const fallbackSongImage = songObj ? (songObj.albums?.image_url || songObj.imageUrl || songObj.albums?.image_path) : null;
             const path = item.image_path || fallbackSongImage || (
               (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist-placeholder.jpg' :
                 (item.item_type === 'song' || item.item_type === 'album') ? 'sample.jpg' :
@@ -404,7 +429,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                   className="flex items-center gap-x-3 hover:bg-neutral-800 p-2 rounded-md cursor-pointer transition w-full"
                 >
                   <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
-                    <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_path, 'artist_images')}
+                    <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_url || results.artists[0].image_path, 'artist_images')}
                       alt={results.artists[0].name}
                       className="object-cover"
                       unoptimized
@@ -422,19 +447,21 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
             <div className="p-2">
               <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Playlists</h3>
               {results.playlists.map(playlist => {
+                const isLiked = playlist.id === 'liked';
                 const isMix = playlist._itemType === 'mix';
+                const contextType = isLiked ? 'liked' : isMix ? 'generated_playlist' : 'playlist';
                 return (
                   <MediaContextMenu
                     key={playlist.id}
                     data={{
                       id: playlist.id,
-                      type: isMix ? 'generated_playlist' : 'playlist',
+                      type: contextType,
                       title: playlist.title,
                       song_ids: playlist.song_ids
                     }}
                   >
                     <div
-                      onClick={() => handleSearchResultClick(playlist, isMix ? 'mix' : 'playlist')}
+                      onClick={() => handleSearchResultClick(playlist, isLiked ? 'playlist' : isMix ? 'mix' : 'playlist')}
                       className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer w-full"
                     >
                       <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
@@ -467,7 +494,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                     className="flex items-center gap-x-3 p-2 rounded-md hover:bg-neutral-800 cursor-pointer w-full"
                   >
                     <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                      <Image fill sizes="48px" src={getImageUrl(album.image_path || 'sample.jpg')}
+                      <Image fill sizes="48px" src={getImageUrl(album.image_url || album.image_path || 'sample.jpg')}
                         alt={album.title}
                         className="object-cover"
                         unoptimized
@@ -489,37 +516,40 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
             <div className="p-2">
               <h3 className="text-xs font-bold text-neutral-400 mb-2 uppercase tracking-wider">Songs</h3>
               <div className="flex flex-col gap-y-1">
-                {results.songs.slice(0, visibleSongCount).map((song) => (
-                  <SongContextMenu key={song.id} songId={song.id}>
-                    <div
-                      onClick={() => handleSearchResultClick(song, 'song')}
-                      className="flex items-center justify-between p-2 rounded-md hover:bg-neutral-800 cursor-pointer group"
-                    >
-                      <div className="flex items-center gap-x-3 overflow-hidden">
-                        <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
-                          <Image fill sizes="48px" src={getImageUrl(song.albums?.image_path || 'sample.jpg')}
-                            alt={song.title}
-                            className="object-cover"
-                            unoptimized
-                            onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
-                          />
-                          <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
-                            <BsPlayFill size={20} className="text-white" />
+                {results.songs.slice(0, visibleSongCount).map((song) => {
+                  const songImg = song.albums?.image_url || song.imageUrl || song.albums?.image_path || 'sample.jpg';
+                  return (
+                    <SongContextMenu key={song.id} songId={song.id}>
+                      <div
+                        onClick={() => handleSearchResultClick(song, 'song')}
+                        className="flex items-center justify-between p-2 rounded-md hover:bg-neutral-800 cursor-pointer group"
+                      >
+                        <div className="flex items-center gap-x-3 overflow-hidden">
+                          <div className="relative h-10 w-10 min-w-[40px] overflow-hidden rounded-md shrink-0">
+                            <Image fill sizes="48px" src={getImageUrl(songImg)}
+                              alt={song.title}
+                              className="object-cover"
+                              unoptimized
+                              onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }}
+                            />
+                            <div className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
+                              <BsPlayFill size={20} className="text-white" />
+                            </div>
+                          </div>
+                          <div className="flex flex-col overflow-hidden">
+                            <p className="text-sm font-medium text-white truncate">{song.title}</p>
+                            <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
                           </div>
                         </div>
-                        <div className="flex flex-col overflow-hidden">
-                          <p className="text-sm font-medium text-white truncate">{song.title}</p>
-                          <p className="text-xs text-neutral-400 truncate">{song.albums?.artists?.name}</p>
+
+                        <div className="flex items-center gap-x-3 pl-2" onClick={(e) => e.stopPropagation()}>
+                          <AddToQueueButton songId={song.id} />
+                          <LikeButton songId={song.id} />
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-x-3 pl-2" onClick={(e) => e.stopPropagation()}>
-                        <AddToQueueButton songId={song.id} />
-                        <LikeButton songId={song.id} />
-                      </div>
-                    </div>
-                  </SongContextMenu>
-                ))}
+                    </SongContextMenu>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -557,6 +587,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                   autoFocus
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onFocus={() => ensureLoaded?.()}
                   placeholder="What do you want to listen to?"
                   className="bg-transparent border-none outline-none text-white ml-2 w-full placeholder:text-neutral-400 text-sm font-medium pr-8"
                 />
@@ -583,7 +614,8 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                   <h3 className="text-sm font-bold text-neutral-100 mb-4 px-1">Recent searches</h3>
                   {history.map(item => {
                     const bucket = item.item_type === 'artist' ? 'artist_images' : (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist_images' : 'images';
-                    const fallbackSongImage = item.item_type === 'song' ? songsMap.get(item.item_id)?.albums?.image_path : null;
+                    const songObj = item.item_type === 'song' ? songsMap.get(item.item_id) : null;
+                    const fallbackSongImage = songObj ? (songObj.albums?.image_url || songObj.imageUrl || songObj.albums?.image_path) : null;
                     const path = item.image_path || fallbackSongImage || (
                       (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist-placeholder.jpg' :
                         (item.item_type === 'song' || item.item_type === 'album') ? 'sample.jpg' :
@@ -623,7 +655,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                       <MediaContextMenu data={{ id: results.artists[0].id, type: 'artist', title: results.artists[0].name }}>
                         <div onClick={() => handleSearchResultClick(results.artists[0], 'artist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800">
                           <div className="relative h-12 w-12 rounded-full overflow-hidden shrink-0">
-                            <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_path, 'artist_images')} alt={results.artists[0].name} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                            <Image fill sizes="48px" src={getImageUrl(results.artists[0].image_url || results.artists[0].image_path, 'artist_images')} alt={results.artists[0].name} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                           </div>
                           <p className="font-medium text-[15px] text-white">{results.artists[0].name}</p>
                         </div>
@@ -636,18 +668,20 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                     <div className="flex flex-col">
                       <h3 className="text-sm font-bold text-neutral-100 mb-3 px-1">Playlists</h3>
                       {results.playlists.map(playlist => {
+                        const isLiked = playlist.id === 'liked';
                         const isMix = playlist._itemType === 'mix';
+                        const contextType = isLiked ? 'liked' : isMix ? 'generated_playlist' : 'playlist';
                         return (
                           <MediaContextMenu
                             key={playlist.id}
                             data={{
                               id: playlist.id,
-                              type: isMix ? 'generated_playlist' : 'playlist',
+                              type: contextType,
                               title: playlist.title,
                               song_ids: playlist.song_ids
                             }}
                           >
-                            <div onClick={() => handleSearchResultClick(playlist, isMix ? 'mix' : 'playlist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
+                            <div onClick={() => handleSearchResultClick(playlist, isLiked ? 'playlist' : isMix ? 'mix' : 'playlist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                               <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
                                 <Image fill sizes="48px" src={getImageUrl(playlist._unified_image || playlist.image_url || playlist.image_path || 'playlist-placeholder.jpg', 'playlist_images')} alt={playlist.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                               </div>
@@ -670,7 +704,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                         <MediaContextMenu key={album.id} data={{ id: album.id, type: 'album', title: album.title, artist_id: album.artists?.id }}>
                           <div onClick={() => handleSearchResultClick(album, 'album')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                             <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                              <Image fill sizes="48px" src={getImageUrl(album.image_path || 'sample.jpg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                              <Image fill sizes="48px" src={getImageUrl(album.image_url || album.image_path || 'sample.jpg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                             </div>
                             <div className="flex flex-col overflow-hidden">
                               <p className="text-[15px] font-medium text-white truncate">{album.title}</p>

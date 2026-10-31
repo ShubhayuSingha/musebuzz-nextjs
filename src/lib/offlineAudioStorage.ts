@@ -169,30 +169,15 @@ export async function getOfflineStorageEstimate(): Promise<StorageEstimate> {
   }
 
   try {
-    const songCount = await offlineDb.songs.count();
-    const albumCount = await offlineDb.albums.count();
-    const playlistCount = await offlineDb.playlists.count();
-
-    // If no downloaded items exist in offlineDb, downloaded usage is strictly 0 B
-    if (songCount === 0 && albumCount === 0 && playlistCount === 0) {
-      let quotaBytes = 0;
-      if (navigator.storage && navigator.storage.estimate) {
-        const est = await navigator.storage.estimate();
-        quotaBytes = est.quota || 0;
-      }
-      return {
-        usageBytes: 0,
-        quotaBytes,
-        formattedUsage: '0 B',
-        formattedQuota: formatBytes(quotaBytes),
-        percentUsed: 0
-      };
+    let quotaBytes = 0;
+    if (navigator.storage && navigator.storage.estimate) {
+      const est = await navigator.storage.estimate();
+      quotaBytes = est.quota || 0;
     }
 
-    let totalBytes = 0;
-
-    // 1. Audio Cache size (downloaded MP3 audio files)
-    if ('caches' in window) {
+    // Measure exact downloaded media size (MP3 audio files + cached media cover images)
+    let mediaBytes = 0;
+    if (typeof window !== 'undefined' && 'caches' in window) {
       if (await caches.has(CACHE_AUDIO_NAME)) {
         const audioCache = await caches.open(CACHE_AUDIO_NAME);
         const requests = await audioCache.keys();
@@ -201,18 +186,17 @@ export async function getOfflineStorageEstimate(): Promise<StorageEstimate> {
           if (res) {
             const cl = res.headers.get('content-length');
             if (cl) {
-              totalBytes += parseInt(cl, 10) || 0;
+              mediaBytes += parseInt(cl, 10) || 0;
             } else {
               try {
                 const blob = await res.clone().blob();
-                totalBytes += blob.size;
+                mediaBytes += blob.size;
               } catch {}
             }
           }
         }
       }
 
-      // 2. Media Images Cache size (downloaded covers and artist images)
       if (await caches.has(CACHE_MEDIA_IMAGES_NAME)) {
         const imgCache = await caches.open(CACHE_MEDIA_IMAGES_NAME);
         const requests = await imgCache.keys();
@@ -221,11 +205,11 @@ export async function getOfflineStorageEstimate(): Promise<StorageEstimate> {
           if (res) {
             const cl = res.headers.get('content-length');
             if (cl) {
-              totalBytes += parseInt(cl, 10) || 0;
+              mediaBytes += parseInt(cl, 10) || 0;
             } else {
               try {
                 const blob = await res.clone().blob();
-                totalBytes += blob.size;
+                mediaBytes += blob.size;
               } catch {}
             }
           }
@@ -233,37 +217,17 @@ export async function getOfflineStorageEstimate(): Promise<StorageEstimate> {
       }
     }
 
-    // 3. IndexedDB metadata size (songs, playlists, albums)
-    try {
-      const [songs, albums, playlists] = await Promise.all([
-        offlineDb.songs.toArray(),
-        offlineDb.albums.toArray(),
-        offlineDb.playlists.toArray()
-      ]);
-      const jsonStr = JSON.stringify({ songs, albums, playlists });
-      totalBytes += new Blob([jsonStr]).size;
-    } catch (e) {
-      console.warn('[Offline Storage] DB size calculation fallback:', e);
-    }
-
-    // Quota from browser
-    let quotaBytes = 0;
-    if (navigator.storage && navigator.storage.estimate) {
-      const est = await navigator.storage.estimate();
-      quotaBytes = est.quota || 0;
-    }
-
-    const percentUsed = quotaBytes > 0 ? Math.round((totalBytes / quotaBytes) * 100) : 0;
+    const percentUsed = quotaBytes > 0 ? (mediaBytes / quotaBytes) * 100 : 0;
 
     return {
-      usageBytes: totalBytes,
+      usageBytes: mediaBytes,
       quotaBytes,
-      formattedUsage: formatBytes(totalBytes),
+      formattedUsage: formatBytes(mediaBytes),
       formattedQuota: formatBytes(quotaBytes),
-      percentUsed
+      percentUsed: Math.min(Math.round(percentUsed * 10) / 10, 100)
     };
   } catch (err) {
-    console.warn('[Offline Storage] Download storage calculation failed:', err);
+    console.warn('[Offline Storage] Failed to get storage estimate:', err);
     return {
       usageBytes: 0,
       quotaBytes: 0,

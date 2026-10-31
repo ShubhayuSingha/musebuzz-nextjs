@@ -398,8 +398,7 @@ const ArtistContent: React.FC<ArtistContentProps> = ({
                                 bg-neutral-400/5 
                                 cursor-pointer 
                                 hover:bg-neutral-400/10 
-                                hover:-translate-y-2
-                                transition-all duration-300 ease-in-out
+                                transition-colors duration-200
                                 p-3
                                 h-full
                             "

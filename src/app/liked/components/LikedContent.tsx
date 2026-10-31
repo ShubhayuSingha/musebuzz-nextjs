@@ -263,7 +263,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                           </>
                         ) : (
                           <>
-                            <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
+                            <span className={`group-hover:hidden ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-neutral-400'}`}>
                               {index + 1}
                             </span>
                             <BsPlayFill
@@ -294,7 +294,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                         <div className="flex items-center gap-1.5 min-w-0">
                           <p 
                             title={song.title} 
-                            className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}
+                            className={`truncate font-medium ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-white'}`}
                           >
                             {song.title}
                           </p>
@@ -352,7 +352,7 @@ const LikedContent: React.FC<LikedContentProps> = ({ songs }) => {
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-white'}`}>{song.title}</p>
                               <DownloadedBadge songId={song.id} />
                             </div>
                             <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>

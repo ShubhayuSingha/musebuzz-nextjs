@@ -8,22 +8,17 @@ import * as downloadService from '@/lib/downloadService';
 import { supabase } from '@/lib/supabaseClient';
 import useDownloadStore from '@/stores/useDownloadStore';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
+import { useNetworkProbe } from '@/hooks/useNetworkProbe';
 
 export default function PwaRegister() {
+  // Real-time zero-byte network probe bypassing Windows virtual network adapters
+  useNetworkProbe();
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     // Request persistent storage from browser to prevent eviction
     requestPersistentStorage();
-
-    // Sync online status and listen to online/offline network changes
-    useOfflineModeStore.getState().setIsOnline(navigator.onLine);
-
-    const handleOnline = () => useOfflineModeStore.getState().setIsOnline(true);
-    const handleOffline = () => useOfflineModeStore.getState().setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
 
     // Refresh downloaded IDs in store on initial mount
     useDownloadStore.getState().refreshDownloadedStatus();
@@ -134,7 +129,7 @@ export default function PwaRegister() {
       if (process.env.NODE_ENV === 'development') return;
 
       if (typeof window !== 'undefined' && 'caches' in window && navigator.onLine) {
-        caches.open('musebuzz-static-v5').then((cache) => {
+        caches.open('musebuzz-static-v6').then((cache) => {
           const scripts = Array.from(document.querySelectorAll('script[src]'))
             .map((s: any) => s.src)
             .filter((src: string) => src.includes('/_next/static/'));
@@ -149,10 +144,27 @@ export default function PwaRegister() {
           });
         }).catch(() => {});
 
-        // Keep cached home/page shell up to date with newest UI
-        caches.open('musebuzz-pages-v2').then((cache) => {
-          fetch(window.location.pathname).then((res) => {
-            if (res.status === 200) cache.put(window.location.pathname, res);
+        // Keep cached core pages and RSC payloads up to date for seamless offline navigation
+        caches.open('musebuzz-pages-v3').then((pagesCache) => {
+          caches.open('musebuzz-rsc-v3').then((rscCache) => {
+            const coreRoutes = ['/', '/liked', '/library', '/offline'];
+            if (!coreRoutes.includes(window.location.pathname)) {
+              coreRoutes.push(window.location.pathname);
+            }
+            coreRoutes.forEach((route) => {
+              // Precache HTML shell
+              fetch(route).then((res) => {
+                if (res.status === 200) pagesCache.put(route, res);
+              }).catch(() => {});
+
+              // Precache RSC stream
+              fetch(route, { headers: { RSC: '1' } }).then((res) => {
+                if (res.status === 200) {
+                  rscCache.put(route, res.clone());
+                  rscCache.put(`${route}?_rsc=offline`, res);
+                }
+              }).catch(() => {});
+            });
           }).catch(() => {});
         }).catch(() => {});
       }
@@ -198,8 +210,6 @@ export default function PwaRegister() {
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', cacheLoadedAssets);
       window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);

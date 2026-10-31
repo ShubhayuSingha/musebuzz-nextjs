@@ -49,27 +49,51 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
   const [isSaved, setIsSaved] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [isMixSaved, setIsMixSaved] = useState(false);
 
   const finalSongId = songId || (data.type === 'song' ? data.id : undefined);
   const finalPlaylistId = playlistId || data.playlistId;
 
-  // --- CHECK STATUS ---
+  // --- CHECK STATUS (Stable check on mount or when data changes) ---
   useEffect(() => {
     if (!user?.id) return;
+    let isMounted = true;
 
     const checkStatus = async () => {
       if (data.type === 'album') {
           const saved = await library.checkIsSaved(data.id);
-          setIsSaved(saved);
+          if (isMounted) setIsSaved(saved);
       }
       if (data.type === 'artist') {
           const following = await library.checkIsArtistSaved(data.id);
-          setIsFollowing(following);
+          if (isMounted) setIsFollowing(following);
+      }
+      if (data.type === 'generated_playlist') {
+          const saved = await library.checkIsMixSaved(data.id);
+          if (isMounted) setIsMixSaved(saved);
       }
     };
 
     checkStatus();
-  }, [data.id, data.type, user, library]);
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.id, data.type, user?.id]);
+
+  // Refresh status on opening context menu
+  const handleOpenChange = (open: boolean) => {
+    if (open && user?.id) {
+      if (data.type === 'album') {
+        library.checkIsSaved(data.id).then(setIsSaved);
+      } else if (data.type === 'artist') {
+        library.checkIsArtistSaved(data.id).then(setIsFollowing);
+      } else if (data.type === 'generated_playlist') {
+        library.checkIsMixSaved(data.id).then(setIsMixSaved);
+      }
+    }
+  };
 
   const { isOnline, isOfflineMode } = useOfflineModeStore();
   const isOffline = !isOnline || isOfflineMode;
@@ -83,7 +107,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
       await library.followArtist(data.id);
       refreshPlaylists(); 
       router.refresh();
-  }
+  };
 
   const handleUnfollow = async () => {
       if (isOffline) return toast.error("Action not available offline");
@@ -92,7 +116,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
       await library.unfollowArtist(data.id);
       refreshPlaylists();
       router.refresh();
-  }
+  };
 
   const handleAddToLibrary = async () => {
     if (isOffline) return toast.error("Action not available offline");
@@ -115,19 +139,19 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   const handleSaveMix = async () => {
     if (isOffline) return toast.error("Action not available offline");
     if (!user) return toast.error("Log in to save mixes");
-    const toastId = toast.loading('Saving to library...');
-    try {
-      const result = await saveMixToLibrary(data.id);
-      if (result.success) {
-        toast.success(`Saved as "${result.title}"`, { id: toastId });
-        refreshPlaylists();
-        router.refresh();
-      } else {
-        toast.error(result.error || 'Failed to save mix', { id: toastId });
-      }
-    } catch (error) {
-      toast.error('Something went wrong', { id: toastId });
-    }
+    setIsMixSaved(true);
+    await library.addMix(data.id);
+    refreshPlaylists();
+    router.refresh();
+  };
+
+  const handleRemoveMix = async () => {
+    if (isOffline) return toast.error("Action not available offline");
+    if (!user) return;
+    setIsMixSaved(false);
+    await library.removeMix(data.id);
+    refreshPlaylists();
+    router.refresh();
   };
 
   const handleDeletePlaylist = () => {
@@ -242,7 +266,7 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
   };
 
   return (
-    <ContextMenu.Root modal={false}>
+    <ContextMenu.Root modal={false} onOpenChange={handleOpenChange}>
       <ContextMenu.Trigger asChild>
         {children}
       </ContextMenu.Trigger>
@@ -306,9 +330,15 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
 
             {/* GROUP: GENERATED MIX */}
             {data.type === 'generated_playlist' && (
-                <ContextMenu.Item onSelect={handleSaveMix} className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3">
-                    <AiOutlinePlus size={18} /> Save to Your Library
-                </ContextMenu.Item>
+                isMixSaved ? (
+                    <ContextMenu.Item onSelect={handleRemoveMix} className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3">
+                        <AiOutlineDelete size={18} /> Remove from Library
+                    </ContextMenu.Item>
+                ) : (
+                    <ContextMenu.Item onSelect={handleSaveMix} className="text-sm text-neutral-200 hover:bg-neutral-700 hover:text-white rounded-sm px-3 py-2 cursor-pointer outline-none flex items-center gap-x-3">
+                        <AiOutlinePlus size={18} /> Save to Your Library
+                    </ContextMenu.Item>
+                )
             )}
 
             {/* GROUP: PLAYLIST */}

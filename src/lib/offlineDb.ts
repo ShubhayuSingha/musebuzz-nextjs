@@ -40,6 +40,7 @@ export interface OfflinePlaylist {
   created_at?: string;
   downloaded_at: number;
   last_accessed_at?: string | null;
+  is_mix?: boolean;
   playlist_songs: OfflinePlaylistSong[];
 }
 
@@ -96,6 +97,7 @@ export interface OfflineArtist {
 export interface OfflinePlaybackState {
   user_id: string;
   active_song_id?: string | null;
+  active_song?: OfflineSong | any;
   is_playing?: boolean;
   volume?: number;
   progress_ms?: number;

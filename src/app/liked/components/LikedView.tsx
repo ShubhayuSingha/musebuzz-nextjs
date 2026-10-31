@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import DownloadButton from '@/components/DownloadButton';
 import LikedContent from './LikedContent';
 import { offlineDb } from '@/lib/offlineDb';
 import useOfflineModeStore from '@/stores/useOfflineModeStore';
 import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react';
 import { RiWifiOffLine } from 'react-icons/ri';
+import { AiFillHeart } from 'react-icons/ai';
 
 interface LikedViewProps {
   initialSongs: any[];
@@ -35,89 +36,94 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
     }
   }, [initialSongs, userId]);
 
+  const loadOfflineLiked = useCallback(async () => {
+    try {
+      let targetUserId = userId;
+      if (!targetUserId && offlineDb.liked_songs) {
+        const firstRow = await offlineDb.liked_songs.toCollection().first();
+        targetUserId = firstRow?.user_id;
+      }
+
+      if (offlineDb.liked_songs) {
+        const likedRows = targetUserId
+          ? await offlineDb.liked_songs.where('user_id').equals(targetUserId).toArray()
+          : await offlineDb.liked_songs.toArray();
+
+        if (likedRows.length > 0) {
+          likedRows.sort((a, b) => {
+            if (a.song_order !== undefined && b.song_order !== undefined && a.song_order !== b.song_order) {
+              return a.song_order - b.song_order;
+            }
+            return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+          });
+
+          const resolvedSongs = await Promise.all(
+            likedRows.map(async (row) => {
+              const song = await offlineDb.songs.get(row.song_id);
+              if (!song) return null;
+              const albumData = song.albums;
+              return {
+                ...song,
+                author: (song as any).author || albumData?.artists?.name || (song as any).artists?.name || "Unknown Artist",
+                album_title: (song as any).album_title || albumData?.title || "Unknown Album",
+                liked_created_at: row.created_at,
+                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+                audio_url: song.audio_url,
+                albums: albumData
+              };
+            })
+          );
+
+          const validSongs = resolvedSongs.filter(Boolean);
+          if (validSongs.length > 0) {
+            setSongs(validSongs);
+            return;
+          }
+        }
+      }
+
+      // Fallback: check legacy offlineDb.playlists in case user hasn't synced yet
+      let offlinePlaylist = targetUserId ? await offlineDb.playlists.get(`liked_${targetUserId}`) : undefined;
+      if (!offlinePlaylist) {
+        const fallback = await offlineDb.playlists.get('liked');
+        if (fallback && (!fallback.user_id || fallback.user_id === targetUserId)) {
+          offlinePlaylist = fallback;
+        }
+      }
+      if (!offlinePlaylist) {
+        const allPlaylists = await offlineDb.playlists.toArray();
+        offlinePlaylist = allPlaylists.find(p => p.id === 'liked' || p.id.startsWith('liked_'));
+      }
+      if (offlinePlaylist) {
+        const mapped = (offlinePlaylist.playlist_songs || [])
+          .sort((a, b) => a.song_order - b.song_order)
+          .map((item) => {
+            const song = item.songs;
+            const albumData = song.albums;
+            return {
+              ...song,
+              author: (song as any).author || albumData?.artists?.name || (song as any).artists?.name || "Unknown Artist",
+              album_title: (song as any).album_title || albumData?.title || "Unknown Album",
+              liked_created_at: item.created_at,
+              imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+              audio_url: song.audio_url,
+              albums: albumData
+            };
+          });
+        setSongs(mapped);
+      } else {
+        setSongs([]);
+      }
+    } catch (e) {
+      console.warn('[LikedView] Failed to load offline liked songs:', e);
+    }
+  }, [userId]);
+
   useEffect(() => {
     if (!mounted) return;
 
     // Offline mode: load directly from IndexedDB
     if (isDeviceOffline) {
-      const loadOfflineLiked = async () => {
-        try {
-          let targetUserId = userId;
-          if (!targetUserId && offlineDb.liked_songs) {
-            const firstRow = await offlineDb.liked_songs.toCollection().first();
-            targetUserId = firstRow?.user_id;
-          }
-
-          if (offlineDb.liked_songs) {
-            const likedRows = targetUserId 
-              ? await offlineDb.liked_songs.where('user_id').equals(targetUserId).toArray()
-              : await offlineDb.liked_songs.toArray();
-
-            if (likedRows.length > 0) {
-              likedRows.sort((a, b) => {
-                if (a.song_order !== undefined && b.song_order !== undefined && a.song_order !== b.song_order) {
-                  return a.song_order - b.song_order;
-                }
-                return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
-              });
-
-              const resolvedSongs = await Promise.all(
-                likedRows.map(async (row) => {
-                  const song = await offlineDb.songs.get(row.song_id);
-                  if (!song) return null;
-                  const albumData = song.albums;
-                  return {
-                    ...song,
-                    author: albumData?.artists?.name || "Unknown Artist",
-                    album_title: albumData?.title || "Unknown Album",
-                    liked_created_at: row.created_at,
-                    imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
-                    audio_url: song.audio_url,
-                    albums: albumData
-                  };
-                })
-              );
-
-              const validSongs = resolvedSongs.filter(Boolean);
-              if (validSongs.length > 0) {
-                setSongs(validSongs);
-                return;
-              }
-            }
-          }
-
-          // Fallback: check legacy offlineDb.playlists in case user hasn't synced yet
-          let offlinePlaylist = userId ? await offlineDb.playlists.get(`liked_${userId}`) : undefined;
-          if (!offlinePlaylist) {
-            const fallback = await offlineDb.playlists.get('liked');
-            if (fallback && (!fallback.user_id || fallback.user_id === userId)) {
-              offlinePlaylist = fallback;
-            }
-          }
-          if (offlinePlaylist) {
-            const mapped = (offlinePlaylist.playlist_songs || [])
-              .sort((a, b) => a.song_order - b.song_order)
-              .map((item) => {
-                const song = item.songs;
-                const albumData = song.albums;
-                return {
-                  ...song,
-                  author: albumData?.artists?.name || "Unknown Artist",
-                  album_title: albumData?.title || "Unknown Album",
-                  liked_created_at: item.created_at,
-                  imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
-                  audio_url: song.audio_url,
-                  albums: albumData
-                };
-              });
-            setSongs(mapped);
-          } else {
-            setSongs([]);
-          }
-        } catch (e) {
-          console.warn('[LikedView] Failed to load offline liked songs:', e);
-        }
-      };
       loadOfflineLiked();
       return;
     }
@@ -132,7 +138,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
       lastFetchedUserIdRef.current = userId;
       const fetchClientLiked = async () => {
         try {
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from('liked_songs')
             .select(`
               *, 
@@ -148,6 +154,13 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
             `)
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
+
+          if (error) {
+            console.warn('[LikedView] Client fetch returned error, falling back to offline:', error);
+            useOfflineModeStore.getState().setIsOnline(false);
+            await loadOfflineLiked();
+            return;
+          }
 
           if (data) {
             const mapped = data.map((item: any) => {
@@ -168,12 +181,14 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
             setSongs(mapped);
           }
         } catch (e) {
-          console.warn('[LikedView] Client fetch failed:', e);
+          console.warn('[LikedView] Client fetch failed, falling back to offline:', e);
+          useOfflineModeStore.getState().setIsOnline(false);
+          await loadOfflineLiked();
         }
       };
       fetchClientLiked();
     }
-  }, [isDeviceOffline, userId, mounted, initialSongs?.length, supabase]);
+  }, [isDeviceOffline, userId, mounted, initialSongs?.length, supabase, loadOfflineLiked]);
 
   return (
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">
@@ -181,14 +196,14 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
       <div className="bg-gradient-to-b from-purple-900 to-black w-full">
         <div className="p-6">
           <div className="flex flex-col md:flex-row items-center md:items-end gap-x-5">
-            {/* IMAGE */}
+            {/* IMAGE: Vibrant Purple-Blue Gradient with Centered White Heart */}
             <div className="
                 relative h-32 w-32 lg:h-52 lg:w-52 rounded-md 
                 overflow-hidden shadow-2xl flex-shrink-0 
-                bg-gradient-to-br from-violet-600 to-blue-600 
+                bg-gradient-to-br from-indigo-500 via-purple-600 to-blue-500 
                 flex items-center justify-center
             ">
-              <span className="text-white text-7xl lg:text-8xl select-none">❤️</span>
+              <AiFillHeart className="text-white drop-shadow-md text-6xl lg:text-8xl select-none" />
             </div>
 
             {/* TEXT CONTENT */}
@@ -198,7 +213,9 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
             ">
               <div className="flex items-center gap-2">
                 <p className="hidden md:block font-semibold text-sm text-neutral-200 uppercase tracking-wider">
-                  Playlist
+                  <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1">
+                    Playlist
+                  </span>
                 </p>
                 {isDeviceOffline && (
                   <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-xs font-semibold flex items-center gap-1">
@@ -206,31 +223,31 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
                   </span>
                 )}
               </div>
-              
+
               <h1 className="text-white font-bold drop-shadow-lg line-clamp-2 break-words leading-none pb-1 text-center md:text-left text-4xl sm:text-5xl lg:text-6xl">
-                 Liked Songs
+                Liked Songs
               </h1>
 
               <div className="flex items-center justify-center md:justify-start gap-x-2 mt-2">
-                  <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
-                      <span className="text-[10px] text-black font-bold">U</span>
-                  </div>
-                  
-                  <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer">
-                      You
-                  </p>
-                  
-                  <span className="text-neutral-400 text-sm">•</span>
-                  
-                  <p className="text-neutral-400 text-sm font-medium">
-                      {songs.length} {songs.length === 1 ? "song" : "songs"}
-                  </p>
+                <div className="relative h-6 w-6 rounded-full bg-neutral-500 flex items-center justify-center overflow-hidden">
+                  <span className="text-[10px] text-black font-bold">U</span>
+                </div>
+
+                <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer">
+                  You
+                </p>
+
+                <span className="text-neutral-400 text-sm">•</span>
+
+                <p className="text-neutral-400 text-sm font-medium">
+                  {songs.length} {songs.length === 1 ? "song" : "songs"}
+                </p>
               </div>
             </div>
 
           </div>
 
-          {/* ACTION CONTROLS ROW (Bottom part of header, on the left side) */}
+          {/* ACTION CONTROLS ROW */}
           <div className="flex items-center justify-center md:justify-start gap-x-4 mt-6">
             <DownloadButton id="liked" type="playlist" title="Liked Songs" />
           </div>

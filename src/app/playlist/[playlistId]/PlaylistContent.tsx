@@ -230,7 +230,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                           </>
                         ) : (
                           <>
-                            <span className={`group-hover:hidden ${isActive ? 'text-green-500' : 'text-neutral-400'}`}>
+                            <span className={`group-hover:hidden ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-neutral-400'}`}>
                               {index + 1}
                             </span>
                             <BsPlayFill size={22} className="hidden group-hover:block text-white" />
@@ -256,7 +256,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                       {/* TITLE */}
                       <div className="min-w-0 pr-4">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                          <p title={song.title} className={`truncate font-medium ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-white'}`}>{song.title}</p>
                           <DownloadedBadge songId={song.id} />
                         </div>
                         <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>
@@ -309,7 +309,7 @@ const PlaylistContent: React.FC<PlaylistContentProps> = ({ songs, playlistId, pl
                           </div>
                           <div className="flex flex-col min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-green-500' : 'text-white'}`}>{song.title}</p>
+                              <p title={song.title} className={`truncate font-medium ${isActive ? 'text-purple-400 font-semibold drop-shadow-[0_0_8px_rgba(168,85,247,0.45)]' : 'text-white'}`}>{song.title}</p>
                               <DownloadedBadge songId={song.id} />
                             </div>
                             <p title={song.author} className="text-sm text-neutral-400 truncate">{song.author}</p>

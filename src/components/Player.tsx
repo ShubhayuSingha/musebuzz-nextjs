@@ -6,10 +6,14 @@ import useSongById from "@/hooks/useSongById";
 import useTracker from "@/hooks/useTracker";
 import useAutoplay from "@/hooks/useAutoplay"; // 🟢 1. Import the Autoplay Hook
 import { useUser } from "@supabase/auth-helpers-react";
+import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import PlayerContent from "./PlayerContent";
+import IdlePlayer from "./IdlePlayer";
 
 const Player = () => {
   const user = useUser();
+  const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
 
   // 🟢 2. Activate the Autoplay Brain
   // This will quietly watch your queue and fetch new songs when you have 2 left.
@@ -21,9 +25,9 @@ const Player = () => {
   const { activeId } = usePlayerStore();
   const { song, songPath } = useSongById(activeId);
 
-  // If user is logged out or no active song at all — nothing to show
-  if (!user || !activeId) {
-    return null;
+  // No active song at all — show idle player on desktop, hidden on mobile
+  if (!activeId) {
+    return <IdlePlayer />;
   }
 
   // activeId exists (restored from localStorage) but song data isn't loaded yet.

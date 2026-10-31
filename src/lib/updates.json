@@ -1,5 +1,26 @@
 [
   {
+    "versionName": "v2.4",
+    "date": "31 Oct 2026",
+    "time": "01:25 PM IST",
+    "title": "⚡Persistent Player, Modern UI & Mobile Polish⚡",
+    "description": "Space-consuming player layout, universal sleek scrollbars, enhanced lyrics experience, and mobile queue fixes.",
+    "changes": [
+      "Converted desktop player from fixed overlay into persistent document flow so scrollbars and content terminate cleanly above the bar",
+      "Added IdlePlayer bar on desktop with interactive volume control and queue access when no track is playing",
+      "Replaced Windows default scrollbar stepper arrows with universal slim, transparent scrollbars and lavender hover highlights",
+      "Made lyrics button always interactive with adaptive opacity and unlocked lyrics access for logged-out users",
+      "Redesigned the 'No Lyrics Available' state with a glassmorphic badge, ambient glow, and dedicated loading spinner",
+      "Upgraded music playing indicator to a smooth, fluid lavender soundwave visualizer",
+      "Added floating timestamp preview tooltip on player seekbar that follows the cursor position",
+      "Fixed mobile queue songs not being tappable to play; now the entire row (title, artist, artwork) is responsive to touch",
+      "Protected like button and drag handle from triggering accidental playback when tapped on touchscreens",
+      "Fixed context menu auto-dismissing when the lyrics player automatically scrolls to the active line",
+      "Increased brightness and contrast of current time and duration labels on the player bar",
+      "Refined desktop play/pause button sizing and bottom padding to provide comfortable breathing room"
+    ]
+  },
+  {
     "versionName": "v2.3",
     "date": "30 Oct 2026",
     "time": "03:35 AM IST",

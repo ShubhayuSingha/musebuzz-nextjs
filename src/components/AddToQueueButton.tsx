@@ -5,7 +5,7 @@
 import usePlayerStore from "@/stores/usePlayerStore";
 import useAuthModalStore from "@/stores/useAuthModalStore";
 import { useUser } from "@supabase/auth-helpers-react";
-import { BsPlusCircle } from "react-icons/bs";
+import { LuCirclePlus } from "react-icons/lu";
 import { toast } from "react-hot-toast";
 
 interface AddToQueueButtonProps {
@@ -17,7 +17,7 @@ const AddToQueueButton: React.FC<AddToQueueButtonProps> = ({ songId }) => {
   const user = useUser();
   const authModal = useAuthModalStore();
 
-  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     // Prevent the click from bubbling up to the row (which would play the song)
     e.stopPropagation();
     
@@ -26,17 +26,19 @@ const AddToQueueButton: React.FC<AddToQueueButtonProps> = ({ songId }) => {
     }
 
     addToQueue(songId);
-    toast.success('Added to queue');
+    toast.success('Added to priority queue');
   };
 
   return (
-    <div 
+    <button 
+      type="button"
       onClick={handleClick}
-      className="text-neutral-400 hover:text-white cursor-pointer transition flex items-center justify-center"
-      title="Add to queue"
+      className="group/queue relative flex items-center justify-center p-1.5 rounded-full text-neutral-400 hover:text-purple-300 hover:bg-purple-600/15 active:scale-90 transition-all duration-200 cursor-pointer"
+      title="Add to priority queue"
+      aria-label="Add to priority queue"
     >
-      <BsPlusCircle size={20} />
-    </div>
+      <LuCirclePlus size={19} className="transition-transform duration-200 group-hover/queue:scale-110" />
+    </button>
   );
 };
 

@@ -22,7 +22,16 @@ const useSongById = (id?: string) => {
       // 1. FAST-PATH: Check local IndexedDB first for instant playback & zero flicker
       let hasLocal = false;
       try {
-        const offlineSong = await offlineDb.songs.get(id);
+        let offlineSong = await offlineDb.songs.get(id);
+
+        // If not directly in offlineDb.songs, check if it was cached in playback_state
+        if (!offlineSong && offlineDb.playback_state) {
+          const ps = await offlineDb.playback_state.toCollection().first();
+          if (ps && (ps as any).active_song && (ps as any).active_song.id === id) {
+            offlineSong = (ps as any).active_song;
+          }
+        }
+
         if (offlineSong) {
           setSong(offlineSong);
           setIsLoading(false);
@@ -55,6 +64,46 @@ const useSongById = (id?: string) => {
 
         if (!error && data) {
           setSong(data);
+
+          // 🟢 AUTO-CACHE METADATA TO INDEXEDDB:
+          // Cache song metadata so if the user restarts the app offline,
+          // title, artist, album, and artwork are known and immediately visible.
+          try {
+            const existing = await offlineDb.songs.get(id);
+            const imagePath = data.albums?.image_path;
+            let resolvedImage = existing?.imageUrl || data.imageUrl || data.albums?.image_url;
+            if (!resolvedImage && imagePath) {
+              const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
+              resolvedImage = imgData?.publicUrl;
+            }
+
+            await offlineDb.songs.put({
+              ...data,
+              id: data.id,
+              title: data.title,
+              author: data.albums?.artists?.name || data.author || undefined,
+              song_path: data.song_path,
+              duration_seconds: data.duration_seconds,
+              audio_url: existing?.audio_url || data.audio_url || undefined,
+              imageUrl: resolvedImage || undefined,
+              lyrics_snippet: data.lyrics_snippet,
+              downloaded_at: existing?.downloaded_at || undefined,
+              albums: data.albums ? {
+                id: data.albums.id,
+                title: data.albums.title,
+                image_path: data.albums.image_path,
+                image_url: resolvedImage || undefined,
+                genre: data.albums.genre,
+                release_type: data.albums.release_type,
+                artists: data.albums.artists ? {
+                  id: data.albums.artists.id,
+                  name: data.albums.artists.name
+                } : undefined
+              } : undefined
+            });
+          } catch (e) {
+            console.warn('[useSongById] Failed to cache metadata:', e);
+          }
         } else if (!hasLocal) {
           const offlineSong = await offlineDb.songs.get(id);
           if (offlineSong) setSong(offlineSong);

@@ -61,7 +61,11 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
         }
     };
     
-    const handleScroll = () => {
+    const handleScroll = (e: Event) => {
+        const target = e.target as HTMLElement | null;
+        if (target && typeof target.closest === 'function' && target.closest('[data-lyrics-container="true"]')) {
+            return;
+        }
         if (visible) setOpenId(null);
     };
 

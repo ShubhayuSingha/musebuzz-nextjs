@@ -13,7 +13,9 @@ import ClientLayout from "@/components/ClientLayout";
 import PwaRegister from "@/components/PwaRegister";
 
 const font = Figtree({ 
-  subsets: ["latin"] 
+  subsets: ["latin"],
+  variable: "--font-figtree",
+  display: "swap"
 });
 
 export const metadata = {
@@ -67,7 +69,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en">
-      <body className={`${font.className} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen h-[100dvh] overflow-x-hidden`}>
+      <body className={`${font.className} ${font.variable} antialiased bg-zinc-900 text-zinc-50 flex flex-col h-screen h-[100dvh] overflow-x-hidden font-sans`}>
         <SupabaseProvider session={session}>
            
            {/* 🟢 Update Component Usage */}

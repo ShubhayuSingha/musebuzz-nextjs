@@ -1,0 +1,60 @@
+<svg width="600" height="600" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#3b1372" />
+      <stop offset="50%" stop-color="#1b0836" />
+      <stop offset="100%" stop-color="#090214" />
+    </radialGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c084fc" />
+      <stop offset="50%" stop-color="#818cf8" />
+      <stop offset="100%" stop-color="#22d3ee" />
+    </linearGradient>
+    <linearGradient id="orbGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.85" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.25" />
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="600" height="600" rx="32" fill="url(#bg)" />
+
+  <!-- Outer subtle tech rings -->
+  <circle cx="300" cy="270" r="210" stroke="#a855f7" stroke-opacity="0.12" stroke-width="2" fill="none" stroke-dasharray="6 8" />
+  <circle cx="300" cy="270" r="165" stroke="#22d3ee" stroke-opacity="0.15" stroke-width="1.5" fill="none" />
+  <circle cx="300" cy="270" r="125" stroke="url(#accentGrad)" stroke-opacity="0.35" stroke-width="3" fill="none" />
+
+  <!-- Center Glowing Orb -->
+  <circle cx="300" cy="270" r="95" fill="url(#orbGrad)" filter="url(#glow)" />
+  
+  <!-- Waveform / Equalizer bars inside Orb -->
+  <g fill="#ffffff" opacity="0.95">
+    <rect x="230" y="255" width="8" height="30" rx="4" />
+    <rect x="246" y="240" width="8" height="60" rx="4" />
+    <rect x="262" y="225" width="8" height="90" rx="4" />
+    <rect x="278" y="210" width="8" height="120" rx="4" />
+    <rect x="294" y="198" width="8" height="144" rx="4" fill="url(#accentGrad)" />
+    <rect x="310" y="215" width="8" height="110" rx="4" />
+    <rect x="326" y="230" width="8" height="80" rx="4" />
+    <rect x="342" y="245" width="8" height="50" rx="4" />
+    <rect x="358" y="258" width="8" height="24" rx="4" />
+  </g>
+
+  <!-- Sparkles -->
+  <path d="M205 180 Q215 180 215 170 Q215 180 225 180 Q215 180 215 190 Q215 180 205 180 Z" fill="#c084fc" filter="url(#glow)" />
+  <path d="M385 190 Q392 190 392 183 Q392 190 399 190 Q392 190 392 197 Q392 190 385 190 Z" fill="#38bdf8" filter="url(#glow)" />
+  <path d="M395 340 Q403 340 403 332 Q403 340 411 340 Q403 340 403 348 Q403 340 395 340 Z" fill="#a855f7" filter="url(#glow)" />
+
+  <!-- Badge Container Bottom -->
+  <rect x="170" y="430" width="260" height="50" rx="25" fill="#000000" fill-opacity="0.65" stroke="url(#accentGrad)" stroke-width="1.5" />
+  <text x="300" y="462" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="4">GENERATED MIX</text>
+  <text x="300" y="520" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="700" fill="#a855f7" text-anchor="middle" letter-spacing="3">MUSEBUZZ CURATED</text>
+</svg>
+

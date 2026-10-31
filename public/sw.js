@@ -1,13 +1,17 @@
 // public/sw.js
-// MuseBuzz Service Worker - Version 1.2.0
+// MuseBuzz Service Worker - Version 1.3.0
 
-const CACHE_STATIC_NAME = 'musebuzz-static-v5';
-const CACHE_PAGES_NAME = 'musebuzz-pages-v2';
+const CACHE_STATIC_NAME = 'musebuzz-static-v6';
+const CACHE_PAGES_NAME = 'musebuzz-pages-v3';
+const CACHE_RSC_NAME = 'musebuzz-rsc-v3';
 const CACHE_AUDIO_NAME = 'musebuzz-audio-v1';
 const CACHE_MEDIA_IMAGES_NAME = 'musebuzz-media-images-v1';
 
 const PRECACHE_ASSETS = [
   '/',
+  '/liked',
+  '/library',
+  '/downloads',
   '/offline',
   '/manifest.json',
   '/icon.svg',
@@ -21,6 +25,8 @@ const PRECACHE_ASSETS = [
   '/images/placeholder.svg'
 ];
 
+const PRECACHE_ROUTES = ['/', '/liked', '/library', '/downloads', '/offline'];
+
 // Message Event: Allow client to force skipWaiting
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
@@ -28,20 +34,50 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// 1. Install Event: Precache app shell
+// 1. Install Event: Precache app shell and essential routes
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_STATIC_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS).catch((err) => {
-        console.warn('[SW] Precache asset failed:', err);
-      });
-    }).then(() => self.skipWaiting())
+    (async () => {
+      // Precache static assets
+      try {
+        const staticCache = await caches.open(CACHE_STATIC_NAME);
+        await staticCache.addAll(PRECACHE_ASSETS);
+      } catch (err) {
+        console.warn('[SW] Precache static assets failed:', err);
+      }
+
+      // Precache route shells and RSC payloads
+      try {
+        const pagesCache = await caches.open(CACHE_PAGES_NAME);
+        const rscCache = await caches.open(CACHE_RSC_NAME);
+
+        for (const route of PRECACHE_ROUTES) {
+          try {
+            const pageRes = await fetch(route);
+            if (pageRes.status === 200) {
+              await pagesCache.put(route, pageRes.clone());
+            }
+            const rscRes = await fetch(route, { headers: { RSC: '1' } });
+            if (rscRes.status === 200) {
+              await rscCache.put(route, rscRes.clone());
+              await rscCache.put(`${route}?_rsc=offline`, rscRes.clone());
+            }
+          } catch (rErr) {
+            console.warn('[SW] Precache route shell failed for', route, rErr);
+          }
+        }
+      } catch (err) {
+        console.warn('[SW] Precache pages/rsc failed:', err);
+      }
+
+      await self.skipWaiting();
+    })()
   );
 });
 
 // 2. Activate Event: Clean up stale caches and claim clients
 self.addEventListener('activate', (event) => {
-  const currentCaches = [CACHE_STATIC_NAME, CACHE_PAGES_NAME, CACHE_AUDIO_NAME, CACHE_MEDIA_IMAGES_NAME];
+  const currentCaches = [CACHE_STATIC_NAME, CACHE_PAGES_NAME, CACHE_RSC_NAME, CACHE_AUDIO_NAME, CACHE_MEDIA_IMAGES_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -101,13 +137,15 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Bypass dev HMR / hot-reload / turbopack / chrome extensions / analytics
+  const isDevHost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
   if (
     url.pathname.includes('_next/webpack-hmr') ||
     url.pathname.includes('_next/turbopack-hmr') ||
     url.pathname.includes('turbopack') ||
     url.pathname.includes('__nextjs') ||
     url.pathname.includes('hot-update') ||
-    url.protocol.startsWith('chrome-extension')
+    url.protocol.startsWith('chrome-extension') ||
+    (isDevHost && url.pathname.startsWith('/_next/'))
   ) {
     return;
   }
@@ -209,8 +247,8 @@ self.addEventListener('fetch', (event) => {
         } catch (err) {
           // Offline: match against static cache or any active cache with ignoreSearch
           const cached = (await staticCache.match(request, { ignoreSearch: true })) ||
-                         (await staticCache.match(url.pathname, { ignoreSearch: true })) ||
-                         (await caches.match(request, { ignoreSearch: true }));
+            (await staticCache.match(url.pathname, { ignoreSearch: true })) ||
+            (await caches.match(request, { ignoreSearch: true }));
           if (cached) return cached;
 
           // If offline and chunk is not in cache, return valid dummy module instead of 404 to avoid ChunkLoadError
@@ -237,17 +275,28 @@ self.addEventListener('fetch', (event) => {
   if (url.searchParams.has('_rsc') || request.headers.get('rsc') === '1') {
     event.respondWith(
       (async () => {
+        const rscCache = await caches.open(CACHE_RSC_NAME);
         const pagesCache = await caches.open(CACHE_PAGES_NAME);
         try {
           const res = await fetch(request);
           if (res.status === 200) {
-            pagesCache.put(request, res.clone());
+            rscCache.put(request, res.clone());
+            rscCache.put(url.pathname, res.clone());
           }
           return res;
         } catch {
-          const cached = await pagesCache.match(request);
+          const cached = (await rscCache.match(request)) ||
+            (await rscCache.match(url.pathname)) ||
+            (await rscCache.match(url.pathname, { ignoreSearch: true })) ||
+            (await rscCache.match(request, { ignoreSearch: true })) ||
+            (await pagesCache.match(request, { ignoreSearch: true }));
           if (cached) return cached;
-          return new Response('', { status: 200, headers: { 'Content-Type': 'text/x-component' } });
+
+          // Never return empty string 200 for RSC: it poisons the Next.js parser and crashes router
+          return new Response(JSON.stringify({ error: 'Offline', message: 'Page RSC not cached' }), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' }
+          });
         }
       })()
     );
@@ -265,29 +314,38 @@ self.addEventListener('fetch', (event) => {
           const networkResponse = await fetch(request);
           if (networkResponse.status === 200) {
             pagesCache.put(request, networkResponse.clone());
+            pagesCache.put(url.pathname, networkResponse.clone());
           }
           return networkResponse;
         } catch (error) {
           // Network failed: Check cache for this specific page
-          const cachedPage = await pagesCache.match(request);
+          const cachedPage = (await pagesCache.match(request)) ||
+            (await pagesCache.match(url.pathname)) ||
+            (await pagesCache.match(url.pathname, { ignoreSearch: true })) ||
+            (await pagesCache.match(request, { ignoreSearch: true }));
           if (cachedPage) {
             return cachedPage;
           }
 
-          // Fallback to home page shell if cached
-          const cachedHome = await pagesCache.match('/');
-          if (cachedHome) {
-            return cachedHome;
+          // If this is the root home page, match '/'
+          if (url.pathname === '/') {
+            const cachedHome = (await pagesCache.match('/')) ||
+              (await pagesCache.match(request, { ignoreSearch: true }));
+            if (cachedHome) {
+              return cachedHome;
+            }
           }
 
-          // Fallback to offline page
+          // Fallback to offline page for any uncached sub-route (NEVER return home page for sub-routes!)
           const staticCache = await caches.open(CACHE_STATIC_NAME);
-          const fallback = await staticCache.match('/offline');
+          const fallback = (await pagesCache.match('/offline')) ||
+            (await staticCache.match('/offline')) ||
+            (await staticCache.match('/offline', { ignoreSearch: true }));
           if (fallback) {
             return fallback;
           }
 
-          return new Response('Offline', { status: 503 });
+          return new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } });
         }
       })()
     );
@@ -305,14 +363,14 @@ self.addEventListener('fetch', (event) => {
         // 1. If targetUrl is in cache (saved during download or prior fetch), return it directly
         if (targetUrl) {
           const cachedTarget = (await mediaImgCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true })) ||
-                               (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
+            (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
           if (cachedTarget) {
             return cachedTarget;
           }
         }
 
         const cachedReq = (await mediaImgCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
-                          (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true }));
+          (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true }));
         if (cachedReq) return cachedReq;
 
         // 2. Not cached: try network
@@ -326,12 +384,12 @@ self.addEventListener('fetch', (event) => {
           // 3. Network failed / offline: check targetUrl again or serve clean fallback
           if (targetUrl) {
             const cachedTarget = (await mediaImgCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true })) ||
-                                 (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
+              (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
             if (cachedTarget) return cachedTarget;
           }
           const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
-                           (await staticCache.match('/images/album-placeholder.png')) ||
-                           (await staticCache.match('/images/placeholder.svg'));
+            (await staticCache.match('/images/album-placeholder.png')) ||
+            (await staticCache.match('/images/placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {
@@ -353,11 +411,11 @@ self.addEventListener('fetch', (event) => {
 
         // 1. Check media images cache first, then static cache with ignoreVary: true
         const cached = (await mediaImgCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
-                       (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
-                       (await mediaImgCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
-                       (await staticCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
-                       (await mediaImgCache.match(url.href, { ignoreSearch: true, ignoreVary: true })) ||
-                       (await staticCache.match(url.href, { ignoreSearch: true, ignoreVary: true }));
+          (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
+          (await mediaImgCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
+          (await staticCache.match(request.url, { ignoreSearch: true, ignoreVary: true })) ||
+          (await mediaImgCache.match(url.href, { ignoreSearch: true, ignoreVary: true })) ||
+          (await staticCache.match(url.href, { ignoreSearch: true, ignoreVary: true }));
 
         if (cached) {
           return cached;
@@ -373,8 +431,8 @@ self.addEventListener('fetch', (event) => {
         } catch {
           // Offline and not cached: return clean album placeholder instead of broken icon
           const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
-                           (await staticCache.match('/images/album-placeholder.png')) ||
-                           (await staticCache.match('/images/placeholder.svg'));
+            (await staticCache.match('/images/album-placeholder.png')) ||
+            (await staticCache.match('/images/placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {

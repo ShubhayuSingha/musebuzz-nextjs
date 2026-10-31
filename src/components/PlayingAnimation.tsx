@@ -3,16 +3,13 @@
 
 const PlayingAnimation = () => {
   return (
-    /* Container: aligns items to the bottom, small gap */
-    <div className="flex items-end gap-[1px] h-4 w-5 justify-center">
-      {/* Bar 1: Standard bounce speed, full height */}
-      <span className="w-[3px] bg-green-500 rounded-sm animate-[bounce_1s_infinite] h-[80%]" />
-      
-      {/* Bar 2: Slower bounce, starts at 60% height */}
-      <span className="w-[3px] bg-green-500 rounded-sm animate-[bounce_1.2s_infinite] h-[60%]" />
-      
-      {/* Bar 3: Faster bounce, starts at 80% height */}
-      <span className="w-[3px] bg-green-500 rounded-sm animate-[bounce_0.8s_infinite] h-[80%]" />
+    <div className="flex items-end justify-center gap-[2.5px] h-4 w-4">
+      {/* Bar 1 */}
+      <span className="w-[2.5px] min-h-[3px] bg-gradient-to-t from-purple-400 to-purple-200 rounded-full animate-soundwave-1 shadow-[0_0_6px_rgba(216,180,254,0.45)]" />
+      {/* Bar 2 */}
+      <span className="w-[2.5px] min-h-[3px] bg-gradient-to-t from-purple-400 to-purple-200 rounded-full animate-soundwave-2 shadow-[0_0_6px_rgba(216,180,254,0.45)]" />
+      {/* Bar 3 */}
+      <span className="w-[2.5px] min-h-[3px] bg-gradient-to-t from-purple-400 to-purple-200 rounded-full animate-soundwave-3 shadow-[0_0_6px_rgba(216,180,254,0.45)]" />
     </div>
   );
 };

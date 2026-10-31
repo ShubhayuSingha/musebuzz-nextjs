@@ -3,7 +3,7 @@
 import { supabase } from '@/lib/supabaseClient';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import MediaContextMenu from './MediaContextMenu'; 
+import MediaContextMenu from './MediaContextMenu';
 
 interface AlbumItemProps {
   album: any;
@@ -25,88 +25,71 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
   };
 
   return (
-    <MediaContextMenu 
-        data={{
-            id: album.id,
-            type: 'album', // 🟢 This triggers the new logic in Step 1
-            title: album.title,
-            artist_id: album.artists?.id // 🟢 Ensures "Go to Artist" works
-        }}
+    <MediaContextMenu
+      data={{
+        id: album.id,
+        type: 'album',
+        title: album.title,
+        artist_id: album.artists?.id
+      }}
     >
+      <div
+        onClick={handleClick}
+        className="
+          group
+          relative
+          flex
+          flex-col
+          rounded-xl
+          p-3
+          cursor-pointer
+          bg-neutral-900/40
+          hover:bg-neutral-800/80
+          border
+          border-neutral-800/60
+          hover:border-neutral-700
+          transition-all
+          duration-200
+          shadow-sm
+          hover:shadow-md
+          h-full
+        "
+      >
+        {/* IMAGE */}
         <div
-          onClick={handleClick}
           className="
-            group
             relative
-            flex
-            flex-col
-            rounded-xl
-            p-3
-            cursor-pointer
-
-            isolate
-            will-change-transform
-
-            transition-transform
-            duration-300
-            hover:-translate-y-2
+            aspect-square
+            w-full
+            rounded-lg
+            overflow-hidden
           "
+          onDragStart={(e) => e.preventDefault()}
         >
-          {/* INSET DEPTH */}
-          <div
-            className="
-              pointer-events-none
-              absolute
-              inset-0
-              rounded-xl
-              opacity-0
-              group-hover:opacity-100
-              transition-opacity
-              duration-300
-              shadow-[inset_0_-14px_22px_-18px_rgba(0,0,0,0.55)]
-            "
+          <Image
+            unoptimized
+            draggable={false}
+            src={imageUrl || '/images/album-placeholder.png'}
+            fill
+            alt={album.title}
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            onError={(e) => {
+              e.currentTarget.src = '/images/album-placeholder.png';
+            }}
           />
-
-          {/* IMAGE */}
-          <div
-            className="
-              relative
-              aspect-square
-              w-full
-              rounded-lg
-              overflow-hidden          
-            "
-            onDragStart={(e) => e.preventDefault()}
-          >
-            <Image
-              unoptimized
-              draggable={false}
-              src={imageUrl || '/images/album-placeholder.png'}
-              fill
-              alt={album.title}
-              className="
-                object-cover
-                transition-transform
-                duration-300
-                ease-out
-              "
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              onError={(e) => {
-                e.currentTarget.src = '/images/album-placeholder.png';
-              }}
-            />
-          </div>
-
-          {/* TEXT */}
-          <div className="flex flex-col w-full pt-4 gap-y-1">
-            <p className="font-semibold truncate" title={album.title}>
-              {album.title}
-            </p>
-            <p className="text-neutral-400 text-sm truncate">
-              By {album.artists?.name || 'Unknown Artist'}
-            </p>
-          </div>
         </div>
+
+        {/* TEXT */}
+        <div className="flex flex-col w-full pt-4 gap-y-1">
+          <p className="font-semibold truncate" title={album.title}>
+            {album.title}
+          </p>
+          <p className="text-neutral-400 text-sm truncate">
+            By {album.artists?.name || 'Unknown Artist'}
+          </p>
+        </div>
+      </div>
     </MediaContextMenu>
   );
 };

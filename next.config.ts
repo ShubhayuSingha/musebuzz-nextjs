@@ -13,13 +13,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  
+
   /* 2. IGNORE ALL BUILD ERRORS */
   typescript: {
     ignoreBuildErrors: true,
   },
 
-  /* 3. Automatic Versioning (Vercel Git SHA) */
+  /* 4. Automatic Versioning (Vercel Git SHA) */
   env: {
     // This takes the private Vercel ID and makes it accessible to your code
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA || '',

@@ -21,6 +21,9 @@ import useDownloadStore from '@/stores/useDownloadStore';
 import useAuthModalStore from '@/stores/useAuthModalStore';
 import { offlineDb } from '@/lib/offlineDb';
 import MediaContextMenu from "@/components/MediaContextMenu"; 
+import MusicLoader from '@/components/MusicLoader';
+import { toast } from 'react-hot-toast';
+import { checkConnectivity } from '@/hooks/useNetworkProbe';
 
 type SectionKey = 'jumpBackIn' | 'madeForYou' | 'suggestedAlbums' | 'yourPlaylists' | 'newestAlbums' | 'offlinePlaylists' | 'offlineAlbums';
 
@@ -32,10 +35,10 @@ export default function Home() {
   const { version } = usePlaylistStore();
   const user = useUser();
   const authModal = useAuthModalStore();
-  const { isOnline, isOfflineMode, toggleOfflineMode } = useOfflineModeStore();
+  const { isOnline, isOfflineMode, setOfflineMode, setIsOnline, toggleOfflineMode } = useOfflineModeStore();
   const { downloadedIds } = useDownloadStore();
 
-  const isEffectivelyOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+  const isNetworkOffline = !isOnline || (typeof navigator !== 'undefined' && !navigator.onLine);
 
   // Global Loading State
   const [isLoading, setIsLoading] = useState(true);
@@ -89,6 +92,16 @@ export default function Home() {
   });
 
   const [canScrollRight, setCanScrollRight] = useState<Record<SectionKey, boolean>>({
+    jumpBackIn: false,
+    madeForYou: false,
+    suggestedAlbums: false,
+    yourPlaylists: false,
+    newestAlbums: false,
+    offlinePlaylists: false,
+    offlineAlbums: false,
+  });
+
+  const [hasOverflow, setHasOverflow] = useState<Record<SectionKey, boolean>>({
     jumpBackIn: false,
     madeForYou: false,
     suggestedAlbums: false,
@@ -206,26 +219,23 @@ export default function Home() {
     }
   }, [userId]);
 
+  // Whether to show the dedicated, full-page Offline Music view:
+  // 1. User deliberately enabled manual Offline Mode (isOfflineMode === true)
+  // 2. OR device is offline AND no online music was ever loaded into memory
+  const hasLoadedOnlineContent = newestAlbums.length > 0 || jumpBackIn.length > 0 || yourPlaylists.length > 0;
+  const showFullOfflineScreen = isOfflineMode || (isNetworkOffline && !hasLoadedOnlineContent);
+
   useEffect(() => {
-    if (isEffectivelyOffline) {
+    if (showFullOfflineScreen || isNetworkOffline) {
       loadOfflineHomeData();
     }
-  }, [isEffectivelyOffline, loadOfflineHomeData]);
+  }, [showFullOfflineScreen, isNetworkOffline, loadOfflineHomeData]);
 
   /* =======================
         ONLINE DATA FETCH
      ======================= */
 
-  useEffect(() => {
-    if (isEffectivelyOffline) return;
-
-    const now = Date.now();
-    // Prevent refetching when switching back and forth between browser tabs (< 60s)
-    if (hasLoadedOnceRef.current && now - lastFetchedTimeRef.current < 60000) {
-      return;
-    }
-
-    const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
       // Only show full-page spinner on initial load; background updates keep existing UI visible
       if (!hasLoadedOnceRef.current) {
         setIsLoading(true);
@@ -380,10 +390,63 @@ export default function Home() {
         lastFetchedTimeRef.current = Date.now();
         setIsLoading(false);
       }
-    };
+    }, [user, loadOfflineHomeData]);
+
+  useEffect(() => {
+    if (isOfflineMode) return;
+    const isHardwareOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+    if (!isOnline && !isHardwareOnline) return;
+
+    const now = Date.now();
+    // Prevent refetching when switching back and forth between browser tabs (< 60s)
+    if (hasLoadedOnceRef.current && now - lastFetchedTimeRef.current < 60000) {
+      return;
+    }
 
     fetchDashboard();
-  }, [version, userId, isEffectivelyOffline, loadOfflineHomeData]);
+  }, [version, userId, isOfflineMode, isOnline, fetchDashboard]);
+
+  // Real-time network reconnection listener: auto-refreshes online data without page reload
+  useEffect(() => {
+    const handleOnline = () => {
+      useOfflineModeStore.getState().setIsOnline(true);
+      lastFetchedTimeRef.current = 0;
+      fetchDashboard();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, [fetchDashboard]);
+
+  const handleSwitchToOnline = async () => {
+    toast.loading("Testing connection...", { id: "switch-online", duration: 1500 });
+    const isActuallyOnline = await checkConnectivity(3000);
+    if (!isActuallyOnline) {
+      toast.error("No internet connection detected. Please reconnect to Wi-Fi to go online.", {
+        id: "switch-online",
+        icon: "📶"
+      });
+      return;
+    }
+    setOfflineMode(false);
+    setIsOnline(true);
+    lastFetchedTimeRef.current = 0;
+    await fetchDashboard();
+    toast.success("Switched to Online Mode", { id: "switch-online" });
+  };
+
+  const handleRetryConnection = async () => {
+    toast.loading("Reconnecting...", { id: "retry-online", duration: 1500 });
+    const isActuallyOnline = await checkConnectivity(3000);
+    if (!isActuallyOnline) {
+      toast.error("Still offline. Please check your network connection.", { id: "retry-online", icon: "📶" });
+      return;
+    }
+    setIsOnline(true);
+    lastFetchedTimeRef.current = 0;
+    await fetchDashboard();
+    toast.success("Connected to MuseBuzz online", { id: "retry-online" });
+  };
 
   /* =======================
         SCROLL HELPERS
@@ -395,12 +458,14 @@ export default function Home() {
   ) => {
     if (!ref.current) return;
     const { scrollLeft, scrollWidth, clientWidth } = ref.current;
+    const isOverflowing = scrollWidth > clientWidth + 2;
 
-    setCanScrollLeft((prev) => ({ ...prev, [key]: scrollLeft > 0 }));
-    setCanScrollRight((prev) => ({
-      ...prev,
-      [key]: scrollLeft + clientWidth < scrollWidth - 1,
-    }));
+    setHasOverflow((prev) => (prev[key] === isOverflowing ? prev : { ...prev, [key]: isOverflowing }));
+    setCanScrollLeft((prev) => (prev[key] === (scrollLeft > 2) ? prev : { ...prev, [key]: scrollLeft > 2 }));
+    setCanScrollRight((prev) => {
+      const canRight = isOverflowing && scrollLeft + clientWidth < scrollWidth - 2;
+      return prev[key] === canRight ? prev : { ...prev, [key]: canRight };
+    });
   };
 
   const scrollByAmount = (
@@ -411,6 +476,8 @@ export default function Home() {
     if (!ref.current) return;
     ref.current.scrollBy({ left: amount, behavior: 'smooth' });
     updateScrollButtons(ref, key);
+    setTimeout(() => updateScrollButtons(ref, key), 150);
+    setTimeout(() => updateScrollButtons(ref, key), 350);
   };
 
   /* =======================
@@ -534,6 +601,63 @@ export default function Home() {
   };
 
   /* =======================
+        SECTION HEADER
+     ======================= */
+
+  const renderSectionHeader = (
+    title: string,
+    key: SectionKey,
+    scrollRef: React.RefObject<HTMLDivElement | null>,
+    options?: { subtitle?: string; count?: number }
+  ) => {
+    const isOverflowing = hasOverflow[key];
+
+    return (
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-semibold text-white tracking-tight">{title}</h2>
+            {options?.count !== undefined && (
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-800 text-zinc-400 font-mono font-medium">
+                {options.count}
+              </span>
+            )}
+          </div>
+          {options?.subtitle && (
+            <p className="text-sm text-neutral-400 mt-1">{options.subtitle}</p>
+          )}
+        </div>
+
+        {/* Navigation arrows beside the heading (visible only if there is overflow) */}
+        {isOverflowing && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => scrollByAmount(scrollRef, -scrollRef.current!.clientWidth * 0.75, key)}
+              disabled={!canScrollLeft[key]}
+              className="w-8 h-8 rounded-full bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 flex items-center justify-center text-neutral-300 hover:text-white transition active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+              title="Scroll left"
+              aria-label="Scroll left"
+            >
+              <HiChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollByAmount(scrollRef, scrollRef.current!.clientWidth * 0.75, key)}
+              disabled={!canScrollRight[key]}
+              className="w-8 h-8 rounded-full bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 hover:border-neutral-700 flex items-center justify-center text-neutral-300 hover:text-white transition active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed cursor-pointer shadow-sm"
+              title="Scroll right"
+              aria-label="Scroll right"
+            >
+              <HiChevronRight size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /* =======================
         SCROLLER
      ======================= */
 
@@ -550,72 +674,47 @@ export default function Home() {
     };
 
     return (
-    <div className="relative group">
-      {canScrollLeft[key] && (
-        <button
-          onClick={() =>
-            scrollByAmount(scrollRef, -scrollRef.current!.clientWidth / 1.5, key)
-          }
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10
-                      bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
-                      hidden group-hover:block shadow-md transition"
+      <div className="relative">
+        <div
+          ref={scrollRef}
+          onScroll={() => updateScrollButtons(scrollRef, key)}
+          onMouseDown={(e) => onMouseDown(e, scrollRef)}
+          onMouseMove={(e) => onMouseMove(e, scrollRef, key)}
+          onMouseUp={() => onMouseUp(scrollRef, key)}
+          onMouseLeave={() => onMouseLeave(scrollRef, key)}
+          className={`
+            flex gap-4 overflow-x-auto scrollbar-hide pb-4 select-none
+            min-h-[260px]
+            ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
+          `}
         >
-          <HiChevronLeft size={30} />
-        </button>
-      )}
-
-      <div
-        ref={scrollRef}
-        onScroll={() => updateScrollButtons(scrollRef, key)}
-        onMouseDown={(e) => onMouseDown(e, scrollRef)}
-        onMouseMove={(e) => onMouseMove(e, scrollRef, key)}
-        onMouseUp={() => onMouseUp(scrollRef, key)}
-        onMouseLeave={() => onMouseLeave(scrollRef, key)}
-        className={`
-          flex gap-4 overflow-x-auto scrollbar-hide pb-4 select-none
-          min-h-[260px]
-          ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
-        `}
-      >
-        {items.map((item, index) => (
-          <motion.div
-            key={item.id}
-            className="min-w-[180px] w-[180px]"
-            initial={{ opacity: 0, y: 60, scale: 0.85 }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              scale: 1,
-              transition: {
-                type: 'spring',
-                stiffness: 180,
-                damping: 18,
-                mass: 0.8,
-                delay: INITIAL_DELAY + index * STAGGER,
-              },
-            }}
-          >
-            <div className={isDragging ? 'pointer-events-none' : ''}>
-               {customRenderer ? customRenderer(item) : DefaultRenderer(item)}
-            </div>
-          </motion.div>
-        ))}
+          {items.map((item, index) => (
+            <motion.div
+              key={item.id}
+              className="min-w-[180px] w-[180px]"
+              initial={{ opacity: 0, y: 60, scale: 0.85 }}
+              animate={{
+                opacity: 1,
+                y: 0,
+                scale: 1,
+                transition: {
+                  type: 'spring',
+                  stiffness: 180,
+                  damping: 18,
+                  mass: 0.8,
+                  delay: INITIAL_DELAY + index * STAGGER,
+                },
+              }}
+            >
+              <div className={isDragging ? 'pointer-events-none' : ''}>
+                 {customRenderer ? customRenderer(item) : DefaultRenderer(item)}
+              </div>
+            </motion.div>
+          ))}
+        </div>
       </div>
-
-      {canScrollRight[key] && (
-        <button
-          onClick={() =>
-            scrollByAmount(scrollRef, scrollRef.current!.clientWidth / 1.5, key)
-          }
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10
-                      bg-purple-300 text-black hover:bg-neutral-200 p-2 rounded-full
-                      hidden group-hover:block shadow-md transition"
-        >
-          <HiChevronRight size={30} />
-        </button>
-      )}
-    </div>
-  )};
+    );
+  };
 
   /* =======================
         INIT & RESIZE OBSERVER
@@ -623,7 +722,7 @@ export default function Home() {
 
   useEffect(() => {
     const checkAllScrolls = () => {
-      if (isEffectivelyOffline) {
+      if (showFullOfflineScreen) {
         updateScrollButtons(offlinePlaylistsRef, 'offlinePlaylists');
         updateScrollButtons(offlineAlbumsRef, 'offlineAlbums');
       } else {
@@ -637,6 +736,8 @@ export default function Home() {
 
     // 1. Initial check when data loads
     checkAllScrolls();
+    const t1 = setTimeout(checkAllScrolls, 100);
+    const t2 = setTimeout(checkAllScrolls, 400);
 
     // 2. Watch for physical container resizing (e.g. Sidebar or Queue toggling)
     const observer = new ResizeObserver(() => {
@@ -655,10 +756,12 @@ export default function Home() {
     window.addEventListener('resize', checkAllScrolls);
 
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       observer.disconnect();
       window.removeEventListener('resize', checkAllScrolls);
     };
-  }, [jumpBackIn, madeForYou, suggestedAlbums, yourPlaylists, newestAlbums, offlinePlaylists, offlineAlbums, isEffectivelyOffline]);
+  }, [jumpBackIn, madeForYou, suggestedAlbums, yourPlaylists, newestAlbums, offlinePlaylists, offlineAlbums, showFullOfflineScreen]);
 
   /* =======================
         RENDER
@@ -667,11 +770,8 @@ export default function Home() {
   // The Loading Screen Interceptor
   if (isLoading) {
     return (
-      <div className="h-[calc(100vh-100px)] w-full flex items-center justify-center bg-black">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
-          <p className="text-neutral-400 text-sm font-medium animate-pulse">Loading MuseBuzz...</p>
-        </div>
+      <div className="h-[calc(100vh-100px)] w-full flex items-center justify-center bg-black p-4">
+        <MusicLoader label="Loading MuseBuzz..." size="lg" />
       </div>
     );
   }
@@ -679,7 +779,7 @@ export default function Home() {
   /* =======================
         OFFLINE VIEW
      ======================= */
-  if (isEffectivelyOffline) {
+  if (showFullOfflineScreen) {
     const hasOfflineContent = offlinePlaylists.length > 0 || offlineAlbums.length > 0;
 
     return (
@@ -702,7 +802,7 @@ export default function Home() {
           </div>
 
           <button
-            onClick={toggleOfflineMode}
+            onClick={handleSwitchToOnline}
             type="button"
             className="self-start md:self-auto px-4 py-2 rounded-full text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition active:scale-95 flex items-center gap-2 cursor-pointer"
           >
@@ -741,7 +841,7 @@ export default function Home() {
               You haven&apos;t downloaded any playlists or albums for offline playback yet. Switch back online to download your favourite music.
             </p>
             <button
-              onClick={toggleOfflineMode}
+              onClick={handleSwitchToOnline}
               type="button"
               className="px-6 py-2.5 rounded-full font-semibold text-sm bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-900/50 transition active:scale-95 cursor-pointer"
             >
@@ -753,12 +853,9 @@ export default function Home() {
         {/* Row 1: Downloaded Playlists */}
         {offlinePlaylists.length > 0 && (
           <div className="mt-8">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-2xl font-semibold text-white">Downloaded Playlists</h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-800 text-zinc-400 font-mono font-medium">
-                {offlinePlaylists.length}
-              </span>
-            </div>
+            {renderSectionHeader("Downloaded Playlists", "offlinePlaylists", offlinePlaylistsRef, {
+              count: offlinePlaylists.length
+            })}
             {renderScroller(offlinePlaylists, offlinePlaylistsRef, 'offlinePlaylists', (item) => (
               <PlaylistItem playlist={item} />
             ))}
@@ -768,12 +865,9 @@ export default function Home() {
         {/* Row 2: Downloaded Albums */}
         {offlineAlbums.length > 0 && (
           <div className="mt-12">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-2xl font-semibold text-white">Downloaded Albums</h2>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-neutral-800 text-zinc-400 font-mono font-medium">
-                {offlineAlbums.length}
-              </span>
-            </div>
+            {renderSectionHeader("Downloaded Albums", "offlineAlbums", offlineAlbumsRef, {
+              count: offlineAlbums.length
+            })}
             {renderScroller(offlineAlbums, offlineAlbumsRef, 'offlineAlbums', (item) => (
               <AlbumItem album={item} />
             ))}
@@ -791,10 +885,43 @@ export default function Home() {
       <Greeting />
       <p className="mt-4 text-zinc-400">Music buzzing every day.</p>
 
+      {/* Non-destructive offline banner when network drops while browsing */}
+      {isNetworkOffline && (
+        <div className="mt-4 mb-2 p-4 rounded-xl bg-purple-950/40 border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20 text-purple-300">
+              <RiWifiOffLine size={20} />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">Network Disconnected</p>
+              <p className="text-xs text-neutral-400">
+                You are offline. Showing cached content. Only downloaded songs can be played offline.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOfflineMode(true)}
+              type="button"
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition active:scale-95 cursor-pointer"
+            >
+              View Downloaded Music
+            </button>
+            <button
+              onClick={handleRetryConnection}
+              type="button"
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold bg-purple-600 hover:bg-purple-500 text-white shadow-md transition active:scale-95 cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. JUMP BACK IN */}
       {user && jumpBackIn.length > 0 && (
           <div className="mt-8">
-            <h2 className="text-2xl font-semibold mb-4">Jump Back In</h2>
+            {renderSectionHeader("Jump Back In", "jumpBackIn", jumpBackInRef)}
             {renderScroller(jumpBackIn, jumpBackInRef, 'jumpBackIn', (item) => {
                  // Liked Songs Card
                  if (item.id === 'liked') {
@@ -828,10 +955,9 @@ export default function Home() {
       {/* 2. MADE FOR YOU */}
       {user && madeForYou.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-semibold mb-4">Made For You</h2>
-            <p className="text-sm text-neutral-400 -mt-3 mb-4">
-              Generated mixes based on your preferences
-            </p>
+            {renderSectionHeader("Made For You", "madeForYou", madeForYouRef, {
+              subtitle: "Generated mixes based on your preferences"
+            })}
             {renderScroller(madeForYou, madeForYouRef, 'madeForYou', (item) => (
                 <MixPlaylistItem data={item} />
             ))}
@@ -841,7 +967,7 @@ export default function Home() {
       {/* 3. AI SUGGESTIONS */}
       {user && suggestedAlbums.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-semibold mb-4">{aiTitle}</h2>
+            {renderSectionHeader(aiTitle, "suggestedAlbums", suggestedRef)}
             {renderScroller(suggestedAlbums, suggestedRef, 'suggestedAlbums', (item) => (
                 <AlbumItem album={item} />
             ))}
@@ -851,7 +977,7 @@ export default function Home() {
       {/* 4. YOUR PLAYLISTS */}
       {user && yourPlaylists.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-semibold mb-4">Your Playlists</h2>
+            {renderSectionHeader("Your Playlists", "yourPlaylists", yourPlaylistsRef)}
             {renderScroller(yourPlaylists, yourPlaylistsRef, 'yourPlaylists', (item) => (
                 <PlaylistItem playlist={item} />
             ))}
@@ -861,7 +987,7 @@ export default function Home() {
       {/* 5. NEWEST ALBUMS */}
       {newestAlbums.length > 0 && (
           <div className="mt-12">
-            <h2 className="text-2xl font-semibold mb-4">Newest Albums</h2>
+            {renderSectionHeader("Newest Albums", "newestAlbums", newestRef)}
             {renderScroller(newestAlbums, newestRef, 'newestAlbums', (item) => (
                 <AlbumItem album={item} />
             ))}

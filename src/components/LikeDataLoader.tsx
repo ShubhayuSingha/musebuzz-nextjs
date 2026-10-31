@@ -155,7 +155,12 @@ const LikeDataLoader = () => {
              }
           }
         )
-        .subscribe();
+        .subscribe((status, err) => {
+          if (status === 'CHANNEL_ERROR') {
+            console.warn('[LikeDataLoader] Supabase Realtime not enabled for liked_songs. Auto-reconnect stopped:', err?.message || status);
+            if (channel) supabaseClient.removeChannel(channel);
+          }
+        });
     }
 
     const { data: { subscription } } = supabaseClient.auth.onAuthStateChange((event) => {

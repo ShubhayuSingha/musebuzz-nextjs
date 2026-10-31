@@ -4,10 +4,10 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image'; 
 import { useRouter } from 'next/navigation';
-import { HiHome } from 'react-icons/hi';
 import { TbPlaylist } from 'react-icons/tb';
 import { AiOutlinePlus, AiFillHeart } from 'react-icons/ai'; 
-import { FiMenu } from 'react-icons/fi';
+import { FiMenu, FiDownload } from 'react-icons/fi';
+import { BsCheckCircleFill } from 'react-icons/bs';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -20,6 +20,7 @@ import usePlaylistStore from '@/stores/usePlaylistStore';
 import usePlaybackSync from "@/hooks/usePlaybackSync"; 
 import MediaContextMenu from "@/components/MediaContextMenu";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
+import useDownloadStore from '@/stores/useDownloadStore';
 import usePlayerStore from "@/stores/usePlayerStore";
 import { offlineDb } from "@/lib/offlineDb";
 
@@ -32,12 +33,12 @@ interface SidebarProps {
 
 interface SidebarItem {
   id: string;
-  type: 'playlist' | 'album' | 'artist'; 
+  type: 'playlist' | 'album' | 'artist' | 'generated_playlist';
   title: string;
   subtitle: string;
   imageUrl: string | null;
   path: string;
-  sortDate: string; 
+  sortDate: string;
   artist_id?: string;
 }
 
@@ -46,12 +47,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
   const router = useRouter();
   const authModal = useAuthModalStore();
   const user = useUser();
+  const userId = user?.id;
 
   usePlaybackSync();
   const { refreshPlaylists, version } = usePlaylistStore();
   const [libraryItems, setLibraryItems] = useState<SidebarItem[]>([]);
   
   const { isOnline, isOfflineMode } = useOfflineModeStore();
+  const isDownloaded = useDownloadStore((state) => state.isDownloaded);
+  const downloadedCount = useDownloadStore((state) => state.downloadedIds.size);
+
+  const isLikedDownloaded = isDownloaded('liked');
 
   const loadOfflineDownloads = async () => {
     if (!user?.id) return [];
@@ -99,17 +105,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
       const offlinePlItems: SidebarItem[] = offlinePlaylists
         .filter(pl => pl.id !== 'liked' && !pl.id.startsWith('liked_'))
         .map(pl => {
-          let imageUrl = '/images/playlist-placeholder.jpg';
+          const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder');
+          let imageUrl = isMix ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg';
           if (pl.image_path && pl.image_url) {
             imageUrl = pl.image_url;
           }
         return {
           id: pl.id,
-          type: 'playlist',
+          type: isMix ? 'generated_playlist' as const : 'playlist' as const,
           title: pl.title,
-          subtitle: 'Downloaded Playlist',
+          subtitle: isMix ? 'Generated Mix' : 'Downloaded Playlist',
           imageUrl: imageUrl,
-          path: `/playlist/${pl.id}`,
+          path: isMix ? `/mix/${pl.id}` : `/playlist/${pl.id}`,
           sortDate: pl.last_accessed_at || new Date(pl.downloaded_at).toISOString()
         };
       });
@@ -141,8 +148,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
     }
 
     if (isOffline) {
-      const offlineData = await loadOfflineDownloads();
-      setLibraryItems(offlineData.slice(0, 10));
+      // Preserve existing loaded items if already present to avoid abrupt layout shifts
+      if (libraryItems.length === 0) {
+        const offlineData = await loadOfflineDownloads();
+        setLibraryItems(offlineData.slice(0, 10));
+      }
       return;
     }
 
@@ -182,14 +192,45 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
 
       if (artError) throw artError;
 
-    // 4. Normalize Playlists
-    const formattedPlaylists: SidebarItem[] = (playlists || []).map((pl: any) => {
+      // 4. Fetch Saved Generated Mixes from user_context_settings
+      const { data: savedMixSettings } = await supabase
+        .from('user_context_settings')
+        .select('context_id, updated_at')
+        .eq('user_id', user.id)
+        .like('context_id', 'saved_mix:%');
+
+      let formattedMixes: SidebarItem[] = [];
+      if (savedMixSettings && savedMixSettings.length > 0) {
+        const mixIds = savedMixSettings.map((s: any) => s.context_id.replace('saved_mix:', ''));
+        const { data: mixData } = await supabase
+          .from('generated_playlists')
+          .select('id, title, image_url, created_at')
+          .in('id', mixIds);
+
+        formattedMixes = (mixData || []).map((mix: any) => {
+          const setting = savedMixSettings.find((s: any) => s.context_id === `saved_mix:${mix.id}`);
+          return {
+            id: mix.id,
+            type: 'generated_playlist' as const,
+            title: mix.title,
+            subtitle: 'Generated Mix',
+            imageUrl: (!mix.image_url || mix.image_url.includes('playlist-placeholder')) 
+              ? '/images/mix-placeholder.png' 
+              : mix.image_url,
+            path: `/mix/${mix.id}`,
+            sortDate: setting?.updated_at || mix.created_at
+          } as SidebarItem;
+        });
+      }
+
+      // 4. Normalize Playlists
+      const formattedPlaylists: SidebarItem[] = (playlists || []).map((pl: any) => {
         let imageUrl = '/images/playlist-placeholder.jpg';
         if (pl.image_path) {
             const { data: imgData } = supabase.storage.from('playlist_images').getPublicUrl(pl.image_path);
             imageUrl = imgData?.publicUrl || imageUrl;
         }
-        const userName = user.user_metadata.full_name || 'User';
+        const userName = user.user_metadata?.full_name || 'User';
 
         return {
             id: pl.id,
@@ -200,10 +241,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             path: `/playlist/${pl.id}`,
             sortDate: pl.last_accessed_at || pl.created_at
         };
-    });
+      });
 
-    // 5. Normalize Albums
-    const formattedAlbums = (savedAlbums || []).map((item: any) => {
+      // 5. Normalize Albums
+      const formattedAlbums = (savedAlbums || []).map((item: any) => {
         const album = item.albums;
         if (!album) return null;
 
@@ -217,17 +258,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             id: album.id,
             type: 'album' as const,
             title: album.title,
-            subtitle: `Album • ${album.artists?.name}`,
+            subtitle: `Album • ${album.artists?.name || 'Various Artists'}`,
             imageUrl: imageUrl,
             path: `/album/${album.id}`,
             sortDate: item.last_accessed_at || item.created_at,
             artist_id: album.artists?.id
         } as SidebarItem;
 
-    }).filter((item) => item !== null) as SidebarItem[];
+      }).filter((item) => item !== null) as SidebarItem[];
 
-    // 6. Normalize Artists
-    const formattedArtists = (savedArtists || []).map((item: any) => {
+      // 6. Normalize Artists
+      const formattedArtists = (savedArtists || []).map((item: any) => {
         const artist = item.artists;
         if (!artist) return null;
 
@@ -247,20 +288,18 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             sortDate: item.last_accessed_at || item.created_at,
         } as SidebarItem;
 
-    }).filter((item) => item !== null) as SidebarItem[];
+      }).filter((item) => item !== null) as SidebarItem[];
 
-    // 7. Combine & Sort
-    const combined = [...formattedPlaylists, ...formattedAlbums, ...formattedArtists]
-        .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
-        .slice(0, 10); 
+      // 7. Combine & Sort
+      const combined = [...formattedPlaylists, ...formattedAlbums, ...formattedArtists, ...formattedMixes]
+          .sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime())
+          .slice(0, 50); 
 
-    setLibraryItems(combined);
+      setLibraryItems(combined);
     } catch {
-      if (user?.id) {
+      if (user?.id && libraryItems.length === 0) {
         const offlineData = await loadOfflineDownloads();
         setLibraryItems(offlineData.slice(0, 10));
-      } else {
-        setLibraryItems([]);
       }
     }
   };
@@ -269,7 +308,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
 
   useEffect(() => {
     fetchLibrary();
-  }, [user, supabase, version, isOnline, isOfflineMode, activeContext?.id]); 
+  }, [userId, supabase, version, isOnline, isOfflineMode, activeContext?.id, downloadedCount]); 
 
   useEffect(() => {
     const handleNetworkChange = () => {
@@ -282,7 +321,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
       window.removeEventListener('offline', handleNetworkChange);
     };
   }, []);
-
 
   // --- CREATE PLAYLIST LOGIC ---
   const handleCreatePlaylist = async (e: React.MouseEvent) => {
@@ -326,12 +364,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
       e.preventDefault(); 
       authModal.onOpen('sign_in'); 
     }
-  }
+  };
 
   // HELPER: Common classes for the fixed-width icon container
   const iconBoxClass = "min-w-[80px] h-full flex items-center justify-center flex-shrink-0";
   
-  // HELPER: Text container that fades out smoothly
+  // HELPER: Text container that fades out smoothly in collapsed mode
   const textContainerClass = `
       flex flex-col whitespace-nowrap overflow-hidden transition-all duration-300
       ${isCollapsed ? 'md:opacity-0 md:w-0 md:-translate-x-[10px]' : 'md:opacity-100 md:w-auto md:translate-x-0'}
@@ -349,7 +387,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
     >
       <LikeDataLoader />
 
-      {/* HEADER */}
+      {/* SECTION 1: HEADER (Toggle Button & Logo) */}
       <div className="flex items-center h-10 mb-6 w-full">
         {/* Toggle Button Wrapper - HIDDEN ON MOBILE */}
         <div className={`${iconBoxClass} hidden md:flex`}>
@@ -377,58 +415,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         </div>
       </div>
 
-      {/* MAIN NAV */}
+      {/* SECTION 2: PRIMARY NAVIGATION (Your Library, Downloads, Create Playlist) */}
       <nav className="flex-shrink-0 w-full">
         <ul className="flex flex-col w-full">
-          <li className="mb-2 w-full">
-            <Link 
-                href="/" 
-                onClick={closeMobile}
-                className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
-                title="Home"
-            >
-               <div className={iconBoxClass}>
-                   <HiHome size={28} />
-               </div>
-               <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Home</span>
-            </Link>
-          </li>
-        </ul>
-      </nav>
-
-      {/* DIVIDER */}
-      <div className={`border-t border-white/10 my-2 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-4' : 'mx-6'}`} />
-      
-      {/* LIBRARY NAV */}
-      <nav className="flex-shrink-0 w-full">
-        <ul className="flex flex-col w-full">
-          {/* Liked Songs */}
-          <li className="mb-2 w-full">
-            {/* 🟢 WRAPPED with MediaContextMenu */}
-            <MediaContextMenu 
-                data={{ 
-                    id: 'liked', 
-                    type: 'liked', 
-                    title: 'Liked Songs' 
-                }}
-            >
-                <Link 
-                    href="/liked" 
-                    onClick={(e) => {
-                        handleLikedClick(e);
-                        if (closeMobile) closeMobile();
-                    }} 
-                    className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
-                    title="Liked Songs"
-                >
-                <div className={iconBoxClass}>
-                    <AiFillHeart size={28} />
-                </div>
-                <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Liked Songs</span>
-                </Link>
-            </MediaContextMenu>
-          </li>
-
           {/* Your Library Link */}
           <li className="mb-2 w-full">
             <Link 
@@ -445,9 +434,31 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
                 title="Your Library" 
             >
               <div className={iconBoxClass}>
-                  <TbPlaylist size={28} />
+                  <TbPlaylist size={26} />
               </div>
               <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Your Library</span>
+            </Link>
+          </li>
+
+          {/* Downloads Link (Dedicated Offline Downloads View) */}
+          <li className="mb-2 w-full">
+            <Link 
+                href="/downloads" 
+                onClick={(e) => {
+                  if (!user) {
+                    e.preventDefault();
+                    authModal.onOpen('sign_in');
+                    return;
+                  }
+                  if (closeMobile) closeMobile();
+                }}
+                className="h-10 flex items-center hover:text-white text-zinc-400 transition-colors duration-200 group"
+                title="Downloads" 
+            >
+              <div className={iconBoxClass}>
+                  <FiDownload size={22} />
+              </div>
+              <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Downloads</span>
             </Link>
           </li>
 
@@ -460,7 +471,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             >
               <div className={iconBoxClass}>
                   <div className="bg-zinc-400 group-hover:bg-white text-black p-1 rounded-[4px] transition">
-                     <AiOutlinePlus size={20} /> 
+                     <AiOutlinePlus size={18} /> 
                   </div>
               </div>
               <span className={`${textContainerClass} text-lg font-medium group-hover:text-white`}>Create Playlist</span>
@@ -469,82 +480,134 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         </ul>
       </nav>
 
-      {/* SEPARATOR */}
-      {libraryItems.length > 0 && (
-         <div className={`border-t border-white/10 mt-2 mb-2 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-4' : 'mx-6'}`} />
-      )}
+      {/* DIVIDER */}
+      <div className={`border-t border-white/10 my-2 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-4' : 'mx-6'}`} />
 
-      {/* SCROLLABLE LIST */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar overflow-x-hidden w-full pb-24">
-         <AnimatePresence initial={false} mode='popLayout'>
-           {libraryItems.map((item) => (
-             <MediaContextMenu 
-                key={`${item.type}-${item.id}`} 
-                data={{ id: item.id, type: item.type, title: item.title, artist_id: item.artist_id }}
-             >
-                 <motion.div
-                    layout
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -10 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                 >
-                      <Link 
-                        href={item.path}
-                        onClick={() => {
-                          if (closeMobile) closeMobile();
-                          const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
-                          if (isOffline) {
-                            const now = new Date().toISOString();
-                            if (item.type === 'playlist') {
-                              offlineDb.playlists.update(item.id, { last_accessed_at: now })
-                                .then(() => refreshPlaylists())
-                                .catch(() => {});
-                            } else if (item.type === 'album') {
-                              offlineDb.albums.update(item.id, { last_accessed_at: now })
-                                .then(() => refreshPlaylists())
-                                .catch(() => {});
-                            }
-                          }
-                        }}
-                        className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
-                        title={`${item.title}\n${item.subtitle}`}
-                      >
-                          {/* Fixed Width Icon Container */}
-                          <div className={iconBoxClass}>
-                             <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
-                                 <Image 
-                                     unoptimized
-                                     fill
-                                     sizes="48px"
-                                     src={item.imageUrl || (item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : '/images/playlist-placeholder.jpg')}
-                                     alt={item.title}
-                                     className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
-                                     onError={(e) => {
-                                         e.currentTarget.src = item.type === 'album' 
-                                             ? '/images/album-placeholder.png' 
-                                             : item.type === 'artist' 
-                                             ? '/images/artist-placeholder.png' 
-                                             : '/images/playlist-placeholder.jpg';
-                                     }}
-                                 />
-                             </div>
-                          </div>
+      {/* SECTION 3: SCROLLABLE MEDIA LIST (Always starts with Liked Songs) */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar overflow-x-hidden w-full pb-6 md:pb-4">
+        
+        {/* Pinned Top Item: Liked Songs Card */}
+        <MediaContextMenu 
+            data={{ 
+                id: 'liked', 
+                type: 'liked', 
+                title: 'Liked Songs' 
+            }}
+        >
+            <div className="w-full">
+              <Link 
+                  href="/liked" 
+                  onClick={(e) => {
+                      handleLikedClick(e);
+                      if (closeMobile) closeMobile();
+                  }} 
+                  className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
+                  title="Liked Songs&#10;Your Favourites"
+              >
+                {/* 48x48 Gradient Cover with White Heart matching reference */}
+                <div className={iconBoxClass}>
+                  <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm bg-gradient-to-br from-indigo-500 via-purple-600 to-blue-500 flex items-center justify-center flex-shrink-0">
+                    <AiFillHeart size={24} className="text-white drop-shadow-sm" />
+                  </div>
+                </div>
 
-                          {/* Text Content */}
-                          <div className={textContainerClass}>
-                             <p className="truncate text-white font-medium text-sm pr-4">
-                                 {item.title}
-                             </p>
-                             <p className="truncate text-zinc-400 text-xs pr-4">
-                                 {item.subtitle}
-                             </p>
-                          </div>
-                      </Link>
-                 </motion.div>
-             </MediaContextMenu>
-           ))}
-         </AnimatePresence>
+                {/* Text Content */}
+                <div className={textContainerClass}>
+                  <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                    <p className="truncate text-white font-medium text-sm">
+                      Liked Songs
+                    </p>
+                    {isLikedDownloaded && (
+                      <span className="inline-flex items-center text-emerald-400 flex-shrink-0" title="Downloaded">
+                        <BsCheckCircleFill size={13} />
+                      </span>
+                    )}
+                  </div>
+                  <p className="truncate text-zinc-400 text-xs pr-4">
+                    Your Favourites
+                  </p>
+                </div>
+              </Link>
+            </div>
+        </MediaContextMenu>
+
+        {/* User Playlists, Albums, Artists */}
+        <AnimatePresence initial={false} mode='popLayout'>
+          {libraryItems.map((item) => {
+            const itemIsDownloaded = isDownloaded(item.id);
+
+            return (
+              <MediaContextMenu 
+                 key={`${item.type}-${item.id}`} 
+                 data={{ id: item.id, type: item.type, title: item.title, artist_id: item.artist_id }}
+              >
+                  <motion.div
+                     layout
+                     initial={{ opacity: 0, x: -10 }}
+                     animate={{ opacity: 1, x: 0 }}
+                     exit={{ opacity: 0, x: -10 }}
+                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                  >
+                       <Link 
+                         href={item.path}
+                         onClick={() => {
+                           if (closeMobile) closeMobile();
+                           const isOffline = !isOnline || isOfflineMode || (typeof navigator !== 'undefined' && !navigator.onLine);
+                           if (isOffline) {
+                             const now = new Date().toISOString();
+                             if (item.type === 'playlist' || item.type === 'generated_playlist') {
+                               offlineDb.playlists.update(item.id, { last_accessed_at: now })
+                                 .then(() => refreshPlaylists())
+                                 .catch(() => {});
+                             } else if (item.type === 'album') {
+                               offlineDb.albums.update(item.id, { last_accessed_at: now })
+                                 .then(() => refreshPlaylists())
+                                 .catch(() => {});
+                             }
+                           }
+                         }}
+                         className="group flex items-center h-14 hover:bg-white/5 transition cursor-pointer w-full"
+                         title={`${item.title}\n${item.subtitle}`}
+                       >
+                           {/* Fixed Width Icon Container */}
+                           <div className={iconBoxClass}>
+                              <div className="relative h-12 w-12 overflow-hidden rounded-md shadow-sm">
+                                  <Image 
+                                      unoptimized
+                                      fill
+                                      sizes="48px"
+                                      src={item.imageUrl || (item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : item.type === 'generated_playlist' ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg')}
+                                      alt={item.title}
+                                      className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
+                                      onError={(e) => {
+                                          e.currentTarget.src = item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : item.type === 'generated_playlist' ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg';
+                                      }}
+                                  />
+                              </div>
+                           </div>
+
+                           {/* Text Content */}
+                           <div className={textContainerClass}>
+                              <div className="flex items-center gap-1.5 min-w-0 pr-4">
+                                <p className="truncate text-white font-medium text-sm">
+                                    {item.title}
+                                </p>
+                                {itemIsDownloaded && (
+                                  <span className="inline-flex items-center text-emerald-400 flex-shrink-0" title="Downloaded">
+                                    <BsCheckCircleFill size={13} />
+                                  </span>
+                                )}
+                              </div>
+                              <p className="truncate text-zinc-400 text-xs pr-4">
+                                  {item.subtitle}
+                              </p>
+                           </div>
+                       </Link>
+                  </motion.div>
+              </MediaContextMenu>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
     </aside>

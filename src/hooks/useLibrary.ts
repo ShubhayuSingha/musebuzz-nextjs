@@ -58,43 +58,36 @@ const useLibrary = () => {
     const checkIsSaved = useCallback(async (albumId: string) => {
         if (!user) return false;
 
-        const isOffline = !useOfflineModeStore.getState().isOnline || 
-                          useOfflineModeStore.getState().isOfflineMode || 
-                          (typeof navigator !== 'undefined' && !navigator.onLine);
+        const { isOnline, isOfflineMode } = useOfflineModeStore.getState();
+        const isOffline = !isOnline || isOfflineMode;
 
+        // OFFLINE CHECK
         if (isOffline) {
             try {
                 if (offlineDb.saved_albums) {
-                    const saved = await offlineDb.saved_albums.get([user.id, albumId]);
-                    return !!saved;
+                    const saved = await offlineDb.saved_albums
+                        .where('[user_id+album_id]')
+                        .equals([user.id, albumId])
+                        .first();
+                    if (saved) return true;
                 }
                 const alb = await offlineDb.albums.get(albumId);
                 return !!alb;
-            } catch {
+            } catch (err) {
+                console.warn('[useLibrary] Error checking offline saved status:', err);
                 return false;
             }
         }
 
-        try {
-            const { data } = await supabase
-                .from('saved_albums')
-                .select('album_id')
-                .eq('user_id', user.id)
-                .eq('album_id', albumId)
-                .maybeSingle(); 
-            return !!data;
-        } catch {
-            try {
-                if (offlineDb.saved_albums) {
-                    const saved = await offlineDb.saved_albums.get([user.id, albumId]);
-                    return !!saved;
-                }
-                const alb = await offlineDb.albums.get(albumId);
-                return !!alb;
-            } catch {
-                return false;
-            }
-        }
+        // ONLINE CHECK
+        const { data } = await supabase
+            .from('saved_albums')
+            .select('album_id')
+            .eq('user_id', user.id)
+            .eq('album_id', albumId)
+            .maybeSingle();
+
+        return !!data;
     }, [user, supabase]);
 
     /* =========================
@@ -152,7 +145,6 @@ const useLibrary = () => {
         return !!data;
     }, [user, supabase]);
 
-    // 🟢 NEW FUNCTION: Updates 'last_accessed_at' to bring artist to top of sidebar
     const updateArtistAccess = async (artistId: string) => {
         if (!user || typeof navigator === 'undefined' || !navigator.onLine) return;
         
@@ -167,6 +159,72 @@ const useLibrary = () => {
         }
     };
 
+    /* =========================
+       GENERATED MIXES
+    ========================= */
+
+    const addMix = async (mixId: string) => {
+        if (!user) {
+            toast.error("Please log in to save mixes");
+            return;
+        }
+
+        const { error } = await supabase
+            .from('user_context_settings')
+            .upsert({
+                user_id: user.id,
+                context_id: `saved_mix:${mixId}`,
+                updated_at: new Date().toISOString()
+            });
+
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Added Mix to Library');
+        }
+    };
+
+    const removeMix = async (mixId: string) => {
+        if (!user) return;
+
+        const { error } = await supabase
+            .from('user_context_settings')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('context_id', `saved_mix:${mixId}`);
+
+        if (error) {
+            toast.error(error.message);
+        } else {
+            toast.success('Removed Mix from Library');
+        }
+    };
+
+    const checkIsMixSaved = useCallback(async (mixId: string) => {
+        if (!user) return false;
+
+        const { isOnline, isOfflineMode } = useOfflineModeStore.getState();
+        const isOffline = !isOnline || isOfflineMode;
+
+        if (isOffline) {
+            try {
+                const offlinePl = await offlineDb.playlists.get(mixId);
+                return !!offlinePl;
+            } catch {
+                return false;
+            }
+        }
+
+        const { data } = await supabase
+            .from('user_context_settings')
+            .select('context_id')
+            .eq('user_id', user.id)
+            .eq('context_id', `saved_mix:${mixId}`)
+            .maybeSingle();
+
+        return !!data;
+    }, [user, supabase]);
+
     return { 
         addAlbum, 
         removeAlbum, 
@@ -174,7 +232,10 @@ const useLibrary = () => {
         followArtist, 
         unfollowArtist, 
         checkIsArtistSaved,
-        updateArtistAccess // 🟢 Exporting new function
+        updateArtistAccess,
+        addMix,
+        removeMix,
+        checkIsMixSaved
     };
 };
 

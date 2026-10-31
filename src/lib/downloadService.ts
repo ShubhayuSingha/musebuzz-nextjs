@@ -18,6 +18,30 @@ import {
 import { offlineDb, type OfflineAlbum, type OfflinePlaylist, type OfflineSong } from './offlineDb';
 
 /**
+ * Precaches the page shell (HTML + RSC payload) into CacheStorage so navigating offline loads instantly
+ */
+async function precachePageShell(routePath: string) {
+  if (typeof window === 'undefined' || !('caches' in window) || !navigator.onLine) return;
+  try {
+    const pagesCache = await caches.open('musebuzz-pages-v3');
+    const rscCache = await caches.open('musebuzz-rsc-v3');
+
+    // 1. HTML shell
+    fetch(routePath).then((res) => {
+      if (res.status === 200) pagesCache.put(routePath, res);
+    }).catch(() => {});
+
+    // 2. RSC payload
+    fetch(routePath, { headers: { RSC: '1' } }).then((res) => {
+      if (res.status === 200) {
+        rscCache.put(routePath, res.clone());
+        rscCache.put(`${routePath}?_rsc=offline`, res);
+      }
+    }).catch(() => {});
+  } catch {}
+}
+
+/**
  * Downloads a complete album from Supabase, caches all audio & images, and stores metadata in IndexedDB
  */
 export async function downloadAlbum(supabase: SupabaseClient, albumId: string): Promise<boolean> {
@@ -198,6 +222,7 @@ export async function downloadAlbum(supabase: SupabaseClient, albumId: string): 
     };
 
     await saveAlbumToDb(offlineAlbum, userId);
+    precachePageShell(`/album/${albumId}`);
 
     store.setProgress(albumId, {
       status: 'completed',
@@ -396,6 +421,7 @@ export async function downloadLikedSongs(supabase: SupabaseClient, silent = fals
       song_order: p.song_order,
       song: p.songs
     })));
+    precachePageShell('/liked');
 
     if (!silent) {
       store.setProgress(likedPlaylistId, {
@@ -445,7 +471,8 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
     });
 
     // 1. Fetch full playlist with nested playlist_songs, songs, albums, and artists
-    const { data: playlist, error } = await supabase
+    let playlist: any = null;
+    const { data: normalPlaylist, error } = await supabase
       .from('playlists')
       .select(`
         *, 
@@ -466,10 +493,67 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
         )
       `)
       .eq('id', playlistId)
-      .single();
+      .maybeSingle();
 
-    if (error || !playlist) {
-      throw new Error(error?.message || 'Playlist not found');
+    if (normalPlaylist) {
+      playlist = normalPlaylist;
+    } else {
+      // Check if this is a generated playlist / mix
+      const { data: mixData } = await supabase
+        .from('generated_playlists')
+        .select('*')
+        .eq('id', playlistId)
+        .maybeSingle();
+
+      if (mixData) {
+        let mixSongs: any[] = [];
+        if (mixData.song_ids && mixData.song_ids.length > 0) {
+          const { data: sData } = await supabase
+            .from('songs')
+            .select(`
+              *, 
+              albums(
+                id, 
+                title, 
+                image_path,
+                genre,
+                release_type,
+                artists(id, name, image_path)
+              )
+            `)
+            .in('id', mixData.song_ids);
+
+          if (sData) {
+            mixSongs = mixData.song_ids
+              .map((id: string, index: number) => {
+                const s = sData.find((x: any) => x.id === id);
+                if (!s) return null;
+                return {
+                  created_at: mixData.created_at,
+                  song_order: index,
+                  songs: s
+                };
+              })
+              .filter(Boolean);
+          }
+        }
+
+        playlist = {
+          id: mixData.id,
+          title: mixData.title,
+          image_path: null,
+          image_url: mixData.image_url || '/images/mix-placeholder.png',
+          user_id: mixData.user_id,
+          created_at: mixData.created_at,
+          last_accessed_at: new Date().toISOString(),
+          playlist_songs: mixSongs,
+          is_mix: true
+        };
+      }
+    }
+
+    if (!playlist) {
+      throw new Error(error?.message || 'Playlist or mix not found');
     }
 
     const playlistSongs = playlist.playlist_songs || [];
@@ -483,6 +567,12 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
       const { data } = supabase.storage.from('playlist_images').getPublicUrl(playlist.image_path);
       imageUrl = data?.publicUrl;
       if (imageUrl) {
+        await saveImageToCache(imageUrl);
+        localDataUrl = (await fetchImageAsDataUrl(imageUrl)) || undefined;
+      }
+    } else if (playlist.image_url) {
+      imageUrl = playlist.image_url.includes('playlist-placeholder') ? '/images/mix-placeholder.png' : playlist.image_url;
+      if (imageUrl && !imageUrl.startsWith('/images/')) {
         await saveImageToCache(imageUrl);
         localDataUrl = (await fetchImageAsDataUrl(imageUrl)) || undefined;
       }
@@ -519,7 +609,8 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
             created_at: playlist.created_at,
             downloaded_at: Date.now(),
             last_accessed_at: playlist.last_accessed_at || new Date().toISOString(),
-            playlist_songs: preparedPlaylistSongs
+            playlist_songs: preparedPlaylistSongs,
+            is_mix: Boolean((playlist as any).is_mix)
           };
           await savePlaylistToDb(offlinePlaylistDraft, currentUserId);
           await store.refreshDownloadedStatus(currentUserId);
@@ -614,10 +705,12 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
       created_at: playlist.created_at,
       downloaded_at: Date.now(),
       last_accessed_at: playlist.last_accessed_at || new Date().toISOString(),
-      playlist_songs: preparedPlaylistSongs
+      playlist_songs: preparedPlaylistSongs,
+      is_mix: Boolean((playlist as any).is_mix)
     };
 
     await savePlaylistToDb(offlinePlaylist, currentUserId);
+    precachePageShell((playlist as any).is_mix ? `/mix/${playlistId}` : `/playlist/${playlistId}`);
 
     store.setProgress(playlistId, {
       status: 'completed',
@@ -793,6 +886,7 @@ export async function syncPlaylist(supabase: SupabaseClient, playlistId: string,
       playlist_songs: updatedPlaylistSongs,
       downloaded_at: Date.now()
     });
+    precachePageShell(`/playlist/${playlistId}`);
 
     if (!silent) {
       store.setProgress(playlistId, {

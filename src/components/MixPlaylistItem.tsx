@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import MediaContextMenu from "./MediaContextMenu"; // 🟢 Switched to MediaContextMenu
+import MediaContextMenu from "./MediaContextMenu";
 
 interface MixPlaylistItemProps {
   data: any;
@@ -16,13 +16,12 @@ const MixPlaylistItem: React.FC<MixPlaylistItemProps> = ({ data }) => {
   };
 
   return (
-    // 🟢 Updated Data Props
-    <MediaContextMenu 
-      data={{ 
-        id: data.id, 
-        title: data.title, 
-        type: 'generated_playlist', // New type
-        song_ids: data.song_ids 
+    <MediaContextMenu
+      data={{
+        id: data.id,
+        title: data.title,
+        type: 'generated_playlist',
+        song_ids: data.song_ids
       }}
     >
       <div
@@ -35,29 +34,18 @@ const MixPlaylistItem: React.FC<MixPlaylistItemProps> = ({ data }) => {
           rounded-xl
           p-3
           cursor-pointer
-          isolate
-          will-change-transform
-          transition-transform
-          duration-300
-          hover:-translate-y-2
+          bg-neutral-900/40
+          hover:bg-neutral-800/80
+          border
+          border-neutral-800/60
+          hover:border-neutral-700
+          transition-all
+          duration-200
+          shadow-sm
+          hover:shadow-md
+          h-full
         "
       >
-        {/* ... (Rest of the JSX remains exactly the same) ... */}
-        {/* INSET DEPTH */}
-        <div
-          className="
-            pointer-events-none
-            absolute
-            inset-0
-            rounded-xl
-            opacity-0
-            group-hover:opacity-100
-            transition-opacity
-            duration-300
-            shadow-[inset_0_-14px_22px_-18px_rgba(0,0,0,0.55)]
-          "
-        />
-
         {/* IMAGE */}
         <div
           className="
@@ -71,13 +59,8 @@ const MixPlaylistItem: React.FC<MixPlaylistItemProps> = ({ data }) => {
         >
           <Image
             draggable={false}
-            className="
-              object-cover
-              transition-transform
-              duration-300
-              ease-out
-            "
-            src={data.image_url || "/images/liked.png"}
+            className="object-cover"
+            src={(!data.image_url || data.image_url.includes('playlist-placeholder')) ? '/images/mix-placeholder.png' : data.image_url}
             fill
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
             alt="Mix Cover"

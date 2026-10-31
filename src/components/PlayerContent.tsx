@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, useMemo, useCallback, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
-import { BsPlayFill, BsPauseFill, BsShuffle, BsRepeat, BsRepeat1, BsChevronDown, BsThreeDotsVertical } from "react-icons/bs";
-import { HiSpeakerWave, HiSpeakerXMark, HiQueueList } from "react-icons/hi2";
-import { AiFillStepBackward, AiFillStepForward } from "react-icons/ai";
-import { TbMicrophone2 } from "react-icons/tb";
+import { BsChevronDown, BsThreeDotsVertical } from "react-icons/bs";
+import { HiSpeakerWave, HiSpeakerXMark } from "react-icons/hi2";
+import { IoPlay, IoPause, IoPlaySkipBack, IoPlaySkipForward } from "react-icons/io5";
+import { LuShuffle, LuRepeat, LuRepeat1, LuMic, LuListMusic } from "react-icons/lu";
 import Slider from 'rc-slider';
 import Image from "next/image";
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
@@ -22,6 +22,7 @@ import useSongById from "@/hooks/useSongById";
 import { offlineDb } from "@/lib/offlineDb";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import { withTimeout } from "@/lib/helpers";
+import { toast } from "react-hot-toast";
 
 interface PlayerContentProps {
   song: any;
@@ -61,16 +62,47 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   const prevIsPlayingRef = useRef(isPlaying);
   const prevActiveIdRef = useRef(activeId);
   const lastMediaPositionSyncRef = useRef<number>(0);
+  const lastLocalSeekSaveRef = useRef<number>(0);
   const attemptedSkipsRef = useRef<Set<string>>(new Set());
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+
+  const sessionTokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      sessionTokenRef.current = data.session?.access_token || null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      sessionTokenRef.current = session?.access_token || null;
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isMobileExpanded, setIsMobileExpanded] = useState(false); 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  const [hoverPosPercent, setHoverPosPercent] = useState<number>(0);
+  const sliderContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleSliderMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!sliderContainerRef.current || !duration || duration <= 0) return;
+    const rect = sliderContainerRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const offsetX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = (offsetX / rect.width) * 100;
+    const targetTime = (percent / 100) * duration;
+    setHoverPosPercent(percent);
+    setHoverTime(targetTime);
+  };
+
+  const handleSliderMouseLeave = () => {
+    setHoverTime(null);
+  };
 
   const [shouldMarquee, setShouldMarquee] = useState(false);
   const titleMeasureRef = useRef<HTMLSpanElement>(null);
@@ -87,7 +119,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
   }, [song, supabase]);
 
   const hasLyrics = !!song?.lyrics_snippet;
-  const Icon = isPlaying ? BsPauseFill : BsPlayFill;
+  const Icon = isPlaying ? IoPause : IoPlay;
   const VolumeIcon = volume === 0 ? HiSpeakerXMark : HiSpeakerWave;
 
   const formatTime = (secs: number) => {
@@ -108,6 +140,16 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     if (progress === undefined && soundRef.current) progress = soundRef.current.seek() as number;
     if (typeof progress !== 'number') return;
 
+    // Immediately persist progress to memory store and local disk (0 network calls, 0 DB load)
+    usePlayerStore.getState().setProgressMs(Math.floor(progress * 1000));
+    try {
+      localStorage.setItem('musebuzz_last_seek', JSON.stringify({
+        songId: activeId,
+        seek: progress,
+        updatedAt: Date.now()
+      }));
+    } catch {}
+
     const queueState = {
       ids, context: activeContext, priority: bucketB,
       shuffledOrder, isShuffled, isPlayingPriority, lastActiveId: lastActiveContextId
@@ -118,15 +160,37 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
       is_playing: isPlaying, queue_state: queueState, updated_at: new Date().toISOString(),
     };
 
+    const currentSongSnapshot = song && song.id === activeId ? {
+      id: song.id,
+      title: song.title,
+      author: song.author || song.albums?.artists?.name || song.artists?.name || 'Unknown Artist',
+      album_title: song.album_title || song.albums?.title,
+      imageUrl: imageUrl || song.imageUrl || song.albums?.image_url,
+      song_path: song.song_path,
+      duration_seconds: duration || song.duration_seconds,
+      lyrics_snippet: song.lyrics_snippet,
+      albums: song.albums
+    } : undefined;
+
     // 🟢 Save to local IndexedDB (offline-safe & zero latency)
     offlineDb.playback_state.put({
       user_id: user.id,
       active_song_id: activeId,
+      active_song: currentSongSnapshot,
       progress_ms: Math.floor(progress * 1000),
       is_playing: isPlaying,
       queue_state: queueState,
       updated_at: Date.now()
-    }).catch(() => {});
+    } as any).catch(() => {});
+
+    // Ensure this song snapshot is in offlineDb.songs for instant offline access
+    if (currentSongSnapshot) {
+      offlineDb.songs.get(activeId).then((existing) => {
+        if (!existing) {
+          offlineDb.songs.put(currentSongSnapshot as any).catch(() => {});
+        }
+      }).catch(() => {});
+    }
 
     // Only send network upsert to Supabase if truly online
     const isOffline = !useOfflineModeStore.getState().isOnline || 
@@ -290,6 +354,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     prevIsPlayingRef.current = isPlaying;
     prevActiveIdRef.current = activeId;
 
+    // Track changed: immediately record new active track at seek 0 so DB & cache know the new song
+    if (songChanged && activeId) {
+      saveProgress(0);
+    }
+
     if (sound) {
       if (playToggled && !songChanged) {
         if (isPlaying && !sound.playing() && !isSongEndedRef.current) sound.play();
@@ -338,16 +407,61 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     const handleBeforeUnload = () => {
       if (soundRef.current && song?.id) {
         const seekTime = soundRef.current.seek() as number;
-        saveProgress(seekTime);
-        sessionStorage.setItem('restore_seek', JSON.stringify({
-          songId: song.id,
-          seek: seekTime
-        }));
+        if (typeof seekTime === 'number') {
+          saveProgress(seekTime);
+          try {
+            localStorage.setItem('musebuzz_last_seek', JSON.stringify({
+              songId: song.id,
+              seek: seekTime,
+              updatedAt: Date.now()
+            }));
+            sessionStorage.setItem('restore_seek', JSON.stringify({
+              songId: song.id,
+              seek: seekTime
+            }));
+          } catch {}
+
+          const isOffline = !useOfflineModeStore.getState().isOnline || 
+                            useOfflineModeStore.getState().isOfflineMode || 
+                            (typeof navigator !== 'undefined' && !navigator.onLine);
+          if (!isOffline && user?.id) {
+            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseKey) {
+              const queueState = {
+                ids, context: activeContext, priority: bucketB,
+                shuffledOrder, isShuffled, isPlayingPriority, lastActiveId: lastActiveContextId
+              };
+              const payload = {
+                user_id: user.id,
+                active_song_id: song.id,
+                progress_ms: Math.floor(seekTime * 1000),
+                is_playing: false,
+                queue_state: queueState,
+                updated_at: new Date().toISOString()
+              };
+              const token = sessionTokenRef.current;
+              if (token) {
+                fetch(`${supabaseUrl}/rest/v1/playback_state`, {
+                  method: 'POST',
+                  headers: {
+                    'apikey': supabaseKey,
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'resolution=merge-duplicates'
+                  },
+                  body: JSON.stringify(payload),
+                  keepalive: true
+                }).catch(() => {});
+              }
+            }
+          }
+        }
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveProgress, song?.id]);
+  }, [saveProgress, song?.id, user, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId]);
 
   // Offline safety: If device is offline and current active track has no playable local path,
   // automatically advance to the next downloaded song once instead of freezing or loop-skipping.
@@ -396,15 +510,38 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     const newSound = loadSong(songPath, volume);
 
     // Check if we have an intended restore seek for THIS specific song
-    const rawRestore = sessionStorage.getItem("restore_seek");
     let targetSeek = 0;
-    if (rawRestore) {
-      try {
-        const parsed = JSON.parse(rawRestore);
+
+    // 1. Persistent localStorage (survives full browser quit & relaunch)
+    try {
+      const rawLocal = localStorage.getItem("musebuzz_last_seek");
+      if (rawLocal) {
+        const parsed = JSON.parse(rawLocal);
         if (parsed?.songId === song.id && typeof parsed.seek === 'number' && parsed.seek > 0) {
           targetSeek = parsed.seek;
         }
-      } catch {}
+      }
+    } catch {}
+
+    // 2. Zustand PlayerStore progress_ms fallback
+    if (targetSeek === 0) {
+      const storeState = usePlayerStore.getState();
+      if (storeState.activeId === song.id && storeState.progress_ms && storeState.progress_ms > 0) {
+        targetSeek = storeState.progress_ms / 1000;
+      }
+    }
+
+    // 3. Fallback to sessionStorage for hot reloads
+    if (targetSeek === 0) {
+      const rawRestore = sessionStorage.getItem("restore_seek");
+      if (rawRestore) {
+        try {
+          const parsed = JSON.parse(rawRestore);
+          if (parsed?.songId === song.id && typeof parsed.seek === 'number' && parsed.seek > 0) {
+            targetSeek = parsed.seek;
+          }
+        } catch {}
+      }
     }
 
     // Force seek to targetSeek (0 for new tracks) BEFORE starting playback
@@ -513,6 +650,19 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           (window as any).__musebuzzCurrentTime = seekVal;
           window.dispatchEvent(new CustomEvent('lyrics-time-update', { detail: seekVal }));
 
+          // Throttled local seek save to localStorage (every 2.5s, 0 network requests, 0 DB load)
+          const nowPerf = performance.now();
+          if (nowPerf - lastLocalSeekSaveRef.current > 2500) {
+            lastLocalSeekSaveRef.current = nowPerf;
+            try {
+              localStorage.setItem('musebuzz_last_seek', JSON.stringify({
+                songId: song.id,
+                seek: seekVal,
+                updatedAt: Date.now()
+              }));
+            } catch {}
+          }
+
           // Throttled sync with lockscreen scrubber (every 1s)
           if (
             typeof window !== 'undefined' &&
@@ -558,6 +708,13 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     if (!user) {
       return authModal.onOpen('sign_in');
     }
+    const isOffline = !useOfflineModeStore.getState().isOnline || 
+                      useOfflineModeStore.getState().isOfflineMode || 
+                      (typeof navigator !== 'undefined' && !navigator.onLine);
+    if (isOffline && !songPath && !isPlaying) {
+      toast("This song is not downloaded for offline playback", { icon: "⚠️" });
+      return;
+    }
     setIsPlaying(!isPlaying);
   };
 
@@ -586,8 +743,16 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     }
   };
 
-  const onClickAlbum = () => { if (song?.albums?.id) router.push(`/album/${song.albums.id}`); };
-  const onClickArtist = () => { if (song?.albums?.artists?.id) router.push(`/artist/${song.albums.artists.id}`); };
+  const onClickAlbum = () => {
+    const albumId = song?.albums?.id || (song as any)?.album_id;
+    if (albumId) router.push(`/album/${albumId}`);
+  };
+  const onClickArtist = () => {
+    const artistId = song?.albums?.artists?.id || (song as any)?.artists?.id;
+    if (artistId) router.push(`/artist/${artistId}`);
+  };
+
+  const artistDisplayName = (song as any)?.author || song?.albums?.artists?.name || (song as any)?.artists?.name || "Unknown Artist";
 
   // 🟢 THE FIX: The Master Navigation Controller for Mobile Menus
   const handleMobileMenuAction = (action: () => void) => {
@@ -668,16 +833,18 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
                 <div className="flex flex-col overflow-hidden w-full pt-1">
                   <p className="text-white font-medium text-sm truncate">{song.title}</p>
-                  <p className="text-neutral-400 text-xs truncate">{song.albums?.artists?.name || "Unknown Artist"}</p>
+                  <p className="text-neutral-400 text-xs truncate">{artistDisplayName}</p>
                 </div>
               </div>
 
-              <div
-                className="flex-shrink-0 flex items-center justify-center p-3 z-10"
+              <button
+                type="button"
+                className="flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-[0_0_14px_rgba(168,85,247,0.45)] active:scale-90 transition-all z-10 cursor-pointer"
                 onClick={(e) => { e.stopPropagation(); handlePlay(); }}
+                aria-label={isPlaying ? "Pause" : "Play"}
               >
-                {isPlaying ? <BsPauseFill size={28} className="text-white" /> : <BsPlayFill size={28} className="text-white" />}
-              </div>
+                {isPlaying ? <IoPause size={20} className="text-white" /> : <IoPlay size={20} className="text-white ml-0.5" />}
+              </button>
             </div>
           </motion.div>
           </>
@@ -743,7 +910,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               <div className="px-8 flex items-center justify-between mb-4">
                 <div className="flex flex-col overflow-hidden max-w-[80%]">
                   <h2 className="text-2xl font-bold text-white truncate break-words">{song.title}</h2>
-                  <p className="text-lg text-neutral-400 mt-1 truncate">{song.albums?.artists?.name}</p>
+                  <p className="text-lg text-neutral-400 mt-1 truncate">{artistDisplayName}</p>
                 </div>
                 <div className="flex-shrink-0">
                   <LikeButton songId={song.id} />
@@ -764,42 +931,113 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               </div>
 
               <div className="px-8 flex items-center justify-between mb-4">
-                <BsShuffle size={24} onClick={isPlayingAutoplay ? undefined : toggleShuffle} className={`transition active:scale-90 ${isPlayingAutoplay ? 'text-neutral-700' : isShuffled ? 'text-green-500' : 'text-neutral-400'}`} />
-                <AiFillStepBackward size={45} onClick={handlePrevious} className="text-neutral-100 active:scale-90 transition" />
+                {/* Mobile Shuffle Capsule */}
+                <button
+                  type="button"
+                  onClick={isPlayingAutoplay ? undefined : toggleShuffle}
+                  disabled={isPlayingAutoplay}
+                  aria-label="Toggle Shuffle"
+                  className={`flex items-center justify-center w-14 h-9 rounded-full transition-all duration-200 active:scale-95 ${
+                    isPlayingAutoplay
+                      ? 'text-neutral-700 cursor-not-allowed opacity-40 border border-transparent'
+                      : isShuffled
+                      ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_14px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                      : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'
+                  }`}
+                >
+                  <LuShuffle size={20} />
+                </button>
 
-                <div onClick={handlePlay} className="flex items-center justify-center p-2 active:scale-95 transition">
-                  <Icon size={52} className="text-white" />
-                </div>
+                <button
+                  type="button"
+                  onClick={handlePrevious}
+                  aria-label="Previous track"
+                  className="flex items-center justify-center p-3 rounded-full text-neutral-200 hover:text-purple-300 active:scale-90 transition-all duration-200 cursor-pointer"
+                >
+                  <IoPlaySkipBack size={38} />
+                </button>
 
-                <AiFillStepForward size={45} onClick={playNext} className="text-neutral-100 active:scale-90 transition" />
-                <div onClick={toggleRepeat} className="active:scale-90 transition">
-                  {repeatMode === 'one' ? <BsRepeat1 size={24} className="text-green-500" /> : <BsRepeat size={24} className={repeatMode === 'context' ? 'text-green-500' : 'text-neutral-400'} />}
-                </div>
+                <button
+                  type="button"
+                  onClick={handlePlay}
+                  aria-label={isPlaying ? "Pause" : "Play"}
+                  className="flex items-center justify-center w-18 h-18 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-[0_0_26px_rgba(168,85,247,0.6)] active:scale-95 transition-all duration-200 border border-purple-400/40 cursor-pointer"
+                >
+                  <Icon size={38} className={isPlaying ? "" : "ml-1"} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={playNext}
+                  aria-label="Next track"
+                  className="flex items-center justify-center p-3 rounded-full text-neutral-200 hover:text-purple-300 active:scale-90 transition-all duration-200 cursor-pointer"
+                >
+                  <IoPlaySkipForward size={38} />
+                </button>
+
+                {/* Mobile Repeat Capsule */}
+                <button
+                  type="button"
+                  onClick={toggleRepeat}
+                  aria-label="Toggle Repeat"
+                  className={`flex items-center justify-center w-14 h-9 rounded-full transition-all duration-200 active:scale-95 ${
+                    repeatMode !== 'off'
+                      ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_14px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                      : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'
+                  }`}
+                >
+                  {repeatMode === 'one' ? (
+                    <LuRepeat1 size={21} className="stroke-[2.2]" />
+                  ) : (
+                    <LuRepeat size={20} />
+                  )}
+                </button>
               </div>
 
               <div className="pb-6 pt-2 px-8 flex items-center justify-between w-full">
-                
-                <div onClick={() => { 
-                   if (isOpen && activeView === 'queue') window.history.back();
-                   else if (isOpen && activeView !== 'queue') toggle('queue');
-                   else toggle('queue');
-                }} className={`p-3 rounded-full active:scale-95 transition ${activeView === 'queue' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
-                  <HiQueueList size={22} />
-                </div>
+                {/* Mobile Queue Capsule */}
+                <button
+                  type="button"
+                  onClick={() => { 
+                    if (isOpen && activeView === 'queue') window.history.back();
+                    else if (isOpen && activeView !== 'queue') toggle('queue');
+                    else toggle('queue');
+                  }}
+                  aria-label="Toggle Queue"
+                  className={`flex items-center justify-center w-14 h-9 rounded-full transition-all duration-200 active:scale-95 ${
+                    activeView === 'queue' && isOpen
+                      ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_14px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                      : 'text-neutral-300 bg-white/5 hover:bg-white/10 border border-transparent'
+                  }`}
+                >
+                  <LuListMusic size={21} />
+                </button>
                 
                 <div className="flex items-center justify-center w-[120px] gap-2">
                   <VolumeIcon onClick={toggleMute} className="text-neutral-400" size={20} />
                   <Slider min={0} max={1} step={0.01} value={volume} onChange={(value) => setVolume(value as number)} styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }} className="!cursor-auto" />
                 </div>
                 
-                <div onClick={() => { 
-                   if (!hasLyrics) return;
-                   if (isOpen && activeView === 'lyrics') window.history.back();
-                   else if (isOpen && activeView !== 'lyrics') toggle('lyrics');
-                   else toggle('lyrics');
-                }} className={`p-3 rounded-full active:scale-95 transition ${!hasLyrics ? 'text-neutral-600 bg-transparent' : activeView === 'lyrics' && isOpen ? 'text-green-500 bg-white/10' : 'text-white bg-white/5 hover:bg-white/10'}`}>
-                  <TbMicrophone2 size={22} />
-                </div>
+                {/* Mobile Lyrics Capsule */}
+                <button
+                  type="button"
+                  onClick={() => { 
+                    if (isOpen && activeView === 'lyrics') window.history.back();
+                    else if (isOpen && activeView !== 'lyrics') toggle('lyrics');
+                    else toggle('lyrics');
+                  }}
+                  title={activeView === 'lyrics' && isOpen ? "Hide Lyrics" : hasLyrics ? "Show Lyrics" : "Lyrics not available (click to view)"}
+                  aria-label="Toggle Lyrics"
+                  className={`flex items-center justify-center w-14 h-9 rounded-full transition-all duration-200 active:scale-95 cursor-pointer ${
+                    activeView === 'lyrics' && isOpen
+                      ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_14px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                      : hasLyrics
+                      ? 'text-neutral-200 bg-white/5 hover:bg-white/10 border border-transparent'
+                      : 'text-neutral-400/80 bg-white/5 hover:bg-white/10 border border-transparent opacity-75'
+                  }`}
+                >
+                  <LuMic size={21} />
+                </button>
 
               </div>
             </div>
@@ -850,8 +1088,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         )}
       </AnimatePresence>
 
-      {/* --- DESKTOP VIEW (hidden on mobile) --- */}
-      <div className="hidden md:grid fixed bottom-0 bg-black w-full py-2 h-[80px] px-4 border-t border-neutral-700 grid-cols-3 z-50">
+      {/* --- DESKTOP VIEW (hidden on mobile, consumes space in flow) --- */}
+      <div className="hidden md:grid w-full pt-1.5 pb-2.5 h-[80px] px-4 border-t border-neutral-800 grid-cols-3 z-50 bg-black shrink-0 select-none">
 
         <div className="flex w-full justify-start items-center gap-x-4 overflow-hidden">
           <div onClick={onClickAlbum} className="relative h-14 w-14 rounded-md overflow-hidden shadow-md cursor-pointer hover:opacity-80 transition flex-shrink-0">
@@ -879,8 +1117,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 )}
               </div>
 
-              <p onClick={onClickArtist} className="text-neutral-400 text-sm truncate cursor-pointer hover:text-white hover:underline transition" title={song.albums?.artists?.name || "Unknown Artist"}>
-                {song.albums?.artists?.name || "Unknown Artist"}
+              <p onClick={onClickArtist} className="text-neutral-400 text-sm truncate cursor-pointer hover:text-white hover:underline transition" title={artistDisplayName}>
+                {artistDisplayName}
               </p>
             </div>
 
@@ -890,38 +1128,136 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center gap-y-2 w-full max-w-[722px] mx-auto">
-          <div className="flex items-center gap-x-6">
-            <BsShuffle size={20} onClick={isPlayingAutoplay ? undefined : toggleShuffle} className={`transition ${isPlayingAutoplay ? 'text-neutral-700 cursor-not-allowed' : isShuffled ? 'text-green-500 cursor-pointer' : 'text-neutral-400 hover:text-white cursor-pointer'}`} />
-            <AiFillStepBackward size={30} onClick={handlePrevious} className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90" />
-            <div onClick={handlePlay} className="flex items-center justify-center h-10 w-10 rounded-full bg-white p-1 cursor-pointer hover:scale-110 transition shadow-lg">
-              <Icon size={26} className="text-black" />
-            </div>
-            <AiFillStepForward size={30} onClick={playNext} className="text-neutral-400 cursor-pointer hover:text-white transition active:scale-90" />
-            <div onClick={toggleRepeat} className="cursor-pointer">
-              {repeatMode === 'one' ? <BsRepeat1 size={20} className="text-green-500 transition" /> : <BsRepeat size={20} className={`transition ${repeatMode === 'context' ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`} />}
-            </div>
+        <div className="flex flex-col items-center justify-center gap-y-1 w-full max-w-[722px] mx-auto">
+          <div className="flex items-center gap-x-4">
+            {/* Desktop Shuffle Capsule */}
+            <button
+              type="button"
+              onClick={isPlayingAutoplay ? undefined : toggleShuffle}
+              disabled={isPlayingAutoplay}
+              title={isPlayingAutoplay ? "Shuffle disabled during autoplay" : isShuffled ? "Shuffle On" : "Shuffle Off"}
+              aria-label="Toggle Shuffle"
+              className={`flex items-center justify-center w-12 h-7.5 rounded-full transition-all duration-200 active:scale-95 ${
+                isPlayingAutoplay
+                  ? 'text-neutral-700 cursor-not-allowed opacity-40 border border-transparent'
+                  : isShuffled
+                  ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.35)] backdrop-blur-sm cursor-pointer'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent cursor-pointer'
+              }`}
+            >
+              <LuShuffle size={16} />
+            </button>
+
+            {/* Desktop Previous */}
+            <button
+              type="button"
+              onClick={handlePrevious}
+              aria-label="Previous track"
+              className="flex items-center justify-center w-8.5 h-8.5 rounded-full text-neutral-300 hover:text-purple-300 hover:bg-white/10 active:scale-90 transition-all duration-200 cursor-pointer"
+            >
+              <IoPlaySkipBack size={19} />
+            </button>
+            
+            {/* Desktop Play / Pause */}
+            <button
+              type="button"
+              onClick={handlePlay}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-[0_0_16px_rgba(168,85,247,0.5)] hover:shadow-[0_0_22px_rgba(168,85,247,0.75)] hover:scale-105 active:scale-95 transition-all duration-200 border border-purple-400/30 cursor-pointer"
+            >
+              <Icon size={18} className={isPlaying ? "" : "ml-0.5"} />
+            </button>
+
+            {/* Desktop Next */}
+            <button
+              type="button"
+              onClick={playNext}
+              aria-label="Next track"
+              className="flex items-center justify-center w-8.5 h-8.5 rounded-full text-neutral-300 hover:text-purple-300 hover:bg-white/10 active:scale-90 transition-all duration-200 cursor-pointer"
+            >
+              <IoPlaySkipForward size={19} />
+            </button>
+
+            {/* Desktop Repeat Capsule */}
+            <button
+              type="button"
+              onClick={toggleRepeat}
+              title={repeatMode === 'one' ? "Repeat Track (On)" : repeatMode === 'context' ? "Repeat All (On)" : "Repeat Off"}
+              aria-label="Toggle Repeat"
+              className={`flex items-center justify-center w-12 h-7.5 rounded-full transition-all duration-200 active:scale-95 cursor-pointer ${
+                repeatMode !== 'off'
+                  ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                  : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'
+              }`}
+            >
+              {repeatMode === 'one' ? (
+                <LuRepeat1 size={17} className="stroke-[2.2]" />
+              ) : (
+                <LuRepeat size={16} />
+              )}
+            </button>
           </div>
 
           <div className="flex items-center gap-x-3 w-full group px-2 cursor-pointer">
-            <p className="text-neutral-400 text-[12px] w-10 text-right tabular-nums">{formatTime(currentTime)}</p>
-            <Slider
-              min={0} max={duration || 100} value={currentTime}
-              onChange={handleSliderChange} onChangeComplete={handleSliderAfterChange} step={0.1}
-              styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }}
-              className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity"
-            />
-            <p className="text-neutral-400 text-[12px] w-10 text-left tabular-nums">{formatTime(duration)}</p>
+            <p className="text-zinc-200 font-medium text-[12px] w-10 text-right tabular-nums">{formatTime(currentTime)}</p>
+            <div
+              ref={sliderContainerRef}
+              onMouseMove={handleSliderMouseMove}
+              onMouseLeave={handleSliderMouseLeave}
+              className="relative flex-1 py-1 flex items-center cursor-pointer"
+            >
+              {hoverTime !== null && duration > 0 && (
+                <div
+                  className="absolute -top-7 -translate-x-1/2 pointer-events-none z-30 px-2 py-0.5 rounded-md bg-neutral-900/95 border border-neutral-700 text-white text-[11px] font-medium tabular-nums shadow-xl backdrop-blur-md whitespace-nowrap"
+                  style={{ left: `${hoverPosPercent}%` }}
+                >
+                  {formatTime(hoverTime)}
+                </div>
+              )}
+              <Slider
+                min={0} max={duration || 100} value={currentTime}
+                onChange={handleSliderChange} onChangeComplete={handleSliderAfterChange} step={0.1}
+                styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none' }, rail: { backgroundColor: 'rgb(63 63 70)' } }}
+                className="!cursor-pointer [&_.rc-slider-handle]:!cursor-pointer [&_.rc-slider-handle]:opacity-0 group-hover:[&_.rc-slider-handle]:opacity-100 [&_.rc-slider-handle]:transition-opacity"
+              />
+            </div>
+            <p className="text-zinc-200 font-medium text-[12px] w-10 text-left tabular-nums">{formatTime(duration)}</p>
           </div>
         </div>
 
-        <div className="flex w-full justify-end items-center pr-2 gap-x-4">
-          <div onClick={() => { if (hasLyrics || !hasLyrics) toggle('lyrics'); }} className={`transition ${!hasLyrics ? 'text-neutral-800 cursor-pointer' : activeView === 'lyrics' && isOpen ? 'text-green-500 cursor-pointer' : 'text-neutral-400 hover:text-white cursor-pointer'}`} title={hasLyrics ? "Lyrics" : "No lyrics available"}>
-            <TbMicrophone2 size={22} />
-          </div>
-          <div onClick={() => toggle('queue')} className={`cursor-pointer transition ${activeView === 'queue' && isOpen ? 'text-green-500' : 'text-neutral-400 hover:text-white'}`} title="Queue">
-            <HiQueueList size={22} />
-          </div>
+        <div className="flex w-full justify-end items-center pr-2 gap-x-3">
+          {/* Desktop Lyrics Capsule */}
+          <button
+            type="button"
+            onClick={() => toggle('lyrics')}
+            title={activeView === 'lyrics' && isOpen ? "Hide Lyrics" : hasLyrics ? "Show Lyrics" : "Lyrics not available (click to view)"}
+            aria-label="Toggle Lyrics"
+            className={`flex items-center justify-center w-12 h-7.5 rounded-full transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeView === 'lyrics' && isOpen
+                ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                : hasLyrics
+                ? 'text-neutral-200 hover:text-white hover:bg-white/10 border border-transparent'
+                : 'text-neutral-400/80 hover:text-neutral-200 hover:bg-white/10 border border-transparent opacity-75'
+            }`}
+          >
+            <LuMic size={16} />
+          </button>
+
+          {/* Desktop Queue Capsule */}
+          <button
+            type="button"
+            onClick={() => toggle('queue')}
+            title={activeView === 'queue' && isOpen ? "Hide Queue" : "Show Queue"}
+            aria-label="Toggle Queue"
+            className={`flex items-center justify-center w-12 h-7.5 rounded-full transition-all duration-200 active:scale-95 cursor-pointer ${
+              activeView === 'queue' && isOpen
+                ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.35)] backdrop-blur-sm'
+                : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'
+            }`}
+          >
+            <LuListMusic size={16} />
+          </button>
+
           <div className="flex items-center gap-x-2 w-[120px]">
             <VolumeIcon onClick={toggleMute} className="cursor-pointer hover:text-white transition text-neutral-400" size={24} />
             <div className="relative w-full flex items-center group cursor-pointer">

@@ -20,7 +20,8 @@ const StorageIndicator: React.FC<StorageIndicatorProps> = ({
   const [showConfirm, setShowConfirm] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
 
-  const { refreshDownloadedStatus, downloadedIds } = useDownloadStore();
+  const refreshDownloadedStatus = useDownloadStore((state) => state.refreshDownloadedStatus);
+  const downloadedCount = useDownloadStore((state) => state.downloadedIds.size);
 
   const loadEstimate = async () => {
     try {
@@ -33,7 +34,7 @@ const StorageIndicator: React.FC<StorageIndicatorProps> = ({
 
   useEffect(() => {
     loadEstimate();
-  }, [downloadedIds]);
+  }, [downloadedCount]);
 
   const handleClear = async () => {
     setIsClearing(true);

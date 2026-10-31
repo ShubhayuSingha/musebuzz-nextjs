@@ -143,14 +143,30 @@ const updateLastAccessed = async (context?: PlayerContext) => {
 
     try {
       if (context.type === 'playlist') {
-          const { error } = await supabase.from('playlists').update({ last_accessed_at: now }).eq('id', context.id);
-          if (!error) usePlaylistStore.getState().refreshPlaylists();
+          await supabase.from('playlists').update({ last_accessed_at: now }).eq('id', context.id);
+          const { data } = await supabase.auth.getUser();
+          if (data?.user) {
+            await supabase
+              .from('user_context_settings')
+              .update({ updated_at: now })
+              .eq('user_id', data.user.id)
+              .eq('context_id', `saved_mix:${context.id}`);
+          }
+          usePlaylistStore.getState().refreshPlaylists();
       }
 
       if (context.type === 'album') {
           const { data } = await supabase.auth.getUser();
           if (data?.user) {
               const { error } = await supabase.from('saved_albums').update({ last_accessed_at: now }).eq('album_id', context.id).eq('user_id', data.user.id);
+              if (!error) usePlaylistStore.getState().refreshPlaylists();
+          }
+      }
+
+      if (context.type === 'artist') {
+          const { data } = await supabase.auth.getUser();
+          if (data?.user) {
+              const { error } = await supabase.from('saved_artists').update({ last_accessed_at: now }).eq('artist_id', context.id).eq('user_id', data.user.id);
               if (!error) usePlaylistStore.getState().refreshPlaylists();
           }
       }
@@ -794,6 +810,7 @@ playPrevious: () => {
         ids: state.ids,
         isPlayingPriority: state.isPlayingPriority,
         isPlayingAutoplay: state.isPlayingAutoplay,
+        progress_ms: state.progress_ms,
         // Always restore as paused — user must press play
         isPlaying: false,
       }),
