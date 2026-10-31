@@ -73,7 +73,8 @@ interface PlayerStore {
     isPlayingPriority: boolean,
     isPlayingAutoplay: boolean,
     autoplay: string[],
-    lastActiveId: string | undefined
+    lastActiveId: string | undefined,
+    shouldPlay?: boolean
   ) => void;
 
   /* Synchronize Queues */
@@ -101,6 +102,10 @@ interface PlayerStore {
   reorderAutoplay: (from: number, to: number) => void;
 
   /* Settings */
+  isAnnouncerEnabled: boolean;
+  toggleAnnouncer: () => void;
+  narratorVolume: number;
+  setNarratorVolume: (value: number) => void;
   setIsPlaying: (value: boolean) => void;
   setVolume: (value: number) => void;
   setPrevVolume: (value: number) => void;
@@ -111,6 +116,7 @@ interface PlayerStore {
   /* Navigation */
   playNext: () => void;
   playPrevious: () => void;
+  getNextSongId: () => string | null;
 
   reset: () => void;
 }
@@ -202,6 +208,10 @@ const usePlayerStore = create<PlayerStore>()(
       activeContext: undefined,
       lastActiveContextId: undefined,
       repeatMode: 'off',
+      isAnnouncerEnabled: false,
+      toggleAnnouncer: () => set((state) => ({ isAnnouncerEnabled: !state.isAnnouncerEnabled })),
+      narratorVolume: 0.85,
+      setNarratorVolume: (value) => set({ narratorVolume: Math.max(0, Math.min(1, value)) }),
 
       setId: (id, context) => {
         const state = get();
@@ -279,7 +289,24 @@ const usePlayerStore = create<PlayerStore>()(
         });
       },
 
-      restoreState: (ids, priority, shuffledOrder, activeId, context, isShuffled, isPlayingPriority, isPlayingAutoplay, autoplay, lastActiveId) => {
+      restoreState: (ids, priority, shuffledOrder, activeId, context, isShuffled, isPlayingPriority, isPlayingAutoplay, autoplay, lastActiveId, shouldPlay?: boolean) => {
+         let restoredIsPlaying = false;
+         if (typeof shouldPlay === 'boolean') {
+           restoredIsPlaying = shouldPlay;
+         } else if (typeof window !== 'undefined') {
+           try {
+             const wasPlayingLocal = localStorage.getItem('musebuzz_was_playing');
+             const lastSeekStr = localStorage.getItem('musebuzz_last_seek');
+             if (wasPlayingLocal === 'true' && lastSeekStr) {
+               const parsed = JSON.parse(lastSeekStr);
+               // Restore playback if was actively playing within the last 15 minutes
+               if (parsed.songId === activeId && Date.now() - (parsed.updatedAt || 0) < 900000) {
+                 restoredIsPlaying = true;
+               }
+             }
+           } catch {}
+         }
+
          set({
             ids: ids,
             sourceContextIds: ids,
@@ -293,7 +320,7 @@ const usePlayerStore = create<PlayerStore>()(
             isPlayingPriority: isPlayingPriority,
             isPlayingAutoplay: isPlayingAutoplay || false,
             lastActiveContextId: lastActiveId,    
-            isPlaying: false, 
+            isPlaying: restoredIsPlaying, 
             activeIdSignature: 0 
          });
       },
@@ -767,6 +794,68 @@ playPrevious: () => {
         }
       },
 
+      getNextSongId: (): string | null => {
+        const { bucketA, bucketB, autoplay, activeId, lastActiveContextId, isPlayingPriority, isPlayingAutoplay, repeatMode } = get();
+        if (repeatMode === 'one') return null;
+
+        const isOffline = (typeof navigator !== 'undefined' && !navigator.onLine) ||
+                          (typeof window !== 'undefined' && (window as any).__musebuzzIsOffline);
+        const downloadedSongIds = useDownloadStore.getState().downloadedSongIds;
+        const isOfflineWithDownloads = isOffline && downloadedSongIds.size > 0;
+
+        // 1. Priority Queue
+        if (bucketB.length > 0) {
+          let nextIndex = 0;
+          if (isOfflineWithDownloads) {
+            nextIndex = bucketB.findIndex((item) => downloadedSongIds.has(item.id));
+          }
+          if (nextIndex !== -1) {
+            return bucketB[nextIndex].id;
+          }
+        }
+
+        // 2. Autoplay (Bucket C)
+        if (isPlayingAutoplay && !isOffline) {
+          const currentIdx = activeId ? autoplay.indexOf(activeId) : -1;
+          const nextIdx = currentIdx + 1;
+          if (nextIdx < autoplay.length) {
+            return autoplay[nextIdx];
+          }
+          return null;
+        }
+
+        // 3. Context (Bucket A)
+        if (bucketA.length > 0) {
+          const refId = isPlayingPriority ? lastActiveContextId : activeId;
+          const currentIdx = refId ? bucketA.indexOf(refId) : -1;
+
+          if (isOfflineWithDownloads) {
+            for (let i = currentIdx + 1; i < bucketA.length; i++) {
+              if (downloadedSongIds.has(bucketA[i])) return bucketA[i];
+            }
+            if (repeatMode === 'context') {
+              for (let i = 0; i <= currentIdx; i++) {
+                if (downloadedSongIds.has(bucketA[i])) return bucketA[i];
+              }
+            }
+            return null;
+          } else {
+            let candidate = currentIdx + 1;
+            if (candidate >= bucketA.length) {
+              if (repeatMode === 'off') {
+                if (autoplay.length > 0 && !isOffline) return autoplay[0];
+                return null;
+              } else if (repeatMode === 'context') {
+                candidate = 0;
+              }
+            }
+            return bucketA[candidate] || null;
+          }
+        }
+
+        return null;
+      },
+
       setIsPlaying: (value) => set({ isPlaying: value }),
       setVolume: (value) => set({ volume: value }),
       setPrevVolume: (value) => set({ prevVolume: value }),
@@ -798,6 +887,8 @@ playPrevious: () => {
         prevVolume: state.prevVolume,
         repeatMode: state.repeatMode,
         isShuffled: state.isShuffled,
+        isAnnouncerEnabled: state.isAnnouncerEnabled,
+        narratorVolume: state.narratorVolume,
         // Queue state — allows the player bar to appear immediately on reload
         activeId: state.activeId,
         activeContext: state.activeContext,

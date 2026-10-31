@@ -12,6 +12,7 @@ import { FaUserCircle } from "react-icons/fa";
 import { RiWifiOffLine } from "react-icons/ri";
 import { HiCog6Tooth } from "react-icons/hi2";
 import { HiHome } from "react-icons/hi";
+import { LuSpeech } from "react-icons/lu";
 import useOfflineModeStore from "@/stores/useOfflineModeStore";
 import useQueueStore from "@/stores/useQueueStore";
 import StorageIndicator from "@/components/StorageIndicator";
@@ -36,6 +37,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const [networkOnline, setNetworkOnline] = useState(true);
 
   const resetPlayer = usePlayerStore((state) => state.reset);
+  const { isAnnouncerEnabled, toggleAnnouncer, narratorVolume, setNarratorVolume } = usePlayerStore();
   const { isOnline, isOfflineMode, toggleOfflineMode } = useOfflineModeStore();
 
   useEffect(() => {
@@ -227,6 +229,62 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
                         `}
                       />
                     </button>
+                  </div>
+
+                  {/* Song Announcer & Volume Option */}
+                  <div className="flex flex-col gap-2.5 p-2.5 rounded-lg bg-neutral-950/60 border border-neutral-800/80">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`p-2 rounded-lg ${isAnnouncerEnabled ? 'bg-purple-600/20 text-purple-400' : 'bg-neutral-800 text-neutral-400'}`}>
+                          <LuSpeech size={16} />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-white">Song Announcer</span>
+                          <span className="text-[10px] text-neutral-400">
+                            {isAnnouncerEnabled ? 'Speaks upcoming track title' : 'Disabled'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Toggle Switch */}
+                      <button
+                        onClick={toggleAnnouncer}
+                        type="button"
+                        role="switch"
+                        aria-checked={isAnnouncerEnabled}
+                        className={`
+                          relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                          transition-colors duration-200 ease-in-out focus:outline-none
+                          ${isAnnouncerEnabled ? 'bg-purple-600' : 'bg-neutral-700'}
+                        `}
+                      >
+                        <span
+                          className={`
+                            pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 
+                            transition duration-200 ease-in-out
+                            ${isAnnouncerEnabled ? 'translate-x-5' : 'translate-x-0'}
+                          `}
+                        />
+                      </button>
+                    </div>
+
+                    {/* Narrator Volume Slider */}
+                    <div className="flex flex-col gap-1.5 pt-2 border-t border-neutral-800/60">
+                      <div className="flex items-center justify-between text-[11px] text-neutral-400">
+                        <span>Narrator Volume</span>
+                        <span className="font-semibold text-purple-300">{Math.round((narratorVolume ?? 0.85) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={narratorVolume ?? 0.85}
+                        onChange={(e) => setNarratorVolume(parseFloat(e.target.value))}
+                        className="w-full h-1.5 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                        aria-label="Narrator Volume"
+                      />
+                    </div>
                   </div>
 
                   {/* Offline Storage Indicator inside Settings Menu */}

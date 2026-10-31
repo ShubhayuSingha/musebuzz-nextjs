@@ -170,6 +170,17 @@ export default function PwaRegister() {
       }
     };
 
+    // Guard against unwanted window.location.reload() while offline (e.g. from HMR or transient network reconnection events)
+    const originalReload = window.location.reload.bind(window.location);
+    window.location.reload = (() => {
+      const isOffline = !navigator.onLine || (window as any).__musebuzzIsOffline || useOfflineModeStore.getState().isOfflineMode;
+      if (isOffline) {
+        console.warn('[PWA] Suppressed automatic window.location.reload() while offline to maintain continuous playback.');
+        return;
+      }
+      return originalReload();
+    }) as any;
+
     cacheLoadedAssets();
     window.addEventListener('online', cacheLoadedAssets);
 

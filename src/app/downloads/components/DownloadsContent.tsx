@@ -249,7 +249,7 @@ export default function DownloadsContent() {
   return (
     <div className="bg-black h-full w-full overflow-hidden overflow-y-auto">
       {/* HEADER SECTION */}
-      <div className="bg-gradient-to-b from-purple-950 via-zinc-950 to-black p-6 sm:p-8 border-b border-neutral-800">
+      <div className="bg-gradient-to-b from-purple-950 via-zinc-950 to-black p-4 sm:p-8 border-b border-neutral-800">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center shadow-2xl flex-shrink-0">
@@ -368,7 +368,7 @@ export default function DownloadsContent() {
       </div>
 
       {/* CONTENT GRID */}
-      <div className="p-6 sm:p-8">
+      <div className="p-4 sm:p-8">
         {loading ? (
           <div className="py-24 flex items-center justify-center">
             <MusicLoader label="Loading downloads..." size="md" />

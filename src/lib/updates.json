@@ -1,5 +1,27 @@
 [
   {
+    "versionName": "v2.5",
+    "date": "31 Oct 2026",
+    "time": "08:10 PM IST",
+    "title": "Okapi BM25 Search, Neural Song Announcer & Mobile Playback Polish",
+    "description": "Upgraded global search with Okapi BM25 scoring, added AI Neural Song Announcer with native script pronunciation and dual-voice stitching, polished player controls, and enhanced offline background playback.",
+    "changes": [
+      "Upgraded global search engine to Okapi BM25 scoring algorithm with weighted relevance across titles, artists, albums, and lyrics",
+      "Added English stop-word filtering to prevent common terms from skewing artist search results",
+      "Streamlined search dropdown results by removing redundant lyrics snippets for a cleaner, unified presentation",
+      "Added clickable artist links on album headers to navigate directly to dedicated artist discographies",
+      "Integrated Microsoft Edge Neural TTS announcer that speaks upcoming track titles upon song completion",
+      "Implemented dual-voice stitching to seamlessly announce multi-lingual tracks with mixed title and artist languages",
+      "Added narration_text column to catalog database with verified native script transliterations for Bengali, Hindi, Korean, and Japanese titles",
+      "Added Song Announcer toggle switch and dedicated narrator volume slider inside the navbar settings menu",
+      "Re-centered mobile player play and pause controls by streamlining playback capsule layout",
+      "Bumped disabled shuffle button opacity during AI Autoplay queues to match inactive lyrics styling",
+      "Prevented mobile browser reload and audio pause when switching back into the app while disconnected from network",
+      "Added visibilitychange and pageshow listeners to automatically resume active playback when returning from background",
+      "Preserved playback active state and exact seek position across tab refreshes and memory cleanups"
+    ]
+  },
+  {
     "versionName": "v2.4",
     "date": "31 Oct 2026",
     "time": "01:25 PM IST",

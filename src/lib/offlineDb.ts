@@ -10,6 +10,8 @@ export interface OfflineSong {
   audio_url?: string;
   imageUrl?: string | null;        // top-level cached image URL (used by player)
   lyrics_snippet?: string | null;
+  language?: string | null;
+  narration_text?: string | null;
   downloaded_at?: number;
   albums?: {
     id: string;

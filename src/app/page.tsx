@@ -674,7 +674,7 @@ export default function Home() {
     };
 
     return (
-      <div className="relative">
+      <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
         <div
           ref={scrollRef}
           onScroll={() => updateScrollButtons(scrollRef, key)}
@@ -684,7 +684,7 @@ export default function Home() {
           onMouseLeave={() => onMouseLeave(scrollRef, key)}
           className={`
             flex gap-4 overflow-x-auto scrollbar-hide pb-4 select-none
-            min-h-[260px]
+            min-h-[260px] after:content-[''] after:w-2 after:flex-shrink-0 md:after:hidden
             ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}
           `}
         >
@@ -783,7 +783,7 @@ export default function Home() {
     const hasOfflineContent = offlinePlaylists.length > 0 || offlineAlbums.length > 0;
 
     return (
-      <div className="p-8 select-none">
+      <div className="px-4 py-6 md:p-8 select-none">
         {/* Offline Banner / Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/10">
           <div>
@@ -881,7 +881,7 @@ export default function Home() {
         ONLINE VIEW
      ======================= */
   return (
-    <div className="p-8 select-none">
+    <div className="px-4 py-6 md:p-8 select-none">
       <Greeting />
       <p className="mt-4 text-zinc-400">Music buzzing every day.</p>
 

@@ -179,7 +179,7 @@ export default async function Library() {
       overflow-hidden 
       overflow-y-auto
     ">
-      <div className="mt-2 mb-7 px-6">        
+      <div className="mt-2 mb-7 px-4 md:px-6">        
         <LibraryContent items={items} likedCount={likedCount || 0} />
       </div>
     </div>

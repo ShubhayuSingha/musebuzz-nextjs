@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useUser } from '@supabase/auth-helpers-react';
 import { toast } from 'react-hot-toast';
 import { HiCheck } from 'react-icons/hi2';
@@ -121,9 +122,18 @@ const AlbumHeader: React.FC<AlbumHeaderProps> = ({ album, imageUrl, songsCount, 
               </h1>
 
               {/* Artist Name */}
-              <p className="text-neutral-300 text-sm font-bold hover:underline cursor-pointer mx-auto md:mx-0 mt-1">
-                {album.artists?.name}
-              </p>
+              {album.artists?.id || album.artist_id ? (
+                <Link
+                  href={`/artist/${album.artists?.id || album.artist_id}`}
+                  className="text-neutral-300 text-sm font-bold hover:underline hover:text-white cursor-pointer mx-auto md:mx-0 mt-1 transition-colors"
+                >
+                  {album.artists?.name}
+                </Link>
+              ) : (
+                <p className="text-neutral-300 text-sm font-bold mx-auto md:mx-0 mt-1">
+                  {album.artists?.name}
+                </p>
+              )}
             </div>
 
             {/* Meta Info */}

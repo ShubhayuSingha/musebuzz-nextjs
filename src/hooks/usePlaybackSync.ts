@@ -130,7 +130,8 @@ const usePlaybackSync = () => {
           savedIsPriority,
           savedIsAutoplay, 
           savedAutoplay,   
-          savedLastActiveId
+          savedLastActiveId,
+          typeof data.is_playing === 'boolean' ? data.is_playing : undefined
         );
 
         if (data.progress_ms && data.active_song_id) {

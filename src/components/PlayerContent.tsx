@@ -39,7 +39,8 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     setVolume, setIsPlaying, toggleShuffle, toggleRepeat, isShuffled,
     repeatMode, prevVolume, setPrevVolume, activeIdSignature, ids,
     bucketA, bucketB, autoplay, shuffledOrder, isPlayingPriority,
-    isPlayingAutoplay, lastActiveContextId, seekRequest, setSeekRequest
+    isPlayingAutoplay, lastActiveContextId, seekRequest, setSeekRequest,
+    isAnnouncerEnabled, toggleAnnouncer, getNextSongId
   } = usePlayerStore();
 
   const nextSongId = useMemo(() => {
@@ -67,6 +68,106 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   const repeatModeRef = useRef(repeatMode);
   useEffect(() => { repeatModeRef.current = repeatMode; }, [repeatMode]);
+
+  const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopNarration = useCallback(() => {
+    if (narrationAudioRef.current) {
+      try {
+        narrationAudioRef.current.pause();
+        narrationAudioRef.current.src = "";
+      } catch {}
+      narrationAudioRef.current = null;
+    }
+  }, []);
+
+  const playNarration = useCallback(async (nextId: string) => {
+    try {
+      let title = "";
+      let artist = "";
+      let language = "en";
+      let narrationText = "";
+
+      // 1. Try offline DB first
+      try {
+        const offlineSong = await offlineDb.songs.get(nextId);
+        if (offlineSong) {
+          title = offlineSong.title || "";
+          artist = offlineSong.albums?.artists?.name || "";
+          language = (offlineSong as any).language || "";
+          narrationText = (offlineSong as any).narration_text || "";
+        }
+      } catch {}
+
+      // 2. Query Supabase for full metadata including narration_text
+      try {
+        const { data } = await supabase
+          .from("songs")
+          .select("title, language, narration_text, albums(artists(name))")
+          .eq("id", nextId)
+          .maybeSingle();
+
+        if (data) {
+          title = data.title || title || "";
+          artist = (data.albums as any)?.artists?.name || artist || "";
+          language = data.language || language || "en";
+          narrationText = data.narration_text || narrationText || "";
+
+          // Backfill into offlineDb so future playback retains language and narration_text
+          try {
+            await offlineDb.songs.update(nextId, {
+              language: data.language,
+              narration_text: data.narration_text
+            });
+          } catch {}
+        }
+      } catch {}
+
+      language = language || "en";
+
+      if (!title && !narrationText) return;
+
+      const params = new URLSearchParams({
+        title,
+        artist,
+        language,
+        t: Date.now().toString(),
+      });
+      if (narrationText) {
+        params.set("narration_text", narrationText);
+      }
+
+      const url = `/api/tts?${params.toString()}`;
+      const audio = new Audio(url);
+      const { narratorVolume } = usePlayerStore.getState();
+      audio.volume = typeof narratorVolume === 'number' ? Math.max(0, Math.min(1, narratorVolume)) : 0.85;
+      narrationAudioRef.current = audio;
+
+      await new Promise<void>((resolve) => {
+        let isDone = false;
+        const finish = () => {
+          if (!isDone) {
+            isDone = true;
+            if (narrationAudioRef.current === audio) {
+              narrationAudioRef.current = null;
+            }
+            resolve();
+          }
+        };
+
+        audio.onended = finish;
+        audio.onerror = finish;
+        audio.play().catch(finish);
+      });
+    } catch (e) {
+      console.warn("[PlayerContent] Announcer error:", e);
+    }
+  }, [supabase]);
+
+  // Abort any ongoing speech whenever active track changes
+  useEffect(() => {
+    stopNarration();
+  }, [activeId, stopNarration]);
 
   const sessionTokenRef = useRef<string | null>(null);
   useEffect(() => {
@@ -148,6 +249,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
         seek: progress,
         updatedAt: Date.now()
       }));
+      localStorage.setItem('musebuzz_was_playing', isPlaying ? 'true' : 'false');
+      sessionStorage.setItem('restore_seek', JSON.stringify({
+        songId: activeId,
+        seek: progress
+      }));
+      sessionStorage.setItem('musebuzz_was_playing', isPlaying ? 'true' : 'false');
     } catch {}
 
     const queueState = {
@@ -212,7 +319,13 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
   useEffect(() => { saveProgressRef.current = saveProgress; }, [saveProgress]);
 
+  const handleManualNext = useCallback(() => {
+    stopNarration();
+    playNext();
+  }, [stopNarration, playNext]);
+
   const handlePrevious = () => {
+    stopNarration();
     if (soundRef.current) {
       const currentSeek = soundRef.current.seek();
       if (typeof currentSeek === 'number' && currentSeek > 2) {
@@ -415,10 +528,12 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               seek: seekTime,
               updatedAt: Date.now()
             }));
+            localStorage.setItem('musebuzz_was_playing', isPlaying ? 'true' : 'false');
             sessionStorage.setItem('restore_seek', JSON.stringify({
               songId: song.id,
               seek: seekTime
             }));
+            sessionStorage.setItem('musebuzz_was_playing', isPlaying ? 'true' : 'false');
           } catch {}
 
           const isOffline = !useOfflineModeStore.getState().isOnline || 
@@ -436,7 +551,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 user_id: user.id,
                 active_song_id: song.id,
                 progress_ms: Math.floor(seekTime * 1000),
-                is_playing: false,
+                is_playing: isPlaying,
                 queue_state: queueState,
                 updated_at: new Date().toISOString()
               };
@@ -461,7 +576,33 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [saveProgress, song?.id, user, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId]);
+  }, [saveProgress, song?.id, user, ids, activeContext, bucketB, shuffledOrder, isShuffled, isPlayingPriority, lastActiveContextId, isPlaying]);
+
+  // Seamless tab return & visibility resume:
+  // When switching back to Brave from background / home screen, ensure audio continues playing if it was active
+  useEffect(() => {
+    const handleVisibilityOrPageShow = () => {
+      if (document.visibilityState === 'visible') {
+        const sound = soundRef.current;
+        const state = usePlayerStore.getState();
+        if (state.isPlaying && sound && !sound.playing() && !isSongEndedRef.current) {
+          try {
+            sound.play();
+          } catch (err) {
+            console.warn('[PlayerContent] Visibility resume error:', err);
+          }
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityOrPageShow);
+    window.addEventListener('pageshow', handleVisibilityOrPageShow);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityOrPageShow);
+      window.removeEventListener('pageshow', handleVisibilityOrPageShow);
+    };
+  }, []);
 
   // Offline safety: If device is offline and current active track has no playable local path,
   // automatically advance to the next downloaded song once instead of freezing or loop-skipping.
@@ -571,10 +712,22 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     });
     newSound.once("pause", () => setIsPlaying(false));
 
-    newSound.once("end", () => {
+    newSound.once("end", async () => {
       isSongEndedRef.current = true;
-      if (repeatModeRef.current === "one") { newSound.play(); isSongEndedRef.current = false; }
-      else { playNext(); }
+      if (repeatModeRef.current === "one") {
+        newSound.play();
+        isSongEndedRef.current = false;
+        return;
+      }
+
+      const { isAnnouncerEnabled, getNextSongId } = usePlayerStore.getState();
+      const nextId = getNextSongId ? getNextSongId() : null;
+
+      if (isAnnouncerEnabled && nextId) {
+        await playNarration(nextId);
+      }
+
+      playNext();
     });
 
     newSound.once("loaderror", (_id: any, err: any) => {
@@ -861,9 +1014,9 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="md:hidden fixed inset-0 bg-zinc-950 z-[100] flex flex-col pt-2"
           >
-            <div className="flex-1 relative flex flex-col w-full min-h-0 pt-10">
+            <div className="flex-1 relative flex flex-col w-full min-h-0 pt-2 sm:pt-4">
               
-              <div className="w-full pb-6 px-6">
+              <div className="w-full pb-2 px-6">
                 <div className="relative flex w-full items-center justify-center h-10">
                   
                   <button
@@ -881,7 +1034,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                   </button>
 
                   <p className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase pointer-events-none mt-1">
-                    Now Playing
+                    {isOpen ? (activeView === 'lyrics' ? 'Lyrics' : 'Queue') : 'Now Playing'}
                   </p>
 
                   <div className="absolute right-0 top-1/2 -translate-y-1/2 -mr-2">
@@ -895,9 +1048,10 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </div>
               </div>
 
-              <div className="flex-1 w-full flex items-center justify-center px-8 relative">
-                <div className="aspect-square relative w-full h-auto max-h-full max-w-[400px] mx-auto rounded-xl overflow-hidden shadow-2xl bg-neutral-800">
-                  {imageUrl && <Image unoptimized fill sizes="(max-width: 768px) 100vw, 400px" src={imageUrl} alt={song.title} className="object-cover" priority />}
+              {/* Album Art: smoothly scales down on small heights (iPhone SE), hidden when Queue/Lyrics is open */}
+              <div className={`flex-1 w-full min-h-0 flex items-center justify-center px-6 py-2 relative overflow-hidden ${isOpen ? 'hidden' : ''}`}>
+                <div className="relative aspect-square h-full max-h-[min(380px,100%)] max-w-full mx-auto rounded-xl overflow-hidden shadow-2xl bg-neutral-800">
+                  {imageUrl && <Image unoptimized fill sizes="(max-width: 768px) 100vw, 380px" src={imageUrl} alt={song.title} className="object-cover" priority />}
                 </div>
               </div>
 
@@ -905,32 +1059,32 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
             </div>
 
-            <div className="flex flex-col w-full h-[40vh] min-h-[300px] max-h-[380px] bg-gradient-to-t from-black via-zinc-950/95 to-transparent flex-shrink-0 mt-auto justify-end">
+            <div className={`flex flex-col w-full flex-shrink-0 mt-auto justify-end pb-5 sm:pb-8 pt-2 z-20 ${isOpen ? 'bg-zinc-950' : 'bg-gradient-to-t from-black via-zinc-950/95 to-transparent'}`}>
 
-              <div className="px-8 flex items-center justify-between mb-4">
+              <div className="px-6 flex items-center justify-between mb-2 sm:mb-4">
                 <div className="flex flex-col overflow-hidden max-w-[80%]">
-                  <h2 className="text-2xl font-bold text-white truncate break-words">{song.title}</h2>
-                  <p className="text-lg text-neutral-400 mt-1 truncate">{artistDisplayName}</p>
+                  <h2 className="text-xl sm:text-2xl font-bold text-white truncate break-words">{song.title}</h2>
+                  <p className="text-sm sm:text-lg text-neutral-400 mt-0.5 sm:mt-1 truncate">{artistDisplayName}</p>
                 </div>
                 <div className="flex-shrink-0">
                   <LikeButton songId={song.id} />
                 </div>
               </div>
 
-              <div className="px-8 mb-4 cursor-pointer">
+              <div className="px-6 mb-2 sm:mb-4 cursor-pointer">
                 <Slider
                   min={0} max={duration || 100} value={currentTime}
                   onChange={handleSliderChange} onChangeComplete={handleSliderAfterChange} step={0.1}
                   styles={{ track: { backgroundColor: '#a855f7' }, handle: { backgroundColor: '#fff', border: 'none', boxShadow: 'none', width: '12px', height: '12px', marginTop: '-4px' }, rail: { backgroundColor: 'rgb(63 63 70)' } }}
                   className={`[&_.rc-slider-handle]:transition-opacity ${isDragging ? '[&_.rc-slider-handle]:opacity-100' : '[&_.rc-slider-handle]:opacity-0'}`}
                 />
-                <div className="flex justify-between items-center mt-2 text-xs text-neutral-400 tabular-nums">
+                <div className="flex justify-between items-center mt-1.5 text-xs text-neutral-400 tabular-nums">
                   <p>{formatTime(currentTime)}</p>
                   <p>{formatTime(duration)}</p>
                 </div>
               </div>
 
-              <div className="px-8 flex items-center justify-between mb-4">
+              <div className="px-6 flex items-center justify-between mb-2 sm:mb-4">
                 {/* Mobile Shuffle Capsule */}
                 <button
                   type="button"
@@ -939,7 +1093,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                   aria-label="Toggle Shuffle"
                   className={`flex items-center justify-center w-14 h-9 rounded-full transition-all duration-200 active:scale-95 ${
                     isPlayingAutoplay
-                      ? 'text-neutral-700 cursor-not-allowed opacity-40 border border-transparent'
+                      ? 'text-neutral-400/80 cursor-not-allowed opacity-75 border border-transparent'
                       : isShuffled
                       ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_14px_rgba(168,85,247,0.35)] backdrop-blur-sm'
                       : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent'
@@ -968,7 +1122,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
 
                 <button
                   type="button"
-                  onClick={playNext}
+                  onClick={handleManualNext}
                   aria-label="Next track"
                   className="flex items-center justify-center p-3 rounded-full text-neutral-200 hover:text-purple-300 active:scale-90 transition-all duration-200 cursor-pointer"
                 >
@@ -994,7 +1148,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
                 </button>
               </div>
 
-              <div className="pb-6 pt-2 px-8 flex items-center justify-between w-full">
+              <div className="pb-2 pt-1 px-6 flex items-center justify-between w-full">
                 {/* Mobile Queue Capsule */}
                 <button
                   type="button"
@@ -1139,7 +1293,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
               aria-label="Toggle Shuffle"
               className={`flex items-center justify-center w-12 h-7.5 rounded-full transition-all duration-200 active:scale-95 ${
                 isPlayingAutoplay
-                  ? 'text-neutral-700 cursor-not-allowed opacity-40 border border-transparent'
+                  ? 'text-neutral-400/80 cursor-not-allowed opacity-75 border border-transparent'
                   : isShuffled
                   ? 'bg-purple-600/30 text-purple-200 border border-purple-500/50 shadow-[0_0_12px_rgba(168,85,247,0.35)] backdrop-blur-sm cursor-pointer'
                   : 'text-neutral-400 hover:text-white hover:bg-white/10 border border-transparent cursor-pointer'
@@ -1171,7 +1325,7 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
             {/* Desktop Next */}
             <button
               type="button"
-              onClick={playNext}
+              onClick={handleManualNext}
               aria-label="Next track"
               className="flex items-center justify-center w-8.5 h-8.5 rounded-full text-neutral-300 hover:text-purple-300 hover:bg-white/10 active:scale-90 transition-all duration-200 cursor-pointer"
             >
