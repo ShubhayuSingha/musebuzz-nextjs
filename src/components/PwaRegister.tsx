@@ -140,9 +140,9 @@ export default function PwaRegister() {
           urls.forEach((url) => {
             fetch(url).then((res) => {
               if (res.status === 200) cache.put(url, res);
-            }).catch(() => {});
+            }).catch(() => { });
           });
-        }).catch(() => {});
+        }).catch(() => { });
 
         // Keep cached core pages and RSC payloads up to date for seamless offline navigation
         caches.open('musebuzz-pages-v3').then((pagesCache) => {
@@ -155,7 +155,7 @@ export default function PwaRegister() {
               // Precache HTML shell
               fetch(route).then((res) => {
                 if (res.status === 200) pagesCache.put(route, res);
-              }).catch(() => {});
+              }).catch(() => { });
 
               // Precache RSC stream
               fetch(route, { headers: { RSC: '1' } }).then((res) => {
@@ -163,23 +163,12 @@ export default function PwaRegister() {
                   rscCache.put(route, res.clone());
                   rscCache.put(`${route}?_rsc=offline`, res);
                 }
-              }).catch(() => {});
+              }).catch(() => { });
             });
-          }).catch(() => {});
-        }).catch(() => {});
+          }).catch(() => { });
+        }).catch(() => { });
       }
     };
-
-    // Guard against unwanted window.location.reload() while offline (e.g. from HMR or transient network reconnection events)
-    const originalReload = window.location.reload.bind(window.location);
-    window.location.reload = (() => {
-      const isOffline = !navigator.onLine || (window as any).__musebuzzIsOffline || useOfflineModeStore.getState().isOfflineMode;
-      if (isOffline) {
-        console.warn('[PWA] Suppressed automatic window.location.reload() while offline to maintain continuous playback.');
-        return;
-      }
-      return originalReload();
-    }) as any;
 
     cacheLoadedAssets();
     window.addEventListener('online', cacheLoadedAssets);
@@ -191,9 +180,9 @@ export default function PwaRegister() {
       if (
         isOffline &&
         (msg.includes('ChunkLoadError') ||
-         msg.includes('Loading chunk') ||
-         msg.includes('Failed to load') ||
-         msg.includes('NetworkError'))
+          msg.includes('Loading chunk') ||
+          msg.includes('Failed to load') ||
+          msg.includes('NetworkError'))
       ) {
         event.preventDefault();
         event.stopPropagation();
@@ -206,12 +195,12 @@ export default function PwaRegister() {
       const reasonStr = event.reason?.message || String(event.reason || '');
       const isOffline = !navigator.onLine || useOfflineModeStore.getState().isOfflineMode;
       if (
-        isOffline && 
-        (reasonStr.includes('Failed to fetch') || 
-         reasonStr.includes('NetworkError') || 
-         reasonStr.includes('Load failed') ||
-         reasonStr.includes('ChunkLoadError') ||
-         reasonStr.includes('Loading chunk'))
+        isOffline &&
+        (reasonStr.includes('Failed to fetch') ||
+          reasonStr.includes('NetworkError') ||
+          reasonStr.includes('Load failed') ||
+          reasonStr.includes('ChunkLoadError') ||
+          reasonStr.includes('Loading chunk'))
       ) {
         event.preventDefault();
       }
