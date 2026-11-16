@@ -63,6 +63,10 @@ const useSongById = (id?: string) => {
         );
 
         if (!error && data) {
+          const existing = await offlineDb.songs.get(id);
+          if (existing?.audio_url) {
+            data.audio_url = existing.audio_url;
+          }
           setSong(data);
 
           // 🟢 AUTO-CACHE METADATA TO INDEXEDDB:

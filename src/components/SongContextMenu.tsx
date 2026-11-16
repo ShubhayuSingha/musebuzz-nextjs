@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
@@ -80,17 +80,59 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
     };
   }, [visible, setOpenId]);
 
+  // Dynamically measure and reposition the context menu so it strictly stays inside the visible screen
+  useLayoutEffect(() => {
+    if (!visible || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const menuWidth = rect.width || 210;
+    const menuHeight = rect.height || 260;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const PADDING = 12;
+
+    setPoints((prev) => {
+      let { x, y } = prev;
+
+      // 1. Vertical positioning: if opening downwards overflows the bottom (or taskbar/player), flip upwards
+      if (y + menuHeight > vh - PADDING) {
+        y = y - menuHeight;
+      }
+
+      // If flipping upwards overflows the top, clamp to top padding
+      if (y < PADDING) {
+        y = PADDING;
+      }
+
+      // Final boundary clamp so bottom never bleeds into taskbar
+      if (y + menuHeight > vh - PADDING) {
+        y = Math.max(PADDING, vh - menuHeight - PADDING);
+      }
+
+      // 2. Horizontal positioning: if opening rightwards overflows the screen, flip leftwards
+      if (x + menuWidth > vw - PADDING) {
+        x = x - menuWidth;
+      }
+
+      // If flipping leftwards overflows the left edge, clamp to left padding
+      if (x < PADDING) {
+        x = PADDING;
+      }
+
+      // Final horizontal clamp
+      if (x + menuWidth > vw - PADDING) {
+        x = Math.max(PADDING, vw - menuWidth - PADDING);
+      }
+
+      if (x === prev.x && y === prev.y) return prev;
+      return { x, y };
+    });
+  }, [visible]);
+
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault(); 
     e.stopPropagation(); 
 
-    let x = e.clientX;
-    let y = e.clientY;
-    
-    if (x + 220 > window.innerWidth) x = window.innerWidth - 220;
-    if (y + 250 > window.innerHeight) y = window.innerHeight - 250;
-    
-    setPoints({ x, y });
+    setPoints({ x: e.clientX, y: e.clientY });
     setOpenId(menuId); 
   };
 
@@ -103,16 +145,7 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
       setOpenId(menuId);
 
       const rect = trigger.getBoundingClientRect();
-      let x = rect.left - 180; // open to the left of the button
-      let y = rect.top + 20;
-
-      if (x < 10) x = 10;
-      // Clamp Y to viewport height factoring scroll position
-      if (rect.top + 20 + 250 > window.innerHeight) {
-         y = rect.top - 250; // Pop upwards instead
-      }
-
-      setPoints({ x, y });
+      setPoints({ x: rect.left, y: rect.bottom + 4 });
     }
   };
 
@@ -239,6 +272,9 @@ const SongContextMenu: React.FC<SongContextMenuProps> = ({
                 border border-neutral-700 
                 rounded-md shadow-xl 
                 p-1 min-w-[200px]
+                max-h-[calc(100vh-24px)]
+                overflow-y-auto
+                scrollbar-thin
                 animate-in fade-in zoom-in-95 duration-100
             "
             style={{ top: points.y, left: points.x }}

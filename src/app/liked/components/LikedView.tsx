@@ -67,7 +67,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
                 author: (song as any).author || albumData?.artists?.name || (song as any).artists?.name || "Unknown Artist",
                 album_title: (song as any).album_title || albumData?.title || "Unknown Album",
                 liked_created_at: row.created_at,
-                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album_placeholder.svg',
                 audio_url: song.audio_url,
                 albums: albumData
               };
@@ -105,7 +105,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
               author: (song as any).author || albumData?.artists?.name || (song as any).artists?.name || "Unknown Artist",
               album_title: (song as any).album_title || albumData?.title || "Unknown Album",
               liked_created_at: item.created_at,
-              imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+              imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album_placeholder.svg',
               audio_url: song.audio_url,
               albums: albumData
             };
@@ -165,7 +165,7 @@ export default function LikedView({ initialSongs }: LikedViewProps) {
           if (data) {
             const mapped = data.map((item: any) => {
               const imagePath = item.songs?.albums?.image_path;
-              let imageUrl = '/images/album-placeholder.png';
+              let imageUrl = '/images/album_placeholder.svg';
               if (imagePath) {
                 const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
                 imageUrl = imgData?.publicUrl || imageUrl;

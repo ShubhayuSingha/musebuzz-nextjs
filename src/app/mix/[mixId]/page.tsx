@@ -56,7 +56,7 @@ export default async function MixPage(props: MixPageProps) {
         .filter((s: any) => s !== undefined)
         .map((item: any) => {
             const imagePath = item.albums?.image_path;
-            let imageUrl = '/images/album-placeholder.png';
+            let imageUrl = '/images/album_placeholder.svg';
             
             if (imagePath) {
                const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);

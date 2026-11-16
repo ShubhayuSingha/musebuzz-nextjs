@@ -21,7 +21,7 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
   const supabaseClient = useSupabaseClient();
 
   const isLikedSongs = playlist.id === 'liked';
-  let imageUrl = '/images/playlist-placeholder.jpg';
+  let imageUrl = '/images/playlist_placeholder.svg';
 
   if (playlist.image_path) {
     if ((playlist as any).image_url) {
@@ -89,13 +89,13 @@ const PlaylistItem: React.FC<PlaylistItemProps> = ({ playlist }) => {
            <Image
              unoptimized
              draggable={false}
-             src={imageUrl || '/images/playlist-placeholder.jpg'}
+             src={imageUrl || '/images/playlist_placeholder.svg'}
              fill
              alt={playlist.title}
              className="object-cover"
              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
              onError={(e) => {
-               e.currentTarget.src = '/images/playlist-placeholder.jpg';
+               e.currentTarget.src = '/images/playlist_placeholder.svg';
              }}
            />
         )}

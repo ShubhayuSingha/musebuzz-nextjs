@@ -290,23 +290,6 @@ const usePlayerStore = create<PlayerStore>()(
       },
 
       restoreState: (ids, priority, shuffledOrder, activeId, context, isShuffled, isPlayingPriority, isPlayingAutoplay, autoplay, lastActiveId, shouldPlay?: boolean) => {
-         let restoredIsPlaying = false;
-         if (typeof shouldPlay === 'boolean') {
-           restoredIsPlaying = shouldPlay;
-         } else if (typeof window !== 'undefined') {
-           try {
-             const wasPlayingLocal = localStorage.getItem('musebuzz_was_playing');
-             const lastSeekStr = localStorage.getItem('musebuzz_last_seek');
-             if (wasPlayingLocal === 'true' && lastSeekStr) {
-               const parsed = JSON.parse(lastSeekStr);
-               // Restore playback if was actively playing within the last 15 minutes
-               if (parsed.songId === activeId && Date.now() - (parsed.updatedAt || 0) < 900000) {
-                 restoredIsPlaying = true;
-               }
-             }
-           } catch {}
-         }
-
          set({
             ids: ids,
             sourceContextIds: ids,
@@ -320,7 +303,7 @@ const usePlayerStore = create<PlayerStore>()(
             isPlayingPriority: isPlayingPriority,
             isPlayingAutoplay: isPlayingAutoplay || false,
             lastActiveContextId: lastActiveId,    
-            isPlaying: restoredIsPlaying, 
+            isPlaying: false, 
             activeIdSignature: 0 
          });
       },

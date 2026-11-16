@@ -51,15 +51,15 @@ interface LibraryContentProps {
 const LibraryCard = ({ data, onClick }: { data: LibraryItem; onClick: () => void }) => {
     const isMix = data.type === 'generated_playlist';
     const placeholder = data.type === 'album' 
-        ? '/images/album-placeholder.png' 
+        ? '/images/album_placeholder.svg' 
         : data.type === 'artist' 
-        ? '/images/artist-placeholder.png' 
+        ? '/images/artist_placeholder.svg' 
         : isMix 
-        ? '/images/mix-placeholder.png' 
-        : '/images/playlist-placeholder.jpg';
+        ? '/images/mix_placeholder.svg' 
+        : '/images/playlist_placeholder.svg';
 
-    const fallbackSrc = isMix && (!data.imageUrl || data.imageUrl.includes('playlist-placeholder'))
-        ? '/images/mix-placeholder.png'
+    const fallbackSrc = isMix && (!data.imageUrl || data.imageUrl.includes('playlist-placeholder') || data.imageUrl.includes('playlist_placeholder') || data.imageUrl.includes('mix-placeholder'))
+        ? '/images/mix_placeholder.svg'
         : data.imageUrl || placeholder;
 
     return (
@@ -220,7 +220,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                 for (const pl of userPlaylists) {
                     const isLegacyLiked = pl.id === 'liked' || pl.id.startsWith('liked_');
                     if (!isLegacyLiked && !existingIds.has(pl.id)) {
-                        const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder');
+                        const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder') || pl.image_url?.includes('mix_placeholder');
                         extraItems.push({
                             id: pl.id,
                             type: isMix ? 'generated_playlist' : 'playlist',
@@ -231,8 +231,8 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                             imageUrl: (pl.image_path && pl.image_url) 
                                 ? pl.image_url 
                                 : isMix 
-                                ? '/images/mix-placeholder.png' 
-                                : '/images/playlist-placeholder.jpg',
+                                ? '/images/mix_placeholder.svg' 
+                                : '/images/playlist_placeholder.svg',
                         });
                     }
                 }
@@ -246,7 +246,7 @@ const LibraryContent: React.FC<LibraryContentProps> = ({ items, likedCount }) =>
                             author: alb.artists?.name || 'Offline Album',
                             created_at: new Date(alb.downloaded_at).toISOString(),
                             sort_date: alb.last_accessed_at || new Date(alb.downloaded_at).toISOString(),
-                            imageUrl: alb.image_url || '/images/album-placeholder.png',
+                            imageUrl: alb.image_url || '/images/album_placeholder.svg',
                             artist_id: alb.artist_id
                         });
                     }

@@ -49,7 +49,7 @@ export default async function ArtistPage(props: ArtistPageProps) {
   // Prepare Songs
   let songs = (songsData || []).map((song: any) => {
      const imgPath = song.albums?.image_path;
-     let imageUrl = '/images/music-placeholder.png';
+     let imageUrl = '/images/album_placeholder.svg';
      if (imgPath) {
         const { data } = supabase.storage.from('images').getPublicUrl(imgPath);
         imageUrl = data.publicUrl;
@@ -81,7 +81,7 @@ export default async function ArtistPage(props: ArtistPageProps) {
   // Prepare Albums
   const albums = (albumsData || []).map((album: any) => {
      const imgPath = album.image_path;
-     let imageUrl = '/images/album-placeholder.png';
+     let imageUrl = '/images/album_placeholder.svg';
      if (imgPath) {
         const { data } = supabase.storage.from('images').getPublicUrl(imgPath);
         imageUrl = data.publicUrl;
@@ -97,7 +97,7 @@ export default async function ArtistPage(props: ArtistPageProps) {
 
   // Artist Image
   const artistImgPath = artist.image_path;
-  let artistImageUrl = '/images/artist-placeholder.png';
+  let artistImageUrl = '/images/artist_placeholder.svg';
   if (artistImgPath) {
      const { data } = supabase.storage.from('artist_images').getPublicUrl(artistImgPath);
      artistImageUrl = data.publicUrl;

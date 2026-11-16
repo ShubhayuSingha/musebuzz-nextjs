@@ -363,7 +363,7 @@ export async function downloadLikedSongs(supabase: SupabaseClient, silent = fals
           }
         }
 
-        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
+        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album_placeholder.svg';
 
         const offlineSongData = {
           ...song,
@@ -542,7 +542,7 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
           id: mixData.id,
           title: mixData.title,
           image_path: null,
-          image_url: mixData.image_url || '/images/mix-placeholder.png',
+          image_url: mixData.image_url || '/images/mix_placeholder.svg',
           user_id: mixData.user_id,
           created_at: mixData.created_at,
           last_accessed_at: new Date().toISOString(),
@@ -571,7 +571,7 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
         localDataUrl = (await fetchImageAsDataUrl(imageUrl)) || undefined;
       }
     } else if (playlist.image_url) {
-      imageUrl = playlist.image_url.includes('playlist-placeholder') ? '/images/mix-placeholder.png' : playlist.image_url;
+      imageUrl = playlist.image_url.includes('playlist-placeholder') ? '/images/mix_placeholder.svg' : playlist.image_url;
       if (imageUrl && !imageUrl.startsWith('/images/')) {
         await saveImageToCache(imageUrl);
         localDataUrl = (await fetchImageAsDataUrl(imageUrl)) || undefined;
@@ -653,7 +653,7 @@ export async function downloadPlaylist(supabase: SupabaseClient, playlistId: str
           }
         }
 
-        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album-placeholder.png';
+        const resolvedSongImage = songDataUrl || songImageUrl || '/images/album_placeholder.svg';
 
         const offlineSongData = {
           ...song,
@@ -969,12 +969,12 @@ export async function autoSyncLikedSong(
     }
 
     // Cache image
-    let resolvedImage: string = '/images/album-placeholder.png';
+    let resolvedImage: string = '/images/album_placeholder.svg';
     if (songData.albums?.image_path) {
       const { data } = supabase.storage.from('images').getPublicUrl(songData.albums.image_path);
       if (data?.publicUrl) {
         await saveImageToCache(data.publicUrl);
-        resolvedImage = (await fetchImageAsDataUrl(data.publicUrl)) || data.publicUrl || '/images/album-placeholder.png';
+        resolvedImage = (await fetchImageAsDataUrl(data.publicUrl)) || data.publicUrl || '/images/album_placeholder.svg';
       }
     }
 

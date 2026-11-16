@@ -9,7 +9,7 @@ interface ArtistItemProps {
   artist: any;
 }
 
-const FALLBACK_IMAGE = '/images/artist-placeholder.png';
+const FALLBACK_IMAGE = '/images/artist_placeholder.svg';
 
 const ArtistItem: React.FC<ArtistItemProps> = ({ artist }) => {
   const router = useRouter();
@@ -70,13 +70,13 @@ const ArtistItem: React.FC<ArtistItemProps> = ({ artist }) => {
           <Image
             unoptimized
             draggable={false}
-            src={imageUrl || '/images/artist-placeholder.png'}
+            src={imageUrl || FALLBACK_IMAGE}
             fill
             alt={artist.name}
             className="object-cover"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             onError={(e) => {
-              e.currentTarget.src = '/images/artist-placeholder.png';
+              e.currentTarget.src = FALLBACK_IMAGE;
             }}
           />
         </div>

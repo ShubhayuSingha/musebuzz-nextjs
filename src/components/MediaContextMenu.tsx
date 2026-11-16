@@ -276,11 +276,13 @@ const MediaContextMenu: React.FC<MediaContextMenuProps> = ({
             onPointerDown={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
+            collisionPadding={12}
             className="
                 min-w-[220px] 
+                max-h-[calc(100vh-24px)]
+                overflow-y-auto
                 bg-neutral-800 
                 rounded-md 
-                overflow-hidden 
                 p-1 
                 shadow-[0px_10px_38px_-10px_rgba(22,_23,_24,_0.35),_0px_10px_20px_-15px_rgba(22,_23,_24,_0.2)] 
                 border 

@@ -92,7 +92,7 @@ const SwipeableSongItem = ({ song, onClick, onAddToQueue, getImageUrl, children 
     }
   };
 
-  const songImg = song.albums?.image_url || song.imageUrl || song.albums?.image_path || 'sample.jpg';
+  const songImg = song.albums?.image_url || song.imageUrl || song.albums?.image_path || '/images/album_placeholder.svg';
 
   return (
     <div className="relative mb-1 overflow-visible rounded-md bg-black">
@@ -261,7 +261,11 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
   };
 
   const getImageUrl = (path: string | null | undefined, bucket: string = 'images') => {
-    if (!path) return PLACEHOLDER_IMAGE;
+    if (!path) {
+      if (bucket === 'artist_images') return '/images/artist_placeholder.svg';
+      if (bucket === 'playlist_images') return '/images/playlist_placeholder.svg';
+      return '/images/album_placeholder.svg';
+    }
     if (
       path.startsWith('http://') ||
       path.startsWith('https://') ||
@@ -281,7 +285,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
     type: 'song' | 'album' | 'artist' | 'playlist' | 'mix'
   ) => {
     if (type === 'song') {
-      const songImg = item.albums?.image_url || item.imageUrl || item.albums?.image_path || 'sample.jpg';
+      const songImg = item.albums?.image_url || item.imageUrl || item.albums?.image_path || '/images/album_placeholder.svg';
       return (
         <SongContextMenu key={item.id} songId={item.id}>
           <div
@@ -356,7 +360,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
               <Image
                 fill
                 sizes="48px"
-                src={getImageUrl(item.image_url || item.image_path || 'sample.jpg')}
+                src={getImageUrl(item.image_url || item.image_path || '/images/album_placeholder.svg')}
                 alt={item.title}
                 className="object-cover"
                 unoptimized
@@ -394,7 +398,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
               <Image
                 fill
                 sizes="48px"
-                src={getImageUrl(item._unified_image || item.image_url || item.image_path || 'playlist-placeholder.jpg', 'playlist_images')}
+                src={getImageUrl(item._unified_image || item.image_url || item.image_path || '/images/playlist_placeholder.svg', 'playlist_images')}
                 alt={item.title}
                 className="object-cover"
                 unoptimized
@@ -476,8 +480,8 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
           {history.map(item => {
             const bucket = item.item_type === 'artist' ? 'artist_images' : (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist_images' : 'images';
             const path = item.image_path || (
-              (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist-placeholder.jpg' :
-                (item.item_type === 'song' || item.item_type === 'album') ? 'sample.jpg' :
+              (item.item_type === 'playlist' || item.item_type === 'mix') ? '/images/playlist_placeholder.svg' :
+                (item.item_type === 'song' || item.item_type === 'album') ? '/images/album_placeholder.svg' :
                   null
             );
 
@@ -643,8 +647,8 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                   {history.map(item => {
                     const bucket = item.item_type === 'artist' ? 'artist_images' : (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist_images' : 'images';
                     const path = item.image_path || (
-                      (item.item_type === 'playlist' || item.item_type === 'mix') ? 'playlist-placeholder.jpg' :
-                        (item.item_type === 'song' || item.item_type === 'album') ? 'sample.jpg' :
+                      (item.item_type === 'playlist' || item.item_type === 'mix') ? '/images/playlist_placeholder.svg' :
+                        (item.item_type === 'song' || item.item_type === 'album') ? '/images/album_placeholder.svg' :
                           null
                     );
 
@@ -756,7 +760,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                               >
                                 <div onClick={() => handleSearchResultClick(playlist, isLiked ? 'playlist' : isMix ? 'mix' : 'playlist')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                                   <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                                    <Image fill sizes="48px" src={getImageUrl(playlist._unified_image || playlist.image_url || playlist.image_path || 'playlist-placeholder.jpg', 'playlist_images')} alt={playlist.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                                    <Image fill sizes="48px" src={getImageUrl(playlist._unified_image || playlist.image_url || playlist.image_path || '/images/playlist_placeholder.svg', 'playlist_images')} alt={playlist.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                                   </div>
                                   <div className="flex flex-col overflow-hidden">
                                     <p className="text-[15px] font-medium text-white truncate">{playlist.title}</p>
@@ -778,7 +782,7 @@ const GlobalSearch: React.FC<GlobalSearchProps> = ({ isMobileRightAligned = fals
                             <MediaContextMenu key={album.id} data={{ id: album.id, type: 'album', title: album.title, artist_id: album.artists?.id }}>
                               <div onClick={() => handleSearchResultClick(album, 'album')} className="flex items-center gap-x-3 p-1 rounded-md cursor-pointer w-full active:bg-neutral-800 mb-2">
                                 <div className="relative h-12 w-12 min-w-[48px] overflow-hidden shrink-0">
-                                  <Image fill sizes="48px" src={getImageUrl(album.image_url || album.image_path || 'sample.jpg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
+                                  <Image fill sizes="48px" src={getImageUrl(album.image_url || album.image_path || '/images/album_placeholder.svg')} alt={album.title} className="object-cover" unoptimized onError={(e) => { e.currentTarget.src = PLACEHOLDER_IMAGE; }} />
                                 </div>
                                 <div className="flex flex-col overflow-hidden">
                                   <p className="text-[15px] font-medium text-white truncate">{album.title}</p>

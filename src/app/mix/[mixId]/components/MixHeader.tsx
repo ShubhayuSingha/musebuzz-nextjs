@@ -64,8 +64,8 @@ const MixHeader: React.FC<MixHeaderProps> = ({ playlist, imageUrl, songsCount })
   };
 
   // Determine image source - prioritize distinct mix placeholder if placeholder is used
-  const displayImage = (!imageUrl || imageUrl.includes('playlist-placeholder'))
-    ? '/images/mix-placeholder.png'
+  const displayImage = (!imageUrl || imageUrl.includes('playlist-placeholder') || imageUrl.includes('playlist_placeholder') || imageUrl.includes('mix-placeholder'))
+    ? '/images/mix_placeholder.svg'
     : imageUrl;
 
   // SIZING LOGIC
@@ -101,7 +101,7 @@ const MixHeader: React.FC<MixHeaderProps> = ({ playlist, imageUrl, songsCount })
                 unoptimized
                 fill
                 sizes="(max-width: 768px) 128px, 208px"
-                src="/images/mix-placeholder.png"
+                src="/images/mix_placeholder.svg"
                 alt={title}
                 className="object-cover"
               />

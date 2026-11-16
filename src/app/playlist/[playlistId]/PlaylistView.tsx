@@ -87,14 +87,14 @@ export default function PlaylistView({
                 album_title: albumData?.title || "Unknown Album",
                 album_id: albumData?.id,
                 added_at: item.created_at,
-                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album-placeholder.png',
+                imageUrl: (song as any).imageUrl || (albumData as any)?.image_url || '/images/album_placeholder.svg',
                 audio_url: song.audio_url
               };
             });
 
           const resolvedCover = (offlinePlaylist.image_path && offlinePlaylist.image_url) 
             ? offlinePlaylist.image_url 
-            : '/images/playlist-placeholder.jpg';
+            : '/images/playlist_placeholder.svg';
 
           setPlaylist(offlinePlaylist);
           setSongs(mappedSongs);
@@ -135,7 +135,7 @@ export default function PlaylistView({
               .sort((a: any, b: any) => a.song_order - b.song_order)
               .map((item: any) => {
                 const imagePath = item.songs?.albums?.image_path;
-                let songImg = '/images/album-placeholder.png';
+                let songImg = '/images/album_placeholder.svg';
                 if (imagePath) {
                   const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);
                   songImg = imgData?.publicUrl || songImg;
@@ -151,7 +151,7 @@ export default function PlaylistView({
               })
               .filter((song: any) => song.id);
 
-            let resolvedUrl = '/images/playlist-placeholder.jpg';
+            let resolvedUrl = '/images/playlist_placeholder.svg';
             if (data.image_path) {
               const { data: imageData } = supabase.storage.from('playlist_images').getPublicUrl(data.image_path);
               resolvedUrl = imageData?.publicUrl || resolvedUrl;
@@ -210,7 +210,7 @@ export default function PlaylistView({
       <PlaylistHeader 
         playlist={playlist} 
         imageUrl={imageUrl} 
-        fallbackImageUrl="/images/playlist-placeholder.jpg"
+        fallbackImageUrl="/images/playlist_placeholder.svg"
         songsCount={songs.length} 
       />
 

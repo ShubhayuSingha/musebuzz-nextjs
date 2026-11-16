@@ -22,7 +22,7 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
 
   let playlist: any = null;
   let songs: any[] = [];
-  let imageUrl = '/images/playlist-placeholder.jpg';
+  let imageUrl = '/images/playlist_placeholder.svg';
   let shouldRedirectToMix = false;
 
   try {
@@ -63,7 +63,7 @@ export default async function PlaylistPage(props: PlaylistPageProps) {
         .sort((a: any, b: any) => a.song_order - b.song_order)
         .map((item: any) => {
           const imagePath = item.songs?.albums?.image_path;
-          let songImg = '/images/album-placeholder.png'; 
+          let songImg = '/images/album_placeholder.svg'; 
           
           if (imagePath) {
             const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);

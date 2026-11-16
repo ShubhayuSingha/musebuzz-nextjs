@@ -1,7 +1,7 @@
 // public/sw.js
 // MuseBuzz Service Worker - Version 1.3.0
 
-const CACHE_STATIC_NAME = 'musebuzz-static-v6';
+const CACHE_STATIC_NAME = 'musebuzz-static-v7';
 const CACHE_PAGES_NAME = 'musebuzz-pages-v3';
 const CACHE_RSC_NAME = 'musebuzz-rsc-v3';
 const CACHE_AUDIO_NAME = 'musebuzz-audio-v1';
@@ -19,10 +19,10 @@ const PRECACHE_ASSETS = [
   '/icons/icon-512.png',
   '/icons/icon-maskable-512.png',
   '/icons/apple-touch-icon.png',
-  '/images/playlist-placeholder.jpg',
-  '/images/album-placeholder.png',
-  '/images/artist-placeholder.png',
-  '/images/placeholder.svg'
+  '/images/playlist_placeholder.svg',
+  '/images/album_placeholder.svg',
+  '/images/artist_placeholder.svg',
+  '/images/mix_placeholder.svg'
 ];
 
 const PRECACHE_ROUTES = ['/', '/liked', '/library', '/downloads', '/offline'];
@@ -387,9 +387,9 @@ self.addEventListener('fetch', (event) => {
               (await staticCache.match(targetUrl, { ignoreSearch: true, ignoreVary: true }));
             if (cachedTarget) return cachedTarget;
           }
-          const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
-            (await staticCache.match('/images/album-placeholder.png')) ||
-            (await staticCache.match('/images/placeholder.svg'));
+          const fallback = (await mediaImgCache.match('/images/album_placeholder.svg')) ||
+            (await staticCache.match('/images/album_placeholder.svg')) ||
+            (await staticCache.match('/images/mix_placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {
@@ -430,9 +430,9 @@ self.addEventListener('fetch', (event) => {
           return networkResponse;
         } catch {
           // Offline and not cached: return clean album placeholder instead of broken icon
-          const fallback = (await mediaImgCache.match('/images/album-placeholder.png')) ||
-            (await staticCache.match('/images/album-placeholder.png')) ||
-            (await staticCache.match('/images/placeholder.svg'));
+          const fallback = (await mediaImgCache.match('/images/album_placeholder.svg')) ||
+            (await staticCache.match('/images/album_placeholder.svg')) ||
+            (await staticCache.match('/images/mix_placeholder.svg'));
           if (fallback) return fallback;
           const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="#18181b"/><path d="M150 90v70a35 35 0 1 0 25 33.5V115h40V90h-65z" fill="#52525b"/></svg>`;
           return new Response(fallbackSvg, {

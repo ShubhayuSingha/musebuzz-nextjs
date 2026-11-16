@@ -105,8 +105,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
       const offlinePlItems: SidebarItem[] = offlinePlaylists
         .filter(pl => pl.id !== 'liked' && !pl.id.startsWith('liked_'))
         .map(pl => {
-          const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder');
-          let imageUrl = isMix ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg';
+          const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder') || pl.image_url?.includes('mix_placeholder');
+          let imageUrl = isMix ? '/images/mix_placeholder.svg' : '/images/playlist_placeholder.svg';
           if (pl.image_path && pl.image_url) {
             imageUrl = pl.image_url;
           }
@@ -125,7 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         type: 'album',
         title: alb.title,
         subtitle: alb.artists?.name ? `Album • ${alb.artists.name}` : 'Downloaded Album',
-        imageUrl: alb.image_url || '/images/album-placeholder.png',
+        imageUrl: alb.image_url || '/images/album_placeholder.svg',
         path: `/album/${alb.id}`,
         sortDate: alb.last_accessed_at || new Date(alb.downloaded_at).toISOString(),
         artist_id: alb.artist_id
@@ -214,8 +214,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
             type: 'generated_playlist' as const,
             title: mix.title,
             subtitle: 'Generated Mix',
-            imageUrl: (!mix.image_url || mix.image_url.includes('playlist-placeholder')) 
-              ? '/images/mix-placeholder.png' 
+            imageUrl: (!mix.image_url || mix.image_url.includes('playlist-placeholder') || mix.image_url.includes('playlist_placeholder') || mix.image_url.includes('mix-placeholder')) 
+              ? '/images/mix_placeholder.svg' 
               : mix.image_url,
             path: `/mix/${mix.id}`,
             sortDate: setting?.updated_at || mix.created_at
@@ -225,7 +225,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
 
       // 4. Normalize Playlists
       const formattedPlaylists: SidebarItem[] = (playlists || []).map((pl: any) => {
-        let imageUrl = '/images/playlist-placeholder.jpg';
+        let imageUrl = '/images/playlist_placeholder.svg';
         if (pl.image_path) {
             const { data: imgData } = supabase.storage.from('playlist_images').getPublicUrl(pl.image_path);
             imageUrl = imgData?.publicUrl || imageUrl;
@@ -248,7 +248,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         const album = item.albums;
         if (!album) return null;
 
-        let imageUrl = '/images/album-placeholder.png';
+        let imageUrl = '/images/album_placeholder.svg';
         if (album.image_path) {
             const { data } = supabase.storage.from('images').getPublicUrl(album.image_path);
             imageUrl = data.publicUrl;
@@ -272,7 +272,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
         const artist = item.artists;
         if (!artist) return null;
 
-        let imageUrl = '/images/artist-placeholder.png';
+        let imageUrl = '/images/artist_placeholder.svg';
         if (artist.image_path) {
             const { data } = supabase.storage.from('artist_images').getPublicUrl(artist.image_path);
             imageUrl = data.publicUrl;
@@ -576,11 +576,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle, isMobileOpen, 
                                       unoptimized
                                       fill
                                       sizes="48px"
-                                      src={item.imageUrl || (item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : item.type === 'generated_playlist' ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg')}
+                                      src={item.imageUrl || (item.type === 'album' ? '/images/album_placeholder.svg' : item.type === 'artist' ? '/images/artist_placeholder.svg' : item.type === 'generated_playlist' ? '/images/mix_placeholder.svg' : '/images/playlist_placeholder.svg')}
                                       alt={item.title}
                                       className={`object-cover ${item.type === 'artist' ? 'rounded-full' : 'rounded-md'}`}
                                       onError={(e) => {
-                                          e.currentTarget.src = item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'artist' ? '/images/artist-placeholder.png' : item.type === 'generated_playlist' ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg';
+                                          e.currentTarget.src = item.type === 'album' ? '/images/album_placeholder.svg' : item.type === 'artist' ? '/images/artist_placeholder.svg' : item.type === 'generated_playlist' ? '/images/mix_placeholder.svg' : '/images/playlist_placeholder.svg';
                                       }}
                                   />
                               </div>

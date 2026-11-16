@@ -173,7 +173,7 @@ export default function Home() {
           id: p.id,
           title: p.title || 'Playlist',
           image_path: p.image_path || null,
-          image_url: p.image_path ? (p.image_url || null) : '/images/playlist-placeholder.jpg',
+          image_url: p.image_path ? (p.image_url || null) : '/images/playlist_placeholder.svg',
           user_id: p.user_id,
           type: 'playlist',
           downloaded_at: p.downloaded_at,

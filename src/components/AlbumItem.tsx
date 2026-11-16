@@ -9,7 +9,7 @@ interface AlbumItemProps {
   album: any;
 }
 
-const FALLBACK_IMAGE = '/images/album-placeholder.png';
+const FALLBACK_IMAGE = '/images/album_placeholder.svg';
 
 const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
   const router = useRouter();
@@ -69,13 +69,13 @@ const AlbumItem: React.FC<AlbumItemProps> = ({ album }) => {
           <Image
             unoptimized
             draggable={false}
-            src={imageUrl || '/images/album-placeholder.png'}
+            src={imageUrl || FALLBACK_IMAGE}
             fill
             alt={album.title}
             className="object-cover"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             onError={(e) => {
-              e.currentTarget.src = '/images/album-placeholder.png';
+              e.currentTarget.src = FALLBACK_IMAGE;
             }}
           />
         </div>

@@ -118,13 +118,13 @@ export default function DownloadsContent() {
 
       for (const pl of userPlaylists) {
         if (pl.id === 'liked' || pl.id.startsWith('liked_')) continue;
-        const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder');
-        let imageUrl = isMix ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg';
+        const isMix = (pl as any).is_mix || pl.image_url?.includes('mix-placeholder') || pl.image_url?.includes('mix_placeholder');
+        let imageUrl = isMix ? '/images/mix_placeholder.svg' : '/images/playlist_placeholder.svg';
         if (pl.image_path && pl.image_url) {
           imageUrl = pl.image_url;
         } else if (pl.image_url) {
-          imageUrl = pl.image_url.includes('playlist-placeholder') && isMix
-            ? '/images/mix-placeholder.png'
+          imageUrl = (pl.image_url.includes('playlist-placeholder') || pl.image_url.includes('playlist_placeholder')) && isMix
+            ? '/images/mix_placeholder.svg'
             : pl.image_url;
         }
         const songCount = pl.playlist_songs?.length || 0;
@@ -161,7 +161,7 @@ export default function DownloadsContent() {
           type: 'album',
           title: alb.title,
           subtitle: alb.artists?.name || 'Album',
-          imageUrl: alb.image_url || '/images/album-placeholder.png',
+          imageUrl: alb.image_url || '/images/album_placeholder.svg',
           path: `/album/${alb.id}`,
           songsCount: alb.songs?.length || 0,
           downloadedAt: alb.downloaded_at || Date.now(),
@@ -431,7 +431,7 @@ export default function DownloadsContent() {
                       ) : (
                         <Image
                           unoptimized
-                          src={item.imageUrl || (item.type === 'album' ? '/images/album-placeholder.png' : item.type === 'generated_playlist' ? '/images/mix-placeholder.png' : '/images/playlist-placeholder.jpg')}
+                          src={item.imageUrl || (item.type === 'album' ? '/images/album_placeholder.svg' : item.type === 'generated_playlist' ? '/images/mix_placeholder.svg' : '/images/playlist_placeholder.svg')}
                           alt={item.title}
                           fill
                           className="object-cover"

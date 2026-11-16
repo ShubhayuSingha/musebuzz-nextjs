@@ -16,7 +16,7 @@ export default async function Album(props: AlbumProps) {
   const { albumId } = params;
 
   let album: any = null;
-  let imageUrl = '/images/album-placeholder.png';
+  let imageUrl = '/images/album_placeholder.svg';
   let releaseYear: number | null = null;
 
   try {
@@ -35,11 +35,12 @@ export default async function Album(props: AlbumProps) {
 
     if (data) {
       album = data;
-      const { data: imageData } = supabase.storage
-        .from('images')
-        .getPublicUrl(album.image_path);
-
-      imageUrl = imageData?.publicUrl || imageUrl;
+      if (album.image_path) {
+        const { data: imageData } = supabase.storage
+          .from('images')
+          .getPublicUrl(album.image_path);
+        imageUrl = imageData?.publicUrl || imageUrl;
+      }
       releaseYear = album.release_date ? new Date(album.release_date).getFullYear() : null;
     }
   } catch (e) {

@@ -16,9 +16,9 @@ const SongItem: React.FC<SongItemProps> = ({ song }) => {
   const user = useUser();
   const authModal = useAuthModalStore();
 
-  const { data: imageData } = supabase.storage
-    .from('images')
-    .getPublicUrl(song.albums.image_path);
+  const imageUrl = song.albums?.image_path
+    ? supabase.storage.from('images').getPublicUrl(song.albums.image_path).data.publicUrl
+    : '/images/album_placeholder.svg';
 
   const handlePlay = () => {
     if (!user) {
@@ -40,12 +40,12 @@ const SongItem: React.FC<SongItemProps> = ({ song }) => {
         <Image
           unoptimized
           className="object-cover"
-          src={imageData?.publicUrl || '/images/album-placeholder.png'}
+          src={imageUrl || '/images/album_placeholder.svg'}
           fill
           alt={song.title}
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           onError={(e) => {
-            e.currentTarget.src = '/images/album-placeholder.png';
+            e.currentTarget.src = '/images/album_placeholder.svg';
           }}
         />
       </div>

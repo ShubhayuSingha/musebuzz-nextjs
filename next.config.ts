@@ -19,6 +19,13 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
+  /* 3. Server Action Body Size Limit (supports high-res audio uploads) */
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '100mb',
+    },
+  },
+
   /* 4. Automatic Versioning (Vercel Git SHA) */
   env: {
     // This takes the private Vercel ID and makes it accessible to your code

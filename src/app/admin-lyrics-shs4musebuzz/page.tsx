@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
 import LyricsIngestionForm, { UnsyncedLyricLine } from './components/LyricsIngestionForm';
+import { updateSongLyrics } from './actions';
 
 export default function AdminLyricsSyncPage() {
   const supabase = useSupabaseClient();
@@ -130,17 +131,14 @@ export default function AdminLyricsSyncPage() {
         lastLine.end = lastLine.start + 5;
     }
 
-    const { error } = await supabase
-      .from('songs')
-      .update({ lyrics_snippet: JSON.stringify(finalData) })
-      .eq('id', selectedSong.id);
+    const res = await updateSongLyrics(selectedSong.id, JSON.stringify(finalData));
 
     setIsSaving(false);
     
-    if (error) {
-      alert("Error saving lyrics: " + error.message);
+    if (!res.success) {
+      alert("Error saving lyrics: " + res.error);
     } else {
-      alert("Success! Lyrics are now perfectly synced.");
+      alert("Success! Lyrics are now perfectly synced and saved to the database.");
       setStep(1);
       setSelectedSong(null);
       setLyricsData([]);

@@ -47,7 +47,7 @@ export default function AlbumView({
 
         if (offlineAlbum) {
           setAlbum(offlineAlbum);
-          setImageUrl(offlineAlbum.image_url || '/images/album-placeholder.png');
+          setImageUrl(offlineAlbum.image_url || '/images/album_placeholder.svg');
           const year = offlineAlbum.created_at ? new Date(offlineAlbum.created_at).getFullYear() : null;
           setReleaseYear(year);
           setIsLoading(false);
@@ -64,7 +64,7 @@ export default function AlbumView({
             .single();
 
           if (!error && data) {
-            let imgUrl = '/images/album-placeholder.png';
+            let imgUrl = '/images/album_placeholder.svg';
             if (data.image_path) {
               const { data: imgData } = supabase.storage
                 .from('images')

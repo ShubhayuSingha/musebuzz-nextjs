@@ -60,10 +60,13 @@ const MixPlaylistItem: React.FC<MixPlaylistItemProps> = ({ data }) => {
           <Image
             draggable={false}
             className="object-cover"
-            src={(!data.image_url || data.image_url.includes('playlist-placeholder')) ? '/images/mix-placeholder.png' : data.image_url}
+            src={(!data.image_url || data.image_url.includes('playlist-placeholder') || data.image_url.includes('playlist_placeholder') || data.image_url.includes('mix-placeholder')) ? '/images/mix_placeholder.svg' : data.image_url}
             fill
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 20vw"
             alt="Mix Cover"
+            onError={(e) => {
+              e.currentTarget.src = '/images/mix_placeholder.svg';
+            }}
           />
         </div>
 

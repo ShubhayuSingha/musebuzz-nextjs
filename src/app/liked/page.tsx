@@ -50,7 +50,7 @@ export default async function Liked() {
     ? data.map((item: any) => {
         // Generate Image URL
         const imagePath = item.songs?.albums?.image_path;
-        let imageUrl = '/images/album-placeholder.png'; // Fallback
+        let imageUrl = '/images/album_placeholder.svg'; // Fallback
         
         if (imagePath) {
            const { data: imgData } = supabase.storage.from('images').getPublicUrl(imagePath);

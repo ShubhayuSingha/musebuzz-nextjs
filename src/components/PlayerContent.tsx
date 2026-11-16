@@ -214,9 +214,11 @@ const PlayerContent: React.FC<PlayerContentProps> = ({ song, songPath }) => {
     // 2. Resolved image_url inside albums sub-object (set by album download service)
     if (song?.albums?.image_url) return song.albums.image_url;
     // 3. Fallback: derive from image_path via Supabase (works online; SW serves from cache offline)
-    if (!song?.albums?.image_path) return null;
-    const { data: imageData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
-    return imageData.publicUrl || null;
+    if (song?.albums?.image_path) {
+      const { data: imageData } = supabase.storage.from('images').getPublicUrl(song.albums.image_path);
+      if (imageData?.publicUrl) return imageData.publicUrl;
+    }
+    return '/images/album_placeholder.svg';
   }, [song, supabase]);
 
   const hasLyrics = !!song?.lyrics_snippet;

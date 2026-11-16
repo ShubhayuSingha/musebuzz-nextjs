@@ -59,7 +59,7 @@ export default async function Library() {
 
   // 1. PLAYLISTS
   const normalizedPlaylists = (playlists || []).map((pl: any) => {
-    let imageUrl = '/images/playlist-placeholder.jpg';
+    let imageUrl = '/images/playlist_placeholder.svg';
     if (pl.image_path) {
       const { data } = supabase.storage
         .from('playlist_images')
@@ -83,7 +83,7 @@ export default async function Library() {
     const album = item.albums;
     if (!album) return null;
 
-    let imageUrl = '/images/album-placeholder.png'; 
+    let imageUrl = '/images/album_placeholder.svg'; 
 
     if (album.image_path) {
       const { data } = supabase.storage
@@ -109,7 +109,7 @@ export default async function Library() {
     const artist = item.artists;
     if (!artist) return null;
 
-    let imageUrl = '/images/artist-placeholder.png';
+    let imageUrl = '/images/artist_placeholder.svg';
 
     if (artist.image_path) {
         const { data } = supabase.storage
@@ -154,8 +154,8 @@ export default async function Library() {
           author: 'MuseBuzz Mix',
           created_at: mix.created_at,
           sort_date: meta?.updated_at || mix.created_at,
-          imageUrl: (!mix.image_url || mix.image_url.includes('playlist-placeholder'))
-            ? '/images/mix-placeholder.png'
+          imageUrl: (!mix.image_url || mix.image_url.includes('playlist-placeholder') || mix.image_url.includes('playlist_placeholder') || mix.image_url.includes('mix-placeholder'))
+            ? '/images/mix_placeholder.svg'
             : mix.image_url,
           song_ids: mix.song_ids
         };

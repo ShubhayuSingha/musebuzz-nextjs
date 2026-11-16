@@ -82,7 +82,7 @@ const QueueItemContent = ({
   // @ts-ignore
   const imageUrl = (song as any)?.imageUrl || (song?.albums as any)?.image_url || (song?.albums?.image_path
     ? supabase.storage.from("images").getPublicUrl(song.albums.image_path).data.publicUrl
-    : "/images/album-placeholder.png");
+    : "/images/album_placeholder.svg");
   const artistName = (song as any)?.artists?.name || song?.albums?.artists?.name || (song as any)?.author || "Unknown";
 
   const handleRowClick = (e: React.MouseEvent) => {
@@ -138,7 +138,7 @@ const QueueItemContent = ({
             alt={song.title || ""}
             className="object-cover"
             onError={(e) => {
-              e.currentTarget.src = '/images/album-placeholder.png';
+              e.currentTarget.src = '/images/album_placeholder.svg';
             }}
           />
         )}

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="avatar-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#12072B" />
+      <stop offset="50%" stop-color="#0A0612" />
+      <stop offset="100%" stop-color="#030008" />
+    </linearGradient>
+
+    <!-- Vibrant Purple Accents -->
+    <linearGradient id="avatar-purple" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7928CA" />
+      <stop offset="50%" stop-color="#A855F7" />
+      <stop offset="100%" stop-color="#EC4899" />
+    </linearGradient>
+
+    <!-- Base Disc Sheen -->
+    <radialGradient id="disc-sheen" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#24133D" />
+      <stop offset="70%" stop-color="#11091C" />
+      <stop offset="95%" stop-color="#07020D" />
+      <stop offset="100%" stop-color="#000000" />
+    </radialGradient>
+
+    <!-- Soft Diffused Bloom (No hard edge) -->
+    <filter id="avatar-glow-soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur1" />
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur2" />
+      <feMerge>
+        <feMergeNode in="blur1" />
+        <feMergeNode in="blur2" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Ambient Background Wash Filter -->
+    <filter id="avatar-ambient-blur" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="28" />
+    </filter>
+
+    <!-- Mask to clip torso cleanly to the inner circle -->
+    <clipPath id="avatar-clip">
+      <circle cx="250" cy="250" r="149" />
+    </clipPath>
+  </defs>
+
+  <!-- Base Square Canvas -->
+  <rect width="500" height="500" rx="36" fill="url(#avatar-bg)" />
+  <rect width="496" height="496" x="2" y="2" rx="34" fill="none" stroke="#A855F7" stroke-width="1.5" stroke-opacity="0.2" />
+
+  <!-- Ambient Purple Halo (Seamless, wide blur) -->
+  <circle cx="250" cy="250" r="130" fill="#7928CA" opacity="0.2" filter="url(#avatar-ambient-blur)" />
+
+  <!-- Outer Orbit & Accent Rings -->
+  <circle cx="250" cy="250" r="162" fill="none" stroke="#2E1065" stroke-width="2" />
+  <circle cx="250" cy="250" r="156" fill="none" stroke="#ffffff" stroke-width="0.75" stroke-opacity="0.06" />
+
+  <!-- Inner Badge Surface -->
+  <circle cx="250" cy="250" r="150" fill="url(#disc-sheen)" stroke="url(#avatar-purple)" stroke-width="2" stroke-opacity="0.6" />
+
+  <!-- Clipped Silhouette Group -->
+  <g clip-path="url(#avatar-clip)">
+    <g filter="url(#avatar-glow-soft)">
+      <!-- Head -->
+      <circle cx="250" cy="205" r="54" fill="url(#avatar-purple)" />
+
+      <!-- Shoulders / Torso -->
+      <path d="M140 375 C140 305 190 280 250 280 C310 280 360 305 360 375 Z" fill="url(#avatar-purple)" />
+    </g>
+  </g>
+</svg>
