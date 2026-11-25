@@ -1,7 +1,7 @@
 // public/sw.js
-// MuseBuzz Service Worker - Version 1.3.0
+// MuseBuzz Service Worker - Version 1.3.1
 
-const CACHE_STATIC_NAME = 'musebuzz-static-v7';
+const CACHE_STATIC_NAME = 'musebuzz-static-v8';
 const CACHE_PAGES_NAME = 'musebuzz-pages-v3';
 const CACHE_RSC_NAME = 'musebuzz-rsc-v3';
 const CACHE_AUDIO_NAME = 'musebuzz-audio-v1';
@@ -369,8 +369,9 @@ self.addEventListener('fetch', (event) => {
           }
         }
 
-        const cachedReq = (await mediaImgCache.match(request, { ignoreSearch: true, ignoreVary: true })) ||
-          (await staticCache.match(request, { ignoreSearch: true, ignoreVary: true }));
+        // Must match full request (including ?url=...&w=...&q=...) so different /_next/image URLs never collide
+        const cachedReq = (await mediaImgCache.match(request)) ||
+          (await staticCache.match(request));
         if (cachedReq) return cachedReq;
 
         // 2. Not cached: try network
