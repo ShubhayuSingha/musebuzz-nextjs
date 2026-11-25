@@ -5,6 +5,7 @@ import ArtistContent from "./components/ArtistContent";
 import ArtistHeader from "./components/ArtistHeader";
 import { withTimeout } from "@/lib/helpers";
 
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 interface ArtistPageProps {

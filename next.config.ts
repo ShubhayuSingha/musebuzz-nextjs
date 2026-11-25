@@ -19,8 +19,11 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  /* 3. Server Action Body Size Limit (supports high-res audio uploads) */
+  /* 3. Server Action Body Size Limit & Fresh Dynamic Navigation */
   experimental: {
+    staleTimes: {
+      dynamic: 0,
+    },
     serverActions: {
       bodySizeLimit: '100mb',
     },

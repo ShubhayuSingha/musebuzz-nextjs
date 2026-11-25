@@ -1,6 +1,16 @@
 [
   {
     "versionName": "v2.5",
+    "date": "33 Oct 2026",
+    "time": "10:10 PM IST",
+    "title": "Some updates",
+    "description": "Some updates were done.",
+    "changes": [
+      "Some updates were done."
+    ]
+  },
+  {
+    "versionName": "v2.5",
     "date": "31 Oct 2026",
     "time": "08:10 PM IST",
     "title": "Okapi BM25 Search, Neural Song Announcer & Mobile Playback Polish",
